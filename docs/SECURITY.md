@@ -38,6 +38,9 @@ Threat model + hardening checklist. Read before deploying anywhere beyond your o
 
 - `MASTER_SECRET` is **not** stored. User supplies it via `.env` (git-ignored) or env var.
 - The derivation salt lives in `data/.salt` (0600). First launch generates one if missing.
+  The salt is 16 random bytes, created exclusively and reused on later starts.
+  A malformed existing salt is rejected, never silently replaced. POSIX modes
+  are enforced on macOS/Linux; Windows uses the directory's inherited ACLs.
 - Loss of `MASTER_SECRET` ≡ loss of password_enc. There is no recovery. The app logs this on startup and refuses to continue decryption.
 - No telemetry. No crash reports leave the machine.
 

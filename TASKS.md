@@ -22,7 +22,8 @@ Work top to bottom. Check each box when done. One task = one commit.
   - TDD: observed red tests before each implementation slice; 300 deterministic Hypothesis round trips cover schemes, credentials, IPv4/IPv6 and hostnames. Passwords use SecretStr, masked representations and credential-free parse errors; bulk blank/comment handling remains T1.2.
 - [x] T1.2  `app/parser.py` : `parse_bulk(text) -> ImportReport` handles blanks, comments, duplicates, bad lines without raising.
   - Partial import, first-wins identity deduplication, 2000-physical-line cap; safe 1-based error line numbers. Hypothesis covers 200 mixed batches plus 200 arbitrary-text inputs. Accepted records are excluded from report JSON.
-- [ ] T1.3  `app/crypto.py` : Fernet encrypt/decrypt + key derivation (PBKDF2HMAC-SHA256, 480k iters, salt from `data/.salt`). Tests.
+- [x] T1.3  `app/crypto.py` : Fernet encrypt/decrypt + key derivation (PBKDF2HMAC-SHA256, 480k iters, salt from `data/.salt`). Tests.
+  - Pure crypto plus `app/salt.py` storage helper; independent KDF vector, Fernet interoperability/tamper tests, persisted-salt restart and POSIX permission checks. Safe errors carry EX_CONFIG=78 for startup integration in T4.1.
 - [ ] T1.4  `app/models.py` : Pydantic DTOs `Proxy`, `CheckResult`, `PoolStats`. No I/O.
 
 ## Phase 2 — Storage

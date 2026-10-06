@@ -52,7 +52,7 @@ Component map, data flow, concurrency model. Companion to `SPEC.md`.
 | Layer    | Modules                            | Owns                                               | Does NOT                               |
 |----------|------------------------------------|----------------------------------------------------|----------------------------------------|
 | Core     | `parser.py`, `crypto.py`, `models.py` | Pure functions. Data shapes. Encryption primitives. | Any I/O.                               |
-| Storage  | `db.py`                            | SQLite connection, migrations.                     | Business logic.                        |
+| Storage  | `db.py`, `salt.py`                 | SQLite connection, migrations, persisted derivation salt. | Business logic.                   |
 | Domain   | `pool.py`, `rotator.py`, `health_checker.py`, `burn_detector.py` | Scoring, selection, probing, burn rules.           | Protocol specifics (HTTP/SOCKS).       |
 | Protocol | `gateway_http.py`, `gateway_socks.py` | TCP accept, parse HTTP/SOCKS, tunnel.             | Scoring / policy. Asks Pool for a proxy. |
 | API      | `routes/*.py`                      | REST endpoints, WebSocket.                         | Business logic (delegates to Domain).  |
@@ -132,6 +132,12 @@ On failure:
 9. Log one `READY` line with all three bound addresses.
 
 Shutdown: cancel background tasks → close gateway listeners → drain in-flight → close DB → exit.
+
+`salt.load_or_create_salt()` owns salt-file I/O; `crypto.py` accepts salt bytes
+and a `SecretStr`, keeping filesystem and environment access out of Core.
+Key derivation uses PBKDF2HMAC-SHA256, 480,000 iterations and a 32-byte output.
+The startup integration must offload salt I/O and derivation from the event loop
+and translate `CryptoConfigError.exit_code` to process exit 78 (`EX_CONFIG`).
 
 ---
 
