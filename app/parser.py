@@ -2,11 +2,13 @@
 
 import ipaddress
 import re
+from io import StringIO
 from typing import Literal, cast
 
-from pydantic import BaseModel, ConfigDict, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 Scheme = Literal["http", "https", "socks5"]
+MAX_IMPORT_LINES = 2000
 _LINE = re.compile(
     r"(?:(?P<scheme>http|https|socks5)://)?"
     r"(?P<username>[A-Za-z0-9_.-]{3,64}):"
@@ -93,3 +95,58 @@ def serialize(proxy: ParsedProxy) -> str:
         f"{proxy.scheme}://{proxy.username}:{proxy.password.get_secret_value()}"
         f"@{host}:{proxy.port}"
     )
+
+
+class ImportLineError(BaseModel):
+    """Identify a rejected record without returning its credentials."""
+
+    line: int
+    reason: str
+
+
+class ImportReport(BaseModel):
+    """Public import counts plus accepted records for the storage caller."""
+
+    imported: int = 0
+    skipped: int = 0
+    errors: list[ImportLineError] = Field(default_factory=list)
+    proxies: list[ParsedProxy] = Field(default_factory=list, exclude=True, repr=False)
+
+
+def parse_bulk(text: str) -> ImportReport:
+    """Parse an in-memory list of records and full-line '#' comments."""
+    report = ImportReport()
+    seen: set[tuple[Scheme, str, int, str]] = set()
+    limit_reported = False
+    for line_number, line in enumerate(StringIO(text, newline=None), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if line_number > MAX_IMPORT_LINES:
+            report.skipped += 1
+            if not limit_reported:
+                report.errors.append(
+                    ImportLineError(
+                        line=line_number,
+                        reason=(
+                            f"Import limit of {MAX_IMPORT_LINES} lines exceeded; "
+                            "remaining records skipped"
+                        ),
+                    )
+                )
+                limit_reported = True
+            continue
+        try:
+            proxy = parse_line(stripped)
+        except ProxyParseError as error:
+            report.skipped += 1
+            report.errors.append(ImportLineError(line=line_number, reason=str(error)))
+            continue
+        identity = (proxy.scheme, proxy.host, proxy.port, proxy.username)
+        if identity in seen:
+            report.skipped += 1
+            continue
+        seen.add(identity)
+        report.proxies.append(proxy)
+        report.imported += 1
+    return report

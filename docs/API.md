@@ -30,7 +30,13 @@ Response `200`:
 }
 ```
 
-Partial success is normal; `errors[i] = {"line": "...", "reason": "..."}`.
+Partial success is normal; `errors[i] = {"line": 4, "reason": "Invalid proxy format"}`.
+`line` is the 1-based physical line number, never the submitted credential-bearing text.
+Blank lines and full-line `#` comments are ignored. Duplicate identities
+`(scheme, host, port, username)` count as skipped; the first record wins.
+Only the first 2000 physical lines are parsed. Later nonblank, noncomment records
+count as skipped, with one limit error identifying the first such overflow line.
+The parser's accepted records are internal only and excluded from report JSON.
 
 ### `GET /api/proxies`
 
