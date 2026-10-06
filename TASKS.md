@@ -33,7 +33,8 @@ Work top to bottom. Check each box when done. One task = one commit.
   - Async connection ownership, foreign_keys=ON, WAL, autocommit, atomic versioned migrations and explicit batch transaction context. Real SQLite tests cover reopening, rollback/cancellation, idempotence and unsupported future versions.
 - [x] T2.2  Migration 001 : tables from `SPEC.md §9`.
   - Exact schema checked against a reference database built from SPEC §9; user_version=1, idempotence, CHECK/UNIQUE/FK/cascade tests. Already-current migrations avoid writer locks so WAL readers remain available.
-- [ ] T2.3  Repository functions: `insert_proxy`, `upsert_proxy`, `list_proxies`, `delete_proxy`, `record_check`.
+- [x] T2.3  Repository functions: `insert_proxy`, `upsert_proxy`, `list_proxies`, `delete_proxy`, `record_check`.
+  - Async repository with bound values, encrypted credential writes, DTO returns and validated filters. Real-DB tests cover upsert, cascade deletion, 50-check retention, atomic batches/savepoints and 100 fresh-database Hypothesis round trips.
 
 ## Phase 3 — Domain
 

@@ -83,3 +83,12 @@ class PoolStats(_DTO):
     avg_score: Score = 0.0
     avg_latency_ms: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None = None
     strategy: RotationStrategy = "weighted"
+
+
+class ProxyFilters(_DTO):
+    """Repository filters; no implicit status exclusion or pagination cap."""
+
+    status: ProxyStatus | None = None
+    min_score: Score | None = None
+    limit: Annotated[int, Field(ge=1, strict=True)] | None = None
+    offset: Count = 0

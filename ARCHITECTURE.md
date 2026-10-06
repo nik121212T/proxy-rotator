@@ -52,7 +52,7 @@ Component map, data flow, concurrency model. Companion to `SPEC.md`.
 | Layer    | Modules                            | Owns                                               | Does NOT                               |
 |----------|------------------------------------|----------------------------------------------------|----------------------------------------|
 | Core     | `parser.py`, `crypto.py`, `models.py` | Pure functions. Data shapes. Encryption primitives. | Any I/O.                               |
-| Storage  | `db.py`, `salt.py`                 | SQLite connection, migrations, persisted derivation salt. | Business logic.                   |
+| Storage  | `db.py`, `migrations.py`, `repository.py`, `salt.py` | SQLite lifecycle, versioned schema, DTO persistence, derivation salt. | Business logic. |
 | Domain   | `pool.py`, `rotator.py`, `health_checker.py`, `burn_detector.py` | Scoring, selection, probing, burn rules.           | Protocol specifics (HTTP/SOCKS).       |
 | Protocol | `gateway_http.py`, `gateway_socks.py` | TCP accept, parse HTTP/SOCKS, tunnel.             | Scoring / policy. Asks Pool for a proxy. |
 | API      | `routes/*.py`                      | REST endpoints, WebSocket.                         | Business logic (delegates to Domain).  |
@@ -132,6 +132,35 @@ On failure:
 9. Log one `READY` line with all three bound addresses.
 
 Shutdown: cancel background tasks → close gateway listeners → drain in-flight → close DB → exit.
+
+### Storage transactions
+
+`get_db(path)` owns one async connection, enables foreign keys and WAL, and
+applies pending migrations atomically using `PRAGMA user_version`. Connections
+use autocommit. A current schema is checked without acquiring a writer lock.
+
+Each task owns its connection; do not interleave independent tasks on a
+connection during a transaction. For bulk import, use one
+`async with transaction(conn)` around all insert/upsert calls. A failure or
+cancellation rolls the entire batch back; individual repository functions do
+not commit an enclosing batch.
+
+Repository input values use bound parameters. Inserts and upserts encrypt
+`ParsedProxy.password` before SQLite sees it; encryption runs off the event
+loop. Upsert updates credentials and label, preserving ID, creation time and
+health history. Queries return `Proxy` DTOs, in ID order, with optional
+`ProxyFilters(status, min_score, limit, offset)`. Storage includes all statuses
+by default; the UI's dead-proxy visibility policy belongs to its caller.
+
+`record_check` returns a `CheckResult` and atomically inserts/prunes to the
+latest 50 checks per proxy. A savepoint preserves any enclosing transaction.
+Check timestamps are written as fixed-precision ISO 8601 UTC; SQLite's UTC
+timestamps without offsets are normalized when reading proxy DTOs. Check
+error messages must already be sanitized by the health-check producer.
+
+`delete_proxy` returns the removed DTO or `None`; foreign keys cascade checks.
+The domain must first drain active tunnels before calling this hard-delete
+operation (SPEC §10).
 
 `salt.load_or_create_salt()` owns salt-file I/O; `crypto.py` accepts salt bytes
 and a `SecretStr`, keeping filesystem and environment access out of Core.
