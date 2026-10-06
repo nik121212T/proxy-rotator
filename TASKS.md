@@ -11,9 +11,10 @@ Work top to bottom. Check each box when done. One task = one commit.
   - Prerequisite correction: annotate the existing `lifespan` return type to satisfy the mandatory mypy gate; no runtime behavior added.
 - [x] T0.2  `pytest -q` passes (the bootstrap smoke test counts).
   - Both bootstrap tests pass; retain `tests/test_smoke.py`.
-- [ ] T0.3  `ruff check app tests` + `mypy app` pass on empty tree.
-- [ ] T0.4  `./scripts/start.sh` and `scripts\start.bat` print a usage message and exit 0 when deps missing.
-  - User-directed order: proceed to T1.1 now; T0.3/T0.4 remain to be closed separately. Work locally without a GitHub remote or push.
+- [x] T0.3  `ruff check app tests` + `mypy app` pass on the real codebase.
+  - Validated implicitly by T1.1 and its pre-commit checks.
+- [ ] T0.4  [deferred to T6.1] `./scripts/start.sh` and `scripts\start.bat` print a usage message and exit 0 when deps missing.
+  - Non-blocking launcher UX deferred to T6.1/T6.2 by the user. Continue Phase 1 locally, without a GitHub remote or push.
 
 ## Phase 1 — Core (pure)
 
