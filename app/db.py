@@ -7,7 +7,7 @@ from pathlib import Path
 
 import aiosqlite
 
-MIGRATIONS: tuple[tuple[str, ...], ...] = ()
+from app.migrations import MIGRATIONS
 
 
 class DatabaseVersionError(ValueError):
@@ -41,6 +41,10 @@ async def migrate(
 ) -> None:
     """Apply trusted, static SQL migrations, each ending in its version PRAGMA."""
     registered = MIGRATIONS if migrations is None else migrations
+    async with conn.execute("PRAGMA user_version") as cursor:
+        current = await cursor.fetchone()
+    if current is not None and current[0] == len(registered):
+        return
     async with transaction(conn):
         async with conn.execute("PRAGMA user_version") as cursor:
             row = await cursor.fetchone()

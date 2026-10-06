@@ -31,7 +31,8 @@ Work top to bottom. Check each box when done. One task = one commit.
 
 - [x] T2.1  `app/db.py` : open aiosqlite connection, apply migrations, context manager.
   - Async connection ownership, foreign_keys=ON, WAL, autocommit, atomic versioned migrations and explicit batch transaction context. Real SQLite tests cover reopening, rollback/cancellation, idempotence and unsupported future versions.
-- [ ] T2.2  Migration 001 : tables from `SPEC.md §9`.
+- [x] T2.2  Migration 001 : tables from `SPEC.md §9`.
+  - Exact schema checked against a reference database built from SPEC §9; user_version=1, idempotence, CHECK/UNIQUE/FK/cascade tests. Already-current migrations avoid writer locks so WAL readers remain available.
 - [ ] T2.3  Repository functions: `insert_proxy`, `upsert_proxy`, `list_proxies`, `delete_proxy`, `record_check`.
 
 ## Phase 3 — Domain
