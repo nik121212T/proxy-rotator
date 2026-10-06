@@ -24,7 +24,8 @@ Work top to bottom. Check each box when done. One task = one commit.
   - Partial import, first-wins identity deduplication, 2000-physical-line cap; safe 1-based error line numbers. Hypothesis covers 200 mixed batches plus 200 arbitrary-text inputs. Accepted records are excluded from report JSON.
 - [x] T1.3  `app/crypto.py` : Fernet encrypt/decrypt + key derivation (PBKDF2HMAC-SHA256, 480k iters, salt from `data/.salt`). Tests.
   - Pure crypto plus `app/salt.py` storage helper; independent KDF vector, Fernet interoperability/tamper tests, persisted-salt restart and POSIX permission checks. Safe errors carry EX_CONFIG=78 for startup integration in T4.1.
-- [ ] T1.4  `app/models.py` : Pydantic DTOs `Proxy`, `CheckResult`, `PoolStats`. No I/O.
+- [x] T1.4  `app/models.py` : Pydantic DTOs `Proxy`, `CheckResult`, `PoolStats`. No I/O.
+  - Immutable validated snapshots, UTC-aware dates, bounded ports/scores/counters and strategy/status literals. `password_enc` is a SecretBytes field excluded from public serialization and repr; timestamps are supplied by callers.
 
 ## Phase 2 — Storage
 
