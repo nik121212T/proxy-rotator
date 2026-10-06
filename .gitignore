@@ -1,0 +1,32 @@
+# Env & secrets
+.env
+*.env
+data/.salt
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Database
+data/proxies.db*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+dist/
+build/
+
+# Tests
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
