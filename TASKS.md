@@ -29,7 +29,8 @@ Work top to bottom. Check each box when done. One task = one commit.
 
 ## Phase 2 — Storage
 
-- [ ] T2.1  `app/db.py` : open aiosqlite connection, apply migrations, context manager.
+- [x] T2.1  `app/db.py` : open aiosqlite connection, apply migrations, context manager.
+  - Async connection ownership, foreign_keys=ON, WAL, autocommit, atomic versioned migrations and explicit batch transaction context. Real SQLite tests cover reopening, rollback/cancellation, idempotence and unsupported future versions.
 - [ ] T2.2  Migration 001 : tables from `SPEC.md §9`.
 - [ ] T2.3  Repository functions: `insert_proxy`, `upsert_proxy`, `list_proxies`, `delete_proxy`, `record_check`.
 
