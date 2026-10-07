@@ -44,7 +44,8 @@ Work top to bottom. Check each box when done. One task = one commit.
   - Exact ratio/latency/freshness formula, selection-time decay, rounded median of the last 20 measurements, persisted-check history restored on load, and dead-after-quarantine-retest boundary.
 - [x] T3.3  `app/rotator.py` : four strategies (`round_robin`, `random`, `weighted`, `sticky`). Interface `pick(pool) -> Proxy | None`.
   - Active snapshots only, fail-closed empty selection, injectable RNG/clock, bounded TTLCache sticky mappings and removed-proxy invalidation.
-- [ ] T3.4  `app/burn_detector.py` : classify outcome. Tests for every signal in `SPEC.md §6`.
+- [x] T3.4  `app/burn_detector.py` : classify outcome. Tests for every signal in `SPEC.md §6`.
+  - Pure status/body/timeout/connection/latency classification with safe fixed reasons; all signals and strict body-size, content-type and timing boundaries tested. Gateway retry integration remains T5.2.
 - [ ] T3.5  `app/health_checker.py` : probe one proxy; probe all with semaphore; background loop with interval. Tests with fake upstream.
 
 ## Phase 4 — API + UI
