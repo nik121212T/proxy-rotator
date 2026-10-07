@@ -3,16 +3,16 @@
 import asyncio
 from collections.abc import AsyncIterator
 
-from app.models import ProxyEvent
+from app.models import Event
 
 
-class Subscription(AsyncIterator[ProxyEvent]):
+class Subscription(AsyncIterator[Event]):
     def __init__(self, bus: "EventBus", capacity: int) -> None:
         self._bus = bus
-        self._queue: asyncio.Queue[ProxyEvent | None] = asyncio.Queue(capacity)
+        self._queue: asyncio.Queue[Event | None] = asyncio.Queue(capacity)
         self._closed = False
 
-    async def __anext__(self) -> ProxyEvent:
+    async def __anext__(self) -> Event:
         if self._closed:
             raise StopAsyncIteration
         try:
@@ -47,7 +47,7 @@ class EventBus:
         self._subscribers.add(subscriber)
         return subscriber
 
-    def publish(self, event: ProxyEvent) -> None:
+    def publish(self, event: Event) -> None:
         for subscriber in tuple(self._subscribers):
             if subscriber._queue.full():
                 self._subscribers.discard(subscriber)

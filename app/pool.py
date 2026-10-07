@@ -12,7 +12,7 @@ import aiosqlite
 from app import repository
 from app.db import transaction
 from app.events import EventBus, Subscription
-from app.models import CheckResult, Proxy, ProxyEvent
+from app.models import CheckResult, PoolStats, PoolStatsEvent, Proxy, ProxyEvent, RotationStrategy
 from app.parser import ImportReport, ParsedProxy, parse_bulk
 
 T = TypeVar("T")
@@ -74,6 +74,38 @@ class Pool:
         now = self._clock()
         current = (p.model_copy(update={"score": health_score(p, now)}) for p in self._snapshot)
         return tuple(p for p in current if p.status == "alive" and p.score >= self._min_score)
+
+    def stats(self, strategy: RotationStrategy) -> PoolStats:
+        snapshot = self._snapshot
+        latencies = [p.latency_ms for p in snapshot if p.latency_ms is not None]
+        return PoolStats(
+            total=len(snapshot), alive=sum(p.status == "alive" for p in snapshot),
+            quarantine=sum(p.status == "quarantine" for p in snapshot),
+            dead=sum(p.status == "dead" for p in snapshot),
+            avg_score=sum(p.score for p in snapshot) / len(snapshot) if snapshot else 0,
+            avg_latency_ms=sum(latencies) / len(latencies) if latencies else None,
+            strategy=strategy,
+        )
+
+    def publish_stats(self, strategy: RotationStrategy) -> PoolStats:
+        stats = self.stats(strategy)
+        self._events.publish(PoolStatsEvent(payload=stats))
+        return stats
+
+    async def clear_dead(self) -> int:
+        async def write() -> int:
+            dead = tuple(p for p in self._snapshot if p.status == "dead")
+            async with transaction(self._conn):
+                for proxy in dead:
+                    await repository.delete_proxy(self._conn, proxy.id)
+            removed = {p.id for p in dead}
+            self._snapshot = tuple(p for p in self._snapshot if p.id not in removed)
+            for proxy_id in removed:
+                self._latencies.pop(proxy_id, None)
+                self._events.publish(ProxyEvent(type="removed", proxy_id=proxy_id))
+            return len(removed)
+
+        return await self._mutate(write)
 
     def subscribe(self) -> Subscription:
         return self._events.subscribe()

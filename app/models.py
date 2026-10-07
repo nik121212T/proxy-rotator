@@ -98,3 +98,11 @@ class ProxyEvent(_DTO):
     type: Literal["added", "updated", "removed", "check_result"]
     proxy_id: Identifier
     payload: Proxy | CheckResult | None = None
+
+
+class PoolStatsEvent(_DTO):
+    type: Literal["pool_stats"] = "pool_stats"
+    payload: PoolStats
+
+
+Event = ProxyEvent | PoolStatsEvent

@@ -55,7 +55,8 @@ Work top to bottom. Check each box when done. One task = one commit.
   - Validated startup settings, off-thread key derivation, credential preflight, migrated DB, pool/rotator/checker lifecycle and readiness. Empty API routers mounted for T4.2–T4.4. `python -m app.main` maps configuration/crypto startup failures to EX_CONFIG=78; launcher scripts remain T6.1/T6.2. Local HTTP and real SQLite lifecycle tests.
 - [x] T4.2  `app/routes/proxies.py` : REST per `docs/API.md`.
   - Atomic imports (any line error rejects the batch per latest user instruction), first-wins identity dedup, filtered pages/details, queued and individual checks, dead-state soft delete. Sanitized validation errors; real DB rollback/concurrency and 60-check retention tests. Fixed fake aiohttp handler leaks; test teardown rejects leaked tasks and warnings.
-- [ ] T4.3  `app/routes/pool.py` : stats + control endpoints.
+- [x] T4.3  `app/routes/pool.py` : stats + control endpoints.
+  - Snapshot-only aggregate stats, validated rotation changes with pool_stats events, atomic dead-only purge preserving alive/quarantined records.
 - [ ] T4.4  `app/routes/gateway.py` : gateway status / strategy switch.
 - [ ] T4.5  WebSocket `/ws/events` broadcasts pool events.
 - [ ] T4.6  Dashboard HTML (Jinja2 + HTMX) : table of proxies, forms, live updates via WS.
