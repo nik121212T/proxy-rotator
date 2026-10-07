@@ -117,3 +117,31 @@ proxy-rotator/
 ## Legal
 
 Use only for proxies you have the right to use. Respect source ToS and target site ToS. The author is not responsible for abuse.
+
+
+## Smoke test
+
+`./scripts/smoke_gateway.sh` verifies the **real local HTTP gateway**, including
+HTTPS CONNECT, by requesting `https://api.ipify.org` three times. It succeeds
+only when at least two distinct exit IPs are observed. It never falls back to
+a direct request and overrides NO_PROXY so the gateway cannot be bypassed.
+
+Prerequisites (macOS/Linux): Python 3.11+, curl, an existing `.venv`, installed
+dependencies and a `.env` with the correct `MASTER_SECRET` for the stored salt
+and database. A master secret alone does not provide proxies: first import at
+least two working upstreams with distinct exit IPs using the UI. Prefer
+`ROTATION_STRATEGY=round_robin`; weighted/random/sticky selection can legitimately
+return the same exit three times. Stop any running app before the test.
+
+The script starts `scripts/start.sh`, waits up to 30 seconds for admin readiness
+on `127.0.0.1:8080`, then up to 60 seconds for at least two alive proxies. Each
+IP request through `127.0.0.1:8888` has a 10-second timeout. Use those default
+ports in `.env`. Startup/dependency installation must fit the readiness timeout;
+run `start.sh` once beforehand on a fresh installation.
+
+Logs go to `/tmp/proxy-rotator-smoke.log` (owner-only). Only validated IPs and
+fixed status messages are printed. The script sends SIGTERM to its own server
+process group, waits up to five seconds, then uses SIGKILL if needed. Exit 0
+means the rotation proof passed; exit 1 means failure or missing prerequisites.
+This live smoke is deliberately **not run in CI**; automated tests use fake
+local upstreams and isolated script harnesses instead.
