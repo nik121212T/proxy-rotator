@@ -92,3 +92,9 @@ class ProxyFilters(_DTO):
     min_score: Score | None = None
     limit: Annotated[int, Field(ge=1, strict=True)] | None = None
     offset: Count = 0
+
+
+class ProxyEvent(_DTO):
+    type: Literal["added", "updated", "removed", "check_result"]
+    proxy_id: Identifier
+    payload: Proxy | CheckResult | None = None

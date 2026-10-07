@@ -85,6 +85,29 @@ async def delete_proxy(conn: aiosqlite.Connection, proxy_id: int) -> Proxy | Non
     return _proxy_from_row(row) if row is not None else None
 
 
+async def update_proxy_health(conn: aiosqlite.Connection, proxy: Proxy) -> Proxy:
+    """Persist a domain-produced health snapshot without changing credentials."""
+    async with conn.execute(
+        "UPDATE proxies SET status=?, score=?, latency_ms=?, success_count=?, fail_count=?, "
+        "consec_fails=?, last_checked_at=?, quarantine_until=? WHERE id=? RETURNING *",
+        (
+            proxy.status,
+            proxy.score,
+            proxy.latency_ms,
+            proxy.success_count,
+            proxy.fail_count,
+            proxy.consec_fails,
+            proxy.last_checked_at.isoformat() if proxy.last_checked_at else None,
+            proxy.quarantine_until.isoformat() if proxy.quarantine_until else None,
+            proxy.id,
+        ),
+    ) as cursor:
+        row = await cursor.fetchone()
+    if row is None:
+        raise KeyError("Proxy no longer exists")
+    return _proxy_from_row(row)
+
+
 @asynccontextmanager
 async def _check_savepoint(conn: aiosqlite.Connection) -> AsyncIterator[None]:
     """Make insert/prune atomic without committing an enclosing import batch."""
