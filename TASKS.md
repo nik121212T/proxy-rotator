@@ -81,7 +81,8 @@ Work top to bottom. Check each box when done. One task = one commit.
   - Early .env check (78), dependency-free --help, Python version validation, module-based pip, timestamp refresh only on success, data directory and exec of app.main/Uvicorn with validated .env bindings. Isolated bootstrap/failure/path-with-spaces tests pass. Gate prerequisite: fake gateway upstreams now always close incoming writers; per-test garbage collection surfaces resource leaks at teardown.
 - [x] T6.2  `scripts/start.bat` : same for Windows.
   - Checks Python, .env (78), install failures and requirement timestamps; creates data. findstr pipes only bindings to a Python parser, never shell-evaluates values. Cross-platform parser tests pass; native batch test included. Native execution SKIPPED locally (no Windows), deferred to T6.3 matrix.
-- [ ] T6.3  GitHub Actions matrix (ubuntu-latest, macos-latest, windows-latest) : `pip install`, `pytest`, `ruff`, `mypy`.
+- [x] T6.3  GitHub Actions matrix (ubuntu-latest, macos-latest, windows-latest) : `pip install`, `pytest`, `ruff`, `mypy`.
+  - Python 3.11, fail-fast matrix, explicit pytest/Ruff/mypy steps; no live gateway smoke. Hosted execution SKIPPED: local-only repository, no GitHub remote. Windows validation remains pending its first hosted run.
 - [ ] T6.4  README screenshot or ASCII sketch of dashboard added.
 
 ## Phase 7 — Done gate
