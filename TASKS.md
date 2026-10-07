@@ -83,7 +83,7 @@ Work top to bottom. Check each box when done. One task = one commit.
   - Checks Python, .env (78), install failures and requirement timestamps; creates data. findstr pipes only bindings to a Python parser, never shell-evaluates values. Cross-platform parser tests pass; native batch test included. Native execution SKIPPED locally (no Windows), deferred to T6.3 matrix.
 - [x] T6.3  GitHub Actions matrix (ubuntu-latest, macos-latest, windows-latest) : `pip install`, `pytest`, `ruff`, `mypy`.
   - Python 3.11, fail-fast matrix, explicit pytest/Ruff/mypy steps; no live gateway smoke. Hosted execution SKIPPED: local-only repository, no GitHub remote. Windows validation remains pending its first hosted run.
-- [ ] T6.4  README screenshot or ASCII sketch of dashboard added.
+- [x] T6.4  README Dashboard ASCII sketch added: topbar, summary, table, import/rotation/gateway panels and bound addresses. Feature list corrected to match implemented MVP.
 
 ## Phase 7 — Done gate
 

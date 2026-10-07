@@ -42,16 +42,48 @@ Browser setup: see [`docs/BROWSER_SETUP.md`](docs/BROWSER_SETUP.md).
 
 ## Features (MVP — v1)
 
-- [x] Import proxies by paste / file / URL (format `user:pass@host:port`)
+- [x] Import proxies by paste (format `user:pass@host:port`)
 - [x] Parse + dedup + persist in SQLite
-- [x] Async health check (parallel, HEAD against `https://api.ipify.org`)
+- [x] Async health check (parallel, GET against `https://api.ipify.org`)
 - [x] Dashboard: host, port, status, latency, score, success %, last check
-- [x] Buttons: test one / test all / remove dead / force-quarantine
+- [x] Buttons: test one / test all / remove / clear dead
 - [x] Local HTTP + SOCKS5 gateway with pluggable rotation strategies
 - [x] Burn detector (status + content + timeout + latency spike)
 - [x] Health score + auto-quarantine (10 min) + re-test
-- [x] Credentials encrypted at rest (Fernet / AES-256)
+- [x] Credentials encrypted at rest (Fernet with PBKDF2-derived key)
 - [x] REST API + WebSocket for live stats
+
+## Dashboard
+
+Open <http://127.0.0.1:8080> after startup. The interface uses server-rendered
+HTML, locally bundled HTMX and WebSocket updates. Illustrative data below;
+the bound addresses shown in this sketch assume the default listeners started.
+The current Gateway panel displays configured addresses and still has a static
+"Non démarrées" label; use `/api/gateway/status` for actual bound addresses and
+counters (UI status wiring remains a known limitation).
+
+```text
++--------------------------------------------------------------------------------+
+| PROXY ROTATOR                                         Live connection: online  |
++--------------------------------------------------------------------------------+
+| Total: 50 | Alive: 46 | Quarantine: 2 | Dead: 2 | Avg latency: 312 ms             |
++--------------------------------------------------------------------------------+
+| Pool                         [Test all] [Clear dead]                            |
+| Host:port       Status       Latency  Score  Success%  Last check   Actions     |
+| 203.0.113.10:80 alive          240 ms   94.2    98%     10:42:01    Test Remove |
+| 203.0.113.11:80 quarantine     890 ms   18.4    62%     10:41:58    Test Remove |
++--------------------------------------------------------------------------------+
+| Import                         | Rotation               | Gateway              |
+| [Paste proxy list            ] | [round_robin         v] | HTTP bound:          |
+| [One proxy per line          ] | [Apply]                | 127.0.0.1:8888       |
+| [Import and check]             | random / weighted /    | SOCKS5 bound:        |
+| 2,000 lines max; atomic import | sticky also available  | 127.0.0.1:1080       |
++--------------------------------------------------------------------------------+
+```
+
+The controls stack vertically on narrow screens; the proxy table scrolls
+horizontally. Empty pools, connection loss and import errors have explicit
+feedback. Credentials are not displayed in the proxy table.
 
 ## Planned (v2)
 
