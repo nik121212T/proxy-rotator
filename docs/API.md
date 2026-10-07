@@ -118,7 +118,13 @@ replace the runtime gateway snapshot with bound addresses and actual counters.
 
 ## WebSocket `/ws/events`
 
-Pushes JSON events, one per line.
+Each WebSocket frame contains one JSON object `{type, payload}`.
+A snapshot of pool_stats is sent on connection, on change and every 2 seconds.
+Each client has its own 100-event queue; saturation drops the oldest event.
+This is a live channel, not a durable/replayable log: refresh REST snapshots
+on reconnect (and periodically) to recover dropped changes. Disconnect cancels
+sender/receiver tasks and unsubscribes. `gateway_event` is an empty-payload hook
+until Phase 5 supplies gateway events.
 
 Event types :
 

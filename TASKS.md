@@ -59,7 +59,8 @@ Work top to bottom. Check each box when done. One task = one commit.
   - Snapshot-only aggregate stats, validated rotation changes with pool_stats events, atomic dead-only purge preserving alive/quarantined records.
 - [x] T4.4  `app/routes/gateway.py` : gateway status (strategy switch is T4.3).
   - Configured addresses from validated settings; bound=null and zero counters until Phase 5 replaces the runtime snapshot. TestClient verification; AnyIO pinned for compatibility with the existing Starlette version.
-- [ ] T4.5  WebSocket `/ws/events` broadcasts pool events.
+- [x] T4.5  WebSocket `/ws/events` broadcasts pool events.
+  - Public event mapping, initial/change/2-second stats, empty gateway hook, per-client 100-item drop-oldest queues and explicit cancellation/unsubscribe on disconnect. Core checker subscribers retain overflow/resync behavior.
 - [ ] T4.6  Dashboard HTML (Jinja2 + HTMX) : table of proxies, forms, live updates via WS.
 
 ## Phase 5 — Local gateways

@@ -18,7 +18,7 @@ from app.health_checker import HealthChecker
 from app.models import GatewayStatus, ListenerStatus
 from app.pool import Pool
 from app.rotator import Rotator
-from app.routes import gateway, proxies
+from app.routes import events, gateway, proxies
 from app.routes import pool as pool_routes
 from app.runtime import Runtime
 from app.salt import load_or_create_salt
@@ -83,7 +83,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="proxy-rotator", version="0.1.0", lifespan=lifespan)
     app.state.runtime = None
     app.state.config_failed = False
-    for router in (proxies.router, pool_routes.router, gateway.router):
+    for router in (proxies.router, pool_routes.router, gateway.router, events.router):
         app.include_router(router)
 
     @app.exception_handler(RequestValidationError)

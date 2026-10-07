@@ -7,8 +7,9 @@ from app.models import Event
 
 
 class Subscription(AsyncIterator[Event]):
-    def __init__(self, bus: "EventBus", capacity: int) -> None:
+    def __init__(self, bus: "EventBus", capacity: int, drop_oldest: bool = False) -> None:
         self._bus = bus
+        self._drop_oldest = drop_oldest
         self._queue: asyncio.Queue[Event | None] = asyncio.Queue(capacity)
         self._closed = False
 
@@ -42,14 +43,24 @@ class EventBus:
         self._capacity = capacity
         self._subscribers: set[Subscription] = set()
 
-    def subscribe(self) -> Subscription:
-        subscriber = Subscription(self, self._capacity)
+    @property
+    def subscriber_count(self) -> int:
+        return len(self._subscribers)
+
+    def subscribe(self, *, capacity: int | None = None, drop_oldest: bool = False) -> Subscription:
+        size = self._capacity if capacity is None else capacity
+        if size < 1:
+            raise ValueError("Subscriber capacity must be positive")
+        subscriber = Subscription(self, size, drop_oldest)
         self._subscribers.add(subscriber)
         return subscriber
 
     def publish(self, event: Event) -> None:
         for subscriber in tuple(self._subscribers):
-            if subscriber._queue.full():
+            if subscriber._queue.full() and subscriber._drop_oldest:
+                subscriber._queue.get_nowait()
+                subscriber._queue.put_nowait(event)
+            elif subscriber._queue.full():
                 self._subscribers.discard(subscriber)
                 while not subscriber._queue.empty():
                     subscriber._queue.get_nowait()

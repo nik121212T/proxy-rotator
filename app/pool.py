@@ -12,7 +12,15 @@ import aiosqlite
 from app import repository
 from app.db import transaction
 from app.events import EventBus, Subscription
-from app.models import CheckResult, PoolStats, PoolStatsEvent, Proxy, ProxyEvent, RotationStrategy
+from app.models import (
+    CheckResult,
+    GatewayEvent,
+    PoolStats,
+    PoolStatsEvent,
+    Proxy,
+    ProxyEvent,
+    RotationStrategy,
+)
 from app.parser import ImportReport, ParsedProxy, parse_bulk
 
 T = TypeVar("T")
@@ -87,6 +95,9 @@ class Pool:
             strategy=strategy,
         )
 
+    def publish_gateway_event(self) -> None:
+        self._events.publish(GatewayEvent())
+
     def publish_stats(self, strategy: RotationStrategy) -> PoolStats:
         stats = self.stats(strategy)
         self._events.publish(PoolStatsEvent(payload=stats))
@@ -107,8 +118,12 @@ class Pool:
 
         return await self._mutate(write)
 
-    def subscribe(self) -> Subscription:
-        return self._events.subscribe()
+    @property
+    def subscriber_count(self) -> int:
+        return self._events.subscriber_count
+
+    def subscribe(self, *, capacity: int | None = None, drop_oldest: bool = False) -> Subscription:
+        return self._events.subscribe(capacity=capacity, drop_oldest=drop_oldest)
 
     def _get(self, proxy_id: int) -> Proxy:
         for proxy in self._snapshot:

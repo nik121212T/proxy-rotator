@@ -105,7 +105,12 @@ class PoolStatsEvent(_DTO):
     payload: PoolStats
 
 
-Event = ProxyEvent | PoolStatsEvent
+class GatewayEvent(_DTO):
+    type: Literal["gateway_event"] = "gateway_event"
+    payload: dict[str, str] = Field(default_factory=dict)
+
+
+Event = ProxyEvent | PoolStatsEvent | GatewayEvent
 
 
 class ListenerStatus(_DTO):
