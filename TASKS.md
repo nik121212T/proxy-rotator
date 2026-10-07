@@ -13,8 +13,8 @@ Work top to bottom. Check each box when done. One task = one commit.
   - Both bootstrap tests pass; retain `tests/test_smoke.py`.
 - [x] T0.3  `ruff check app tests` + `mypy app` pass on the real codebase.
   - Validated implicitly by T1.1 and its pre-commit checks.
-- [ ] T0.4  [deferred to T6.1] `./scripts/start.sh` and `scripts\start.bat` print a usage message and exit 0 when deps missing.
-  - Non-blocking launcher UX deferred to T6.1/T6.2 by the user. Continue Phase 1 locally, without a GitHub remote or push.
+- [x] T0.4  Both launchers provide dependency-free `--help` (exit 0); missing dependencies bootstrap automatically per updated T6.1/T6.2 requirements.
+  - Original missing-dependencies/exit-0 wording superseded by the requested automatic bootstrap.
 
 ## Phase 1 — Core (pure)
 
@@ -79,7 +79,8 @@ Work top to bottom. Check each box when done. One task = one commit.
 
 - [x] T6.1  `scripts/start.sh` : auto-create venv if missing, install deps, start.
   - Early .env check (78), dependency-free --help, Python version validation, module-based pip, timestamp refresh only on success, data directory and exec of app.main/Uvicorn with validated .env bindings. Isolated bootstrap/failure/path-with-spaces tests pass. Gate prerequisite: fake gateway upstreams now always close incoming writers; per-test garbage collection surfaces resource leaks at teardown.
-- [ ] T6.2  `scripts/start.bat` : same for Windows.
+- [x] T6.2  `scripts/start.bat` : same for Windows.
+  - Checks Python, .env (78), install failures and requirement timestamps; creates data. findstr pipes only bindings to a Python parser, never shell-evaluates values. Cross-platform parser tests pass; native batch test included. Native execution SKIPPED locally (no Windows), deferred to T6.3 matrix.
 - [ ] T6.3  GitHub Actions matrix (ubuntu-latest, macos-latest, windows-latest) : `pip install`, `pytest`, `ruff`, `mypy`.
 - [ ] T6.4  README screenshot or ASCII sketch of dashboard added.
 

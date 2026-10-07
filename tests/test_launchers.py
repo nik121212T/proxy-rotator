@@ -89,3 +89,74 @@ def test_unix_missing_env_and_failed_install_do_not_launch(launcher_project: Pat
     assert result.returncode != 0
     assert not (launcher_project / ".venv" / ".deps-installed").exists()
     assert not (launcher_project / "launched").exists()
+
+
+@pytest.mark.parametrize("bindings", ['BIND_HOST="127.0.0.2"\nADMIN_PORT=8091 # admin\n', ""])
+def test_windows_filtered_bindings_start_application(launcher_project: Path, bindings: str) -> None:
+    import json
+
+    helper = ROOT / "scripts" / "windows_env.py"
+    assert helper.exists(), "Windows filtered-env entry point is missing"
+    shutil.copy2(helper, launcher_project / "scripts" / helper.name)
+    (launcher_project / "app" / "main.py").write_text(
+        "import os, json\nfrom pathlib import Path\n"
+        "def run():\n"
+        '    Path("bindings.json").write_text(json.dumps({k: os.getenv(k) for k in '
+        '("BIND_HOST", "ADMIN_PORT")}))\n'
+        "    return 0\n"
+    )
+    env = {k: v for k, v in os.environ.items() if k not in {"BIND_HOST", "ADMIN_PORT"}}
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, str(launcher_project / "scripts" / helper.name)],
+        cwd=launcher_project.parent,
+        env=env,
+        input=bindings,
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    actual = json.loads((launcher_project / "bindings.json").read_text())
+    assert actual == {
+        "BIND_HOST": "127.0.0.2" if bindings else None,
+        "ADMIN_PORT": "8091" if bindings else None,
+    }
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Native Windows launcher; CI windows-latest")
+def test_windows_bootstrap_and_dependency_refresh(launcher_project: Path) -> None:
+    shutil.copy2(ROOT / "scripts" / "windows_env.py", launcher_project / "scripts")
+    (launcher_project / "app" / "main.py").write_text(
+        'from pathlib import Path\ndef run():\n    Path("launched").touch()\n    return 0\n'
+    )
+
+    command = shutil.which("cmd.exe")
+    assert command is not None
+
+    def launch(*args: str, fail_pip: bool = False) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(  # noqa: S603
+            [command, "/d", "/c", "scripts\\start.bat", *args],
+            cwd=launcher_project,
+            text=True,
+            capture_output=True,
+            timeout=60,
+            env=dict(os.environ, TEST_PIP_EXIT="1" if fail_pip else "0"),
+        )
+
+    assert launch("--help").returncode == 0
+    assert not (launcher_project / ".venv").exists()
+    assert launch().returncode == 78
+    (launcher_project / ".env").write_text("MASTER_SECRET=synthetic\n")
+    assert launch(fail_pip=True).returncode != 0
+    stamp = launcher_project / ".venv" / ".deps-installed"
+    assert not stamp.exists()
+    result = launch()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (launcher_project / "launched").exists()
+    assert (launcher_project / "data").is_dir()
+    assert (launcher_project / "installs").read_text() == "2"
+    assert launch().returncode == 0
+    assert (launcher_project / "installs").read_text() == "2"
+    os.utime(stamp, (1, 1))
+    assert launch().returncode == 0
+    assert (launcher_project / "installs").read_text() == "3"
