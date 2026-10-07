@@ -1,8 +1,10 @@
 """Serialized write-through pool with immutable, lock-free read snapshots."""
 
 import asyncio
+import math
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
+from statistics import median
 from typing import TypeVar
 
 import aiosqlite
@@ -20,6 +22,17 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def health_score(proxy: Proxy, now: datetime) -> float:
+    """SPEC section 4; unmeasured proxies have zero freshness."""
+    if proxy.last_checked_at is None:
+        return 0.0
+    ratio = proxy.success_count / max(1, proxy.success_count + proxy.fail_count)
+    latency = proxy.latency_ms if proxy.latency_ms is not None else 2000
+    penalty = min(1.0, max(0.0, latency / 2000))
+    age_minutes = max(0.0, (now - proxy.last_checked_at).total_seconds() / 60)
+    return 100 * ratio * (1 - 0.3 * penalty) * math.exp(-age_minutes / 60)
+
+
 class Pool:
     def __init__(
         self,
@@ -34,6 +47,7 @@ class Pool:
         self._clock = clock
         self._min_score = min_score
         self._snapshot: tuple[Proxy, ...] = ()
+        self._latencies: dict[int, tuple[int | None, ...]] = {}
         self._lock = asyncio.Lock()
         self._events = EventBus()
 
@@ -48,13 +62,18 @@ class Pool:
     ) -> "Pool":
         pool = cls(conn, key, clock=clock, min_score=min_score)
         pool._snapshot = tuple(await repository.list_proxies(conn))
+        for proxy in pool._snapshot:
+            history = await repository.list_checks(conn, proxy.id, limit=20)
+            pool._latencies[proxy.id] = tuple(check.latency_ms for check in reversed(history))
         return pool
 
     def all(self) -> tuple[Proxy, ...]:
         return self._snapshot
 
     def active(self) -> tuple[Proxy, ...]:
-        return tuple(p for p in self.all() if p.status == "alive" and p.score >= self._min_score)
+        now = self._clock()
+        current = (p.model_copy(update={"score": health_score(p, now)}) for p in self._snapshot)
+        return tuple(p for p in current if p.status == "alive" and p.score >= self._min_score)
 
     def subscribe(self) -> Subscription:
         return self._events.subscribe()
@@ -96,6 +115,7 @@ class Pool:
             removed = await repository.delete_proxy(self._conn, proxy_id)
             if removed is not None:
                 self._snapshot = tuple(p for p in self._snapshot if p.id != proxy_id)
+                self._latencies.pop(proxy_id, None)
                 self._events.publish(ProxyEvent(type="removed", proxy_id=proxy_id))
             return removed
 
@@ -145,11 +165,14 @@ class Pool:
             until = None if ok else old.quarantine_until
             if not ok and failures >= 3:
                 until = now + timedelta(minutes=10)
+            history = (*self._latencies.get(proxy_id, ()), latency_ms)[-20:]
+            measured = [value for value in history if value is not None]
+            median_ms = round(median(measured)) if measured else old.latency_ms
             updated = Proxy.model_validate(
                 {
                     **old.__dict__,
                     "status": status,
-                    "latency_ms": latency_ms if latency_ms is not None else old.latency_ms,
+                    "latency_ms": median_ms,
                     "success_count": old.success_count + int(ok),
                     "fail_count": old.fail_count + int(not ok),
                     "consec_fails": failures,
@@ -157,10 +180,15 @@ class Pool:
                     "quarantine_until": until,
                 }
             )
+            score = health_score(updated, self._clock())
+            if check is not None and old.status == "quarantine" and score < 10:
+                updated = updated.model_copy(update={"status": "dead", "quarantine_until": None})
+            updated = updated.model_copy(update={"score": score})
             async with transaction(self._conn):
                 if check:
                     await repository.record_check(self._conn, check)
                 saved = await repository.update_proxy_health(self._conn, updated)
+            self._latencies[proxy_id] = history
             self._publish_proxy(saved)
             if check:
                 self._events.publish(

@@ -151,3 +151,26 @@ async def record_check(conn: aiosqlite.Connection, check: CheckResult) -> CheckR
         ):
             pass
     return check
+
+
+async def list_checks(
+    conn: aiosqlite.Connection, proxy_id: int, limit: int = 50
+) -> tuple[CheckResult, ...]:
+    if not 1 <= limit <= 50:
+        raise ValueError("Check history limit must be between 1 and 50")
+    async with conn.execute(
+        "SELECT proxy_id, ok, status_code, latency_ms, exit_ip, error, checked_at "
+        "FROM proxy_checks WHERE proxy_id=? ORDER BY checked_at DESC, id DESC LIMIT ?",
+        (proxy_id, limit),
+    ) as cursor:
+        rows = await cursor.fetchall()
+    results = []
+    for row in rows:
+        values = dict(row)
+        values["ok"] = bool(values["ok"])
+        timestamp = datetime.fromisoformat(values["checked_at"])
+        values["checked_at"] = (
+            timestamp.replace(tzinfo=UTC) if timestamp.tzinfo is None else timestamp
+        )
+        results.append(CheckResult.model_validate(values))
+    return tuple(results)

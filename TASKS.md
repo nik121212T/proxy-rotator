@@ -40,7 +40,8 @@ Work top to bottom. Check each box when done. One task = one commit.
 
 - [x] T3.1  `app/pool.py` : `Pool` class, in-memory + DB write-through, event bus (asyncio.Queue).
   - Immutable tuple snapshots, serialized write-through mutations, atomic check/state writes and bounded queue fanout. Tests cover 100 parallel mutations, DB failures, subscriber lifecycle and payloads. Pool owns its DB connection exclusively.
-- [ ] T3.2  `app/pool.py` : scoring formula from `SPEC.md §4`. Tests.
+- [x] T3.2  `app/pool.py` : scoring formula from `SPEC.md §4`. Tests.
+  - Exact ratio/latency/freshness formula, selection-time decay, rounded median of the last 20 measurements, persisted-check history restored on load, and dead-after-quarantine-retest boundary.
 - [ ] T3.3  `app/rotator.py` : four strategies (`round_robin`, `random`, `weighted`, `sticky`). Interface `pick(pool) -> Proxy | None`.
 - [ ] T3.4  `app/burn_detector.py` : classify outcome. Tests for every signal in `SPEC.md §6`.
 - [ ] T3.5  `app/health_checker.py` : probe one proxy; probe all with semaphore; background loop with interval. Tests with fake upstream.
