@@ -77,7 +77,8 @@ Work top to bottom. Check each box when done. One task = one commit.
 
 ## Phase 6 — Packaging
 
-- [ ] T6.1  `scripts/start.sh` : auto-create venv if missing, install deps, start.
+- [x] T6.1  `scripts/start.sh` : auto-create venv if missing, install deps, start.
+  - Early .env check (78), dependency-free --help, Python version validation, module-based pip, timestamp refresh only on success, data directory and exec of app.main/Uvicorn with validated .env bindings. Isolated bootstrap/failure/path-with-spaces tests pass. Gate prerequisite: fake gateway upstreams now always close incoming writers; per-test garbage collection surfaces resource leaks at teardown.
 - [ ] T6.2  `scripts/start.bat` : same for Windows.
 - [ ] T6.3  GitHub Actions matrix (ubuntu-latest, macos-latest, windows-latest) : `pip install`, `pytest`, `ruff`, `mypy`.
 - [ ] T6.4  README screenshot or ASCII sketch of dashboard added.

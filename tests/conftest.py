@@ -1,6 +1,7 @@
 """Real, per-test databases; no SQLite mocks."""
 
 import asyncio
+import gc
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -30,6 +31,7 @@ async def no_leaked_tasks() -> AsyncIterator[None]:
     baseline = asyncio.all_tasks()
     yield
     await asyncio.sleep(0)
+    gc.collect()
     leaked = asyncio.all_tasks() - baseline - {asyncio.current_task()}
     descriptions = [repr(task.get_coro()) for task in leaked]
     for task in leaked:

@@ -97,6 +97,14 @@ class FakeUpstream:
 
     async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
+            await self._serve(reader, writer)
+        finally:
+            writer.close()
+            with contextlib.suppress(ConnectionError, OSError):
+                await writer.wait_closed()
+
+    async def _serve(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        try:
             method, target, headers = await self._read_headers(reader)
         except asyncio.IncompleteReadError:
             writer.close()

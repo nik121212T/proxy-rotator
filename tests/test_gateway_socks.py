@@ -50,6 +50,14 @@ class FakeHttpUpstream:
 
     async def _handle(self, reader, writer):
         try:
+            await self._serve(reader, writer)
+        finally:
+            writer.close()
+            with contextlib.suppress(ConnectionError, OSError):
+                await writer.wait_closed()
+
+    async def _serve(self, reader, writer):
+        try:
             line = await reader.readuntil(b"\r\n")
         except asyncio.IncompleteReadError:
             writer.close()
