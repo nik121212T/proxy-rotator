@@ -28,13 +28,27 @@
         <form id="import-form" hx-post="/api/proxies/import" hx-ext="json-form" hx-target="#feedback" hx-disabled-elt="find button" autocomplete="off">
           <label for="proxy-text">Proxies</label><textarea id="proxy-text" name="text" rows="6" required spellcheck="false" autocapitalize="off" placeholder="user:pass@hôte:port" aria-describedby="import-help"></textarea>
           <label for="proxy-label">Libellé <span class="optional">facultatif</span></label><input id="proxy-label" name="label" placeholder="Ex. : pool principal">
-          <p id="import-help" class="helper">2 000 lignes maximum. Une ligne invalide bloque tout le lot.</p><button type="submit" class="wide">Importer et vérifier</button>
+          <p id="import-help" class="helper">2 000 lignes maximum. Les lignes invalides sont ignorées, les proxies valides sont importés.</p><button type="submit" class="wide">Importer et vérifier</button>
         </form>
       </section>
       <section class="control-section"><h2>Rotation</h2><form id="strategy-form" hx-post="/api/pool/strategy" hx-ext="json-form" hx-target="#feedback" hx-disabled-elt="find button">
         <label for="strategy">Mode de sélection</label><select id="strategy" name="strategy">{% for value,label in [('weighted','Pondérée par le score'),('round_robin','À tour de rôle'),('random','Aléatoire'),('sticky','Stable par domaine')] %}<option value="{{ value }}" {% if stats.strategy == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><button type="submit" class="secondary wide">Appliquer la stratégie</button>
       </form></section>
-      <section class="gateway-note"><h2>Passerelles</h2><p>Non démarrées</p><dl><div><dt>HTTP</dt><dd>{{ gateway.http.configured }}</dd></div><div><dt>SOCKS5</dt><dd>{{ gateway.socks5.configured }}</dd></div></dl></section>
+      <section class="gateway-note" aria-labelledby="gw-title">
+        <h2 id="gw-title">Passerelles</h2>
+        <dl class="gateway-list">
+          <div class="gateway-row{% if not gateway.http.bound %} offline{% endif %}">
+            <dt>HTTP</dt>
+            <dd>{{ gateway.http.bound or gateway.http.configured }}</dd>
+            <span class="status {% if gateway.http.bound %}status-alive{% else %}status-dead{% endif %}">{% if gateway.http.bound %}En écoute{% else %}Hors service{% endif %}</span>
+          </div>
+          <div class="gateway-row{% if not gateway.socks5.bound %} offline{% endif %}">
+            <dt>SOCKS5</dt>
+            <dd>{{ gateway.socks5.bound or gateway.socks5.configured }}</dd>
+            <span class="status {% if gateway.socks5.bound %}status-alive{% else %}status-dead{% endif %}">{% if gateway.socks5.bound %}En écoute{% else %}Hors service{% endif %}</span>
+          </div>
+        </dl>
+      </section>
     </aside>
   </div>
 </main>
