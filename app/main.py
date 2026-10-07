@@ -15,8 +15,8 @@ from pydantic import ValidationError
 from app.config import Settings
 from app.crypto import CryptoConfigError, decrypt_password, derive_key
 from app.db import get_db
+from app.gateway_http import HttpGateway
 from app.health_checker import HealthChecker
-from app.models import GatewayStatus, ListenerStatus
 from app.pool import Pool
 from app.rotator import Rotator
 from app.routes import events, gateway, proxies, ui
@@ -52,15 +52,30 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
             interval_s=config.health_check_interval_s,
         )
         rotator = Rotator(config.rotation_strategy, sticky_ttl_s=config.sticky_ttl_s)
+        host = f"[{config.bind_host}]" if ":" in config.bind_host else config.bind_host
+        http_configured = f"{host}:{config.gateway_http_port}"
+        socks5_configured = f"{host}:{config.gateway_socks_port}"
+        http_gateway = HttpGateway(
+            pool,
+            rotator,
+            key,
+            host=config.bind_host,
+            port=config.gateway_http_port,
+            timeout_s=config.gateway_timeout_s,
+        )
         checker.start()
+        await http_gateway.start()
         try:
-            host = f"[{config.bind_host}]" if ":" in config.bind_host else config.bind_host
-            gateway_status = GatewayStatus(
-                http=ListenerStatus(configured=f"{host}:{config.gateway_http_port}"),
-                socks5=ListenerStatus(configured=f"{host}:{config.gateway_socks_port}"),
+            yield Runtime(
+                pool=pool,
+                checker=checker,
+                rotator=rotator,
+                http_configured=http_configured,
+                socks5_configured=socks5_configured,
+                http_gateway=http_gateway,
             )
-            yield Runtime(pool, checker, rotator, gateway_status)
         finally:
+            await http_gateway.stop()
             await checker.stop()
 
 

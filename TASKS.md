@@ -66,7 +66,8 @@ Work top to bottom. Check each box when done. One task = one commit.
 
 ## Phase 5 — Local gateways
 
-- [ ] T5.1  `app/gateway_http.py` : HTTP forward proxy + CONNECT tunnel.
+- [x] T5.1  `app/gateway_http.py` : HTTP forward proxy + CONNECT tunnel.
+  - Asyncio TCP listener with manual request-line + header parsing. CONNECT opens a raw tunnel through the chosen upstream (HTTP CONNECT or SOCKS5 via aiohttp_socks). Non-CONNECT requests forward through aiohttp with chunked / Content-Length framing preserved. Hop-by-hop headers stripped (RFC 7230) including `Connection: foo` extensions. `Via: 1.1 proxy-rotator` added. `pool.mark_success` / `mark_fail` reported per request. Wired into FastAPI lifespan; `GatewayStatus` now live (`bound`, `active_conns`, `requests_total`). Config port `0` opts into an ephemeral OS-assigned port for tests/CI. T5.2 adds burn-on-response + retry; T5.3 adds SOCKS5 inbound.
 - [ ] T5.2  Burn-on-response hook + automatic retry on next proxy (≤ `MAX_RETRY_PER_REQUEST`).
 - [ ] T5.3  `app/gateway_socks.py` : SOCKS5 no-auth CONNECT server with DNS passthrough.
 - [ ] T5.4  Smoke test : `curl -x http://127.0.0.1:8888 https://api.ipify.org` returns a different IP from the user's direct IP, three times.
