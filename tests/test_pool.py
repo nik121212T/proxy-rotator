@@ -89,3 +89,33 @@ async def test_check_result_is_persisted_and_fanned_out(db: aiosqlite.Connection
     async with db.execute("SELECT count(*) FROM proxy_checks") as cursor:
         assert (await cursor.fetchone())[0] == 1
     await stream.aclose()
+
+
+async def test_bulk_import_rolls_back_database_and_snapshot(db: aiosqlite.Connection) -> None:
+    pool = await Pool.load(db, Fernet.generate_key())
+    async with db.execute(
+        "CREATE TRIGGER reject_second BEFORE INSERT ON proxies "
+        "WHEN NEW.username = 'second' BEGIN SELECT RAISE(ABORT, 'Test write failure'); END"
+    ):
+        pass
+    with pytest.raises(aiosqlite.IntegrityError, match='Test write failure'):
+        await pool.import_text('first:fake@proxy.example:80\nsecond:fake@proxy.example:80')
+    assert pool.all() == ()
+    assert await list_proxies(db) == []
+
+
+async def test_concurrent_bulk_imports_deduplicate_and_keep_first_credentials(db: aiosqlite.Connection) -> None:
+    from app.crypto import decrypt_password
+
+    key = Fernet.generate_key()
+    pool = await Pool.load(db, key)
+    text = 'first:original@proxy.example:80\nsecond:original@proxy.example:80'
+    reports = await asyncio.gather(*(pool.import_text(text, label='first') for _ in range(10)))
+    assert sum(report.imported for report in reports) == 2
+    assert sum(report.skipped for report in reports) == 18
+    await pool.import_text(text.replace('original', 'replacement'), label='replacement')
+    stored = await list_proxies(db)
+    assert len(stored) == 2
+    assert all(p.label == 'first' for p in stored)
+    assert all(decrypt_password(p.password_enc.get_secret_value(), key).get_secret_value() == 'original'
+               for p in stored)

@@ -13,7 +13,7 @@ from app import repository
 from app.db import transaction
 from app.events import EventBus, Subscription
 from app.models import CheckResult, Proxy, ProxyEvent
-from app.parser import ParsedProxy
+from app.parser import ImportReport, ParsedProxy, parse_bulk
 
 T = TypeVar("T")
 
@@ -106,6 +106,45 @@ class Pool:
             saved = await repository.insert_proxy(self._conn, proxy, self._key)
             self._snapshot = (*self._snapshot, saved)
             self._events.publish(ProxyEvent(type="added", proxy_id=saved.id, payload=saved))
+            return saved
+
+        return await self._mutate(write)
+
+    async def import_text(self, text: str, *, label: str | None = None) -> ImportReport:
+        report = await asyncio.to_thread(parse_bulk, text)
+        if report.errors:
+            return ImportReport(skipped=report.skipped + report.imported, errors=report.errors)
+
+        async def write() -> ImportReport:
+            seen = {(p.scheme, p.host, p.port, p.username) for p in self._snapshot}
+            accepted = [p for p in report.proxies
+                        if (p.scheme, p.host, p.port, p.username) not in seen]
+            saved = []
+            async with transaction(self._conn):
+                for proxy in accepted:
+                    saved.append(await repository.insert_proxy(
+                        self._conn, proxy, self._key, label=label,
+                    ))
+            self._snapshot = (*self._snapshot, *saved)
+            for stored in saved:
+                self._events.publish(ProxyEvent(type="added", proxy_id=stored.id, payload=stored))
+            return ImportReport(imported=len(saved),
+                                skipped=report.skipped + report.imported - len(saved),
+                                errors=report.errors)
+
+        return await self._mutate(write)
+
+    async def detail(self, proxy_id: int) -> tuple[Proxy, tuple[CheckResult, ...]]:
+        async with self._lock:
+            proxy = self._get(proxy_id)
+            return proxy, await repository.list_checks(self._conn, proxy_id)
+
+    async def soft_delete(self, proxy_id: int) -> Proxy:
+        async def write() -> Proxy:
+            old = self._get(proxy_id)
+            updated = old.model_copy(update={"status": "dead", "quarantine_until": None})
+            saved = await repository.update_proxy_health(self._conn, updated)
+            self._publish_proxy(saved)
             return saved
 
         return await self._mutate(write)

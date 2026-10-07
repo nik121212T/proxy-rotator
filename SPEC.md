@@ -258,7 +258,7 @@ Date format everywhere: **ISO 8601 UTC** (`datetime('now')` in SQLite = UTC).
 
 ## 10. Error handling (user-facing)
 
-- Import 10 proxies, 2 malformed → return `{imported: 8, skipped: 2, errors: [...]}`. Never crash the whole batch.
+- Import 10 proxies, 2 malformed → return `{imported: 0, skipped: 10, errors: [...]}` and write nothing. Atomic API import policy updated for T4.2; the pure parser still reports valid records and line errors separately.
 - Pool empty when a client request arrives → `503 Pool Empty` with JSON `{error, pool_size, alive_count}`.
 - User removes a proxy that's currently serving a tunneled connection → let the connection finish, mark proxy deleted after close.
 - `MASTER_SECRET` missing or wrong key → exit with code `78` (`EX_CONFIG`) and a readable message.

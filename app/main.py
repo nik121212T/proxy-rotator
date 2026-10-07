@@ -4,10 +4,11 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from app.config import Settings
@@ -18,16 +19,10 @@ from app.pool import Pool
 from app.rotator import Rotator
 from app.routes import gateway, proxies
 from app.routes import pool as pool_routes
+from app.runtime import Runtime
 from app.salt import load_or_create_salt
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(repr=False)
-class Runtime:
-    pool: Pool
-    checker: HealthChecker
-    rotator: Rotator
 
 
 def load_settings() -> Settings:
@@ -84,6 +79,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.config_failed = False
     for router in (proxies.router, pool_routes.router, gateway.router):
         app.include_router(router)
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(request: Request, error: RequestValidationError) -> JSONResponse:
+        # Pydantic/FastAPI error details may contain the original credential-bearing input.
+        return JSONResponse(status_code=422, content={"detail": "Invalid request"})
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:

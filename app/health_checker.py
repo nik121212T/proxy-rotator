@@ -52,6 +52,7 @@ class HealthChecker:
         self._tls_context = tls_context
         self._jobs: dict[int, asyncio.Task[CheckResult]] = {}
         self._runner: asyncio.Task[None] | None = None
+        self._suppressed: set[int] = set()
 
     async def _exchange(
         self, proxy: Proxy, password: SecretStr
@@ -174,7 +175,30 @@ class HealthChecker:
         proxy = next((proxy for proxy in self.pool.all() if proxy.id == proxy_id), None)
         if proxy is None:
             raise KeyError("Proxy is not in the pool")
-        return await asyncio.shield(self._start_job(proxy))
+        self._suppressed.discard(proxy_id)
+        try:
+            return await asyncio.shield(self._start_job(proxy))
+        except asyncio.CancelledError:
+            caller = asyncio.current_task()
+            if caller is not None and caller.cancelling():
+                raise
+            raise KeyError("Proxy check cancelled") from None
+
+    def queue_all(self) -> int:
+        selected = self.pool.all()
+        deadline = asyncio.get_running_loop().time() + self._batch_timeout_s * 0.9
+        for proxy in selected:
+            self._suppressed.discard(proxy.id)
+            self._start_job(proxy, deadline)
+        return len(selected)
+
+    async def cancel_one(self, proxy_id: int) -> None:
+        if any(proxy.id == proxy_id for proxy in self.pool.all()):
+            self._suppressed.add(proxy_id)
+        task = self._jobs.get(proxy_id)
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     async def check_all(self, proxies: tuple[Proxy, ...] | None = None) -> tuple[CheckResult, ...]:
         # Reserve 10% of the batch budget for durable writes and publication.
@@ -182,7 +206,19 @@ class HealthChecker:
         selected = self.pool.all() if proxies is None else proxies
         tasks = [self._start_job(proxy, deadline) for proxy in selected]
         try:
-            return tuple(await asyncio.gather(*tasks))
+
+            async def observed(task: asyncio.Task[CheckResult]) -> CheckResult | None:
+                try:
+                    return await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    caller = asyncio.current_task()
+                    if caller is not None and caller.cancelling():
+                        raise
+                    # Removing one proxy must not cancel the batch or its scheduler.
+                    return None
+
+            results = await asyncio.gather(*(observed(task) for task in tasks))
+            return tuple(result for result in results if result is not None)
         except BaseException:
             for task in tasks:
                 task.cancel()
@@ -195,6 +231,7 @@ class HealthChecker:
             proxy
             for proxy in self.pool.all()
             if proxy.id not in self._jobs
+            and proxy.id not in self._suppressed
             and (
                 (proxy.status == "unknown" and proxy.last_checked_at is None)
                 or (

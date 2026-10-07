@@ -30,22 +30,29 @@ Response `200`:
 }
 ```
 
-Partial success is normal; `errors[i] = {"line": 4, "reason": "Invalid proxy format"}`.
+An import with any line error writes nothing (atomic batch policy).
+`imported` is zero, `skipped` counts all non-comment records, and
+`errors[i] = {"line": 4, "reason": "Invalid proxy format"}` preserves each parse error.
 `line` is the 1-based physical line number, never the submitted credential-bearing text.
 Blank lines and full-line `#` comments are ignored. Duplicate identities
 `(scheme, host, port, username)` count as skipped; the first record wins.
 Only the first 2000 physical lines are parsed. Later nonblank, noncomment records
 count as skipped, with one limit error identifying the first such overflow line.
 The parser's accepted records are internal only and excluded from report JSON.
+A clean batch is committed in one transaction; existing identities are skipped
+without replacing their credentials or label. SQLite write failures roll back
+all insertions and publish no events.
 
 ### `GET /api/proxies`
 
 Query params : `status`, `min_score`, `limit`, `offset`.
 Returns `{items: [Proxy], total: int}`. Passwords never returned.
+Default limit is 100, offset 0; total counts matches before pagination.
+Dead proxies are hidden unless `status=dead` is explicitly requested.
 
 ### `GET /api/proxies/{id}`
 
-Full detail + last 50 `proxy_checks`.
+Proxy fields plus `checks` containing the latest 50 results, newest first. Unknown IDs return 404.
 
 ### `POST /api/proxies/{id}/test`
 
@@ -57,7 +64,13 @@ Response : `{queued: n}`. Progress via WebSocket.
 
 ### `DELETE /api/proxies/{id}`
 
-Soft-delete. Returns `204`.
+Soft-delete. Returns `204` with no body, or 404 for an unknown ID.
+For the existing v1 schema, soft-delete means status=dead, retained credentials
+and history, and no automatic retest. An in-flight probe is cancelled first.
+Explicit test-one/test-all can revive a dead proxy. Gateway tunnel draining is
+reserved for Phase 5. Hard deletion of dead records is `/api/pool/clear-dead`.
+
+Validation errors return a sanitized 422 response without echoing submitted input.
 
 ---
 

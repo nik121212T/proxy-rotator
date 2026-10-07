@@ -49,7 +49,7 @@ async def upstream() -> AsyncIterator[FakeProxy]:
     fake = FakeProxy()
     app = web.Application()
     app.router.add_route("*", "/{tail:.*}", fake.handle)
-    runner = web.AppRunner(app, access_log=None, shutdown_timeout=0.1)
+    runner = web.AppRunner(app, access_log=None, shutdown_timeout=0.1, handler_cancellation=True)
     await runner.setup()
     try:
         site = web.TCPSite(runner, "127.0.0.1", 0)
