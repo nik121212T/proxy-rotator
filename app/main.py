@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
+from app.burn_detector import BurnDetector
 from app.config import Settings
 from app.crypto import CryptoConfigError, decrypt_password, derive_key
 from app.db import get_db
@@ -62,6 +63,11 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
             host=config.bind_host,
             port=config.gateway_http_port,
             timeout_s=config.gateway_timeout_s,
+            max_retry_per_request=config.max_retry_per_request,
+            burn_detector=BurnDetector(
+                timeout_s=config.gateway_timeout_s,
+                inspect_body=config.burn_inspect_body,
+            ),
         )
         checker.start()
         await http_gateway.start()

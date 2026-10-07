@@ -26,6 +26,7 @@ import aiohttp
 from aiohttp_socks import ProxyConnector  # type: ignore[import-untyped]
 from yarl import URL
 
+from app.burn_detector import BurnDetector
 from app.crypto import decrypt_password
 from app.models import ListenerStatus, Proxy
 from app.pool import Pool
@@ -165,9 +166,13 @@ class HttpGateway:
         port: int = 8888,
         timeout_s: float = 15.0,
         tls_context: ssl.SSLContext | None = None,
+        max_retry_per_request: int = 2,
+        burn_detector: BurnDetector | None = None,
     ) -> None:
         if timeout_s <= 0:
             raise ValueError("timeout_s must be positive")
+        if max_retry_per_request < 0:
+            raise ValueError("max_retry_per_request must be non-negative")
         self.pool = pool
         self.rotator = rotator
         self._key = key
@@ -175,6 +180,8 @@ class HttpGateway:
         self._port = port
         self._timeout_s = timeout_s
         self._tls_context = tls_context
+        self._max_retry = max_retry_per_request
+        self._burn = burn_detector or BurnDetector(timeout_s=timeout_s)
         self._server: asyncio.base_events.Server | None = None
         self._bound: tuple[str, int] | None = None
         self._active_conns = 0
@@ -268,21 +275,38 @@ class HttpGateway:
         if not host or not port_str.isdigit():
             raise HttpGatewayError(f"Malformed CONNECT target: {target!r}")
         port = int(port_str)
-        proxy = self._pick(target_domain=host.strip("[]"))
-        if proxy is None:
-            await self._reply_error(writer, 503, "Pool Empty")
-            return
-        try:
-            up_reader, up_writer = await asyncio.wait_for(
-                self._open_upstream_tunnel(proxy, host, port), timeout=self._timeout_s
-            )
-        except (TimeoutError, ConnectionError, OSError, HttpGatewayError) as exc:
-            logger.info(
-                "gateway_http_connect_upstream_failed proxy_id=%s target=%s:%s err=%s",
-                proxy.id, host, port, exc,
-            )
-            await self.pool.mark_fail(proxy.id, "upstream_connect_error")
-            await self._reply_error(writer, 502, "Bad Gateway")
+
+        # Retry only on upstream-connect errors. Once bytes bridge, we cannot
+        # swap proxies without observing the TLS session itself (out of scope).
+        attempts_left = self._max_retry + 1
+        chosen: Proxy | None = None
+        up_reader: asyncio.StreamReader | None = None
+        up_writer: asyncio.StreamWriter | None = None
+        last_reason = "no attempt"
+        while attempts_left > 0:
+            attempts_left -= 1
+            chosen = self._pick(target_domain=host.strip("[]"))
+            if chosen is None:
+                await self._reply_error(writer, 503, "Pool Empty")
+                return
+            try:
+                up_reader, up_writer = await asyncio.wait_for(
+                    self._open_upstream_tunnel(chosen, host, port),
+                    timeout=self._timeout_s,
+                )
+                break
+            except (TimeoutError, ConnectionError, OSError, HttpGatewayError) as exc:
+                last_reason = _format_reason(exc)
+                logger.info(
+                    "gateway_http_connect_upstream_failed proxy_id=%s target=%s:%s err=%s",
+                    chosen.id, host, port, exc,
+                )
+                await self.pool.mark_fail(chosen.id, "upstream_connect_error")
+                up_reader = None
+                up_writer = None
+
+        if up_reader is None or up_writer is None or chosen is None:
+            await self._reply_error(writer, 502, f"Bad Gateway: {last_reason}")
             return
 
         writer.write(b"HTTP/1.1 200 Connection Established\r\n\r\n")
@@ -300,7 +324,7 @@ class HttpGateway:
             with contextlib.suppress(ConnectionError, OSError):
                 up_writer.close()
                 await up_writer.wait_closed()
-            await self.pool.mark_success(proxy.id, 0)
+            await self.pool.mark_success(chosen.id, 0)
 
     async def _open_upstream_tunnel(
         self, proxy: Proxy, target_host: str, target_port: int
@@ -373,10 +397,6 @@ class HttpGateway:
         url = URL(target)
         if url.scheme not in {"http", "https"} or not url.host:
             raise HttpGatewayError(f"Unsupported absolute URI: {target!r}")
-        proxy = self._pick(target_domain=url.host)
-        if proxy is None:
-            await self._reply_error(writer, 503, "Pool Empty")
-            return
 
         clean_headers = _append_via(_strip_hop_by_hop(headers))
         header_names = {name.lower() for name, _ in clean_headers}
@@ -384,11 +404,70 @@ class HttpGateway:
             host_value = url.host if url.port is None else f"{url.host}:{url.port}"
             clean_headers.append(("Host", host_value))
 
-        body = _request_body_stream(reader, headers)
+        # Buffer small bodies so we can retry on burn; otherwise stream once.
+        body_bytes = await _collect_body_if_small(reader, headers)
+        has_body_stream = body_bytes is None and _has_body(headers)
+        if has_body_stream:
+            # Non-idempotent: a single attempt only (we cannot rewind the stream).
+            unbuffered = _request_body_stream(reader, headers)
+            await self._single_forward(
+                writer, method, url, clean_headers, unbuffered
+            )
+            return
 
+        attempts_left = self._max_retry + 1
+        last_reason = "no attempt"
+        tried: set[int] = set()
+        while attempts_left > 0:
+            attempts_left -= 1
+            proxy = self._pick(target_domain=url.host or "")
+            if proxy is None or proxy.id in tried:
+                break
+            tried.add(proxy.id)
+            attempt_body = (
+                _bytes_async_iter(body_bytes) if body_bytes is not None else None
+            )
+            try:
+                burn = await asyncio.wait_for(
+                    self._forward_attempt(
+                        writer, method, url, clean_headers, attempt_body, proxy
+                    ),
+                    timeout=self._timeout_s,
+                )
+            except (TimeoutError, aiohttp.ClientError, ConnectionError, OSError) as exc:
+                last_reason = _format_reason(exc)
+                logger.info(
+                    "gateway_http_forward_failed proxy_id=%s target=%s err=%s",
+                    proxy.id, url.host, exc,
+                )
+                await self.pool.mark_fail(proxy.id, "upstream_error")
+                continue
+            if burn is None:
+                return  # success — already streamed to client
+            last_reason = burn
+            await self.pool.mark_fail(proxy.id, burn)
+
+        if not tried:
+            await self._reply_error(writer, 503, "Pool Empty")
+        else:
+            with contextlib.suppress(ConnectionError, OSError):
+                await self._reply_error(writer, 502, f"Bad Gateway: {last_reason}")
+
+    async def _single_forward(
+        self,
+        writer: asyncio.StreamWriter,
+        method: str,
+        url: URL,
+        clean_headers: list[tuple[str, str]],
+        body: AsyncIterator[bytes] | None,
+    ) -> None:
+        proxy = self._pick(target_domain=url.host or "")
+        if proxy is None:
+            await self._reply_error(writer, 503, "Pool Empty")
+            return
         try:
-            await asyncio.wait_for(
-                self._forward_via_aiohttp(writer, method, url, clean_headers, body, proxy),
+            burn = await asyncio.wait_for(
+                self._forward_attempt(writer, method, url, clean_headers, body, proxy),
                 timeout=self._timeout_s,
             )
         except (TimeoutError, aiohttp.ClientError, ConnectionError, OSError) as exc:
@@ -399,8 +478,13 @@ class HttpGateway:
             await self.pool.mark_fail(proxy.id, "upstream_error")
             with contextlib.suppress(ConnectionError, OSError):
                 await self._reply_error(writer, 502, "Bad Gateway")
+            return
+        if burn is not None:
+            await self.pool.mark_fail(proxy.id, burn)
+            with contextlib.suppress(ConnectionError, OSError):
+                await self._reply_error(writer, 502, f"Bad Gateway: {burn}")
 
-    async def _forward_via_aiohttp(
+    async def _forward_attempt(
         self,
         writer: asyncio.StreamWriter,
         method: str,
@@ -408,7 +492,14 @@ class HttpGateway:
         headers: list[tuple[str, str]],
         body: AsyncIterator[bytes] | None,
         proxy: Proxy,
-    ) -> None:
+    ) -> str | None:
+        """Perform one upstream attempt.
+
+        Returns ``None`` when the response was successfully streamed to the
+        client; returns a short burn reason string when the response was
+        classified as burned *before* any bytes left the gateway (so the
+        caller can safely retry on a different proxy).
+        """
         loop = asyncio.get_running_loop()
         started = loop.time()
         connector: aiohttp.BaseConnector | None = None
@@ -446,37 +537,68 @@ class HttpGateway:
                 ssl=self._tls_context if self._tls_context is not None else True,
             ) as response,
         ):
+            # Status-based burn classification BEFORE forwarding anything.
+            burn = self._burn.classify(status_code=response.status)
+            if burn.burned:
+                response.release()
+                return burn.reason or f"HTTP {response.status}"
+
+            # Optional body-marker classification for small, inspectable bodies.
+            upstream_cl = response.headers.get("Content-Length")
+            content_type = response.headers.get("Content-Type") or ""
+            peek_body: bytes | None = None
+            if (
+                upstream_cl is not None
+                and upstream_cl.isdigit()
+                and int(upstream_cl) <= 128 * 1024
+                and self._burn.inspect_body
+                and _is_inspectable(content_type)
+            ):
+                peek_body = await response.read()
+                body_burn = self._burn.classify(
+                    status_code=response.status,
+                    body=peek_body,
+                    content_type=content_type,
+                )
+                if body_burn.burned:
+                    return body_burn.reason or "body marker"
+
             status_line = (
                 f"HTTP/1.1 {response.status} {response.reason or ''}\r\n".encode("latin-1")
             )
             out_headers = _append_via(_strip_hop_by_hop(list(response.headers.items())))
-            # Deterministic framing: Content-Length when known, chunked otherwise.
             out_headers = [
                 (name, value)
                 for name, value in out_headers
                 if name.lower() not in {"content-length", "transfer-encoding"}
             ]
-            upstream_cl = response.headers.get("Content-Length")
-            if upstream_cl is None:
-                use_chunked = True
+            if peek_body is not None:
+                out_headers.append(("Content-Length", str(len(peek_body))))
+                writer.write(status_line + _format_response_headers(out_headers) + b"\r\n")
+                writer.write(peek_body)
+                await writer.drain()
+            elif upstream_cl is None:
                 out_headers.append(("Transfer-Encoding", "chunked"))
+                use_chunked = True
             else:
-                use_chunked = False
                 out_headers.append(("Content-Length", upstream_cl))
-            writer.write(status_line + _format_response_headers(out_headers) + b"\r\n")
-            await writer.drain()
-            async for chunk in response.content.iter_any():
-                if use_chunked:
-                    writer.write(f"{len(chunk):x}\r\n".encode("ascii"))
-                writer.write(chunk)
-                if use_chunked:
-                    writer.write(b"\r\n")
+                use_chunked = False
+            if peek_body is None:
+                writer.write(status_line + _format_response_headers(out_headers) + b"\r\n")
                 await writer.drain()
-            if use_chunked:
-                writer.write(b"0\r\n\r\n")
-                await writer.drain()
+                async for chunk in response.content.iter_any():
+                    if use_chunked:
+                        writer.write(f"{len(chunk):x}\r\n".encode("ascii"))
+                    writer.write(chunk)
+                    if use_chunked:
+                        writer.write(b"\r\n")
+                    await writer.drain()
+                if use_chunked:
+                    writer.write(b"0\r\n\r\n")
+                    await writer.drain()
         latency_ms = max(1, int((loop.time() - started) * 1000))
         await self.pool.mark_success(proxy.id, latency_ms)
+        return None
 
     # ── helpers ───────────────────────────────────────────────────────────
 
@@ -502,6 +624,68 @@ class HttpGateway:
             await writer.drain()
         except (ConnectionError, OSError):
             return
+
+
+# ── retry helpers ───────────────────────────────────────────────────────────
+
+
+_MAX_BUFFERED_BODY: Final[int] = 1 * 1024 * 1024  # 1 MiB cap for retryable bodies
+
+
+def _format_reason(exc: BaseException) -> str:
+    message = str(exc).strip() or exc.__class__.__name__
+    return message[:200]
+
+
+def _is_inspectable(content_type: str) -> bool:
+    media = content_type.partition(";")[0].strip().lower()
+    return media.startswith("text/") or media == "application/json"
+
+
+def _has_body(headers: list[tuple[str, str]]) -> bool:
+    for name, value in headers:
+        lname = name.lower()
+        if lname == "transfer-encoding" and "chunked" in value.lower():
+            return True
+        if lname == "content-length" and value.isdigit() and int(value) > 0:
+            return True
+    return False
+
+
+async def _collect_body_if_small(
+    reader: asyncio.StreamReader, headers: list[tuple[str, str]]
+) -> bytes | None:
+    """Return the request body as bytes when small enough to buffer for retry.
+
+    Returns:
+        * ``None`` when the request has no body (safe to retry freely),
+        * ``bytes`` when the body was buffered (safe to retry with a fresh
+          iterator per attempt),
+        * ``None`` ALSO when the body is too large to buffer; the caller must
+          then stream once without retry support.
+    """
+    length_text = ""
+    encoding = ""
+    for name, value in headers:
+        lname = name.lower()
+        if lname == "content-length":
+            length_text = value
+        elif lname == "transfer-encoding":
+            encoding = value.lower()
+    if "chunked" in encoding:
+        return None  # unknown size → do not buffer
+    if not length_text or not length_text.isdigit():
+        return None  # no body
+    length = int(length_text)
+    if length == 0:
+        return None
+    if length > _MAX_BUFFERED_BODY:
+        return None  # too large to buffer
+    return await reader.readexactly(length)
+
+
+async def _bytes_async_iter(data: bytes) -> AsyncIterator[bytes]:
+    yield data
 
 
 # ── request-body streaming ──────────────────────────────────────────────────

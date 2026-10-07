@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     gateway_http_port: int = Field(default=8888, ge=0, le=65535)
     gateway_socks_port: int = Field(default=1080, ge=0, le=65535)
     gateway_timeout_s: float = Field(default=15, gt=0)
+    max_retry_per_request: int = Field(default=2, ge=0, le=10)
+    burn_inspect_body: bool = True
     rotation_strategy: RotationStrategy = "weighted"
     sticky_ttl_s: float = Field(default=900, gt=0)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
