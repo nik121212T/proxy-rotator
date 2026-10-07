@@ -1,0 +1,5 @@
+{% if proxy %}
+  {% if append %}<template><tbody hx-swap-oob="beforeend:#proxy-rows">{% include '_row.html' %}</tbody></template>
+  {% else %}<template>{% set row_oob = true %}{% include '_row.html' %}</template>{% endif %}
+  {% if empty %}<template><tr id="empty-row" hx-swap-oob="delete"></tr></template>{% endif %}
+{% elif not append %}<template><tr id="proxy-{{ proxy_id }}" hx-swap-oob="delete"></tr></template>{% endif %}

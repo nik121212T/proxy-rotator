@@ -1,0 +1,2 @@
+<p {% if errors %}class="error"{% endif %}>{{ message }}</p>
+{% if errors %}<ul>{% for error in errors %}<li>Ligne {{ error.line }} : {{ error.reason }}</li>{% endfor %}</ul>{% endif %}

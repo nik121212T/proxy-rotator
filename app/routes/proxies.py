@@ -2,12 +2,14 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict, SecretStr
 
 from app.models import CheckResult, Proxy, ProxyStatus
 from app.parser import ImportReport
 from app.runtime import Runtime, get_runtime
+from app.ui.rendering import feedback
 
 router = APIRouter(prefix="/api/proxies", tags=["proxies"])
 Services = Annotated[Runtime, Depends(get_runtime)]
@@ -19,9 +21,19 @@ class ImportRequest(BaseModel):
     label: str | None = None
 
 
-@router.post("/import")
-async def import_proxies(body: ImportRequest, runtime: Services) -> ImportReport:
-    return await runtime.pool.import_text(body.text.get_secret_value(), label=body.label)
+@router.post("/import", response_model=ImportReport)
+async def import_proxies(
+    body: ImportRequest, runtime: Services, request: Request
+) -> ImportReport | HTMLResponse:
+    report = await runtime.pool.import_text(body.text.get_secret_value(), label=body.label)
+    if request.headers.get("HX-Request") == "true":
+        return feedback(
+            request,
+            f"{report.imported} proxy(s) importé(s) · {report.skipped} ligne(s) ignorée(s).",
+            errors=[e.model_dump() for e in report.errors],
+            clear_import=not report.errors,
+        )
+    return report
 
 
 class ProxyPage(BaseModel):
@@ -50,9 +62,12 @@ class ProxyDetail(Proxy):
     checks: tuple[CheckResult, ...]
 
 
-@router.post("/test-all")
-async def test_all(runtime: Services) -> dict[str, int]:
-    return {"queued": runtime.checker.queue_all()}
+@router.post("/test-all", response_model=dict[str, int])
+async def test_all(runtime: Services, request: Request) -> dict[str, int] | HTMLResponse:
+    queued = runtime.checker.queue_all()
+    if request.headers.get("HX-Request") == "true":
+        return feedback(request, f"{queued} vérification(s) en cours.")
+    return {"queued": queued}
 
 
 @router.get("/{proxy_id}")
@@ -64,10 +79,20 @@ async def proxy_detail(proxy_id: int, runtime: Services) -> ProxyDetail:
     return ProxyDetail(**proxy.__dict__, checks=checks)
 
 
-@router.post("/{proxy_id}/test")
-async def test_proxy(proxy_id: int, runtime: Services) -> CheckResult:
+@router.post("/{proxy_id}/test", response_model=CheckResult)
+async def test_proxy(
+    proxy_id: int, runtime: Services, request: Request
+) -> CheckResult | HTMLResponse:
     try:
-        return await runtime.checker.check_one(proxy_id)
+        result = await runtime.checker.check_one(proxy_id)
+        if request.headers.get("HX-Request") == "true":
+            return feedback(
+                request,
+                "Proxy disponible."
+                if result.ok
+                else "Vérification échouée. Consultez l’état du proxy.",
+            )
+        return result
     except KeyError:
         raise HTTPException(status_code=404, detail="Proxy not found") from None
 
@@ -79,4 +104,4 @@ async def delete_proxy(proxy_id: int, runtime: Services) -> Response:
         await runtime.pool.soft_delete(proxy_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Proxy not found") from None
-    return Response(status_code=204)
+    return Response(status_code=204, headers={"HX-Trigger": "pool-refresh"})

@@ -221,7 +221,8 @@ including quarantined/dead records, to detect a wrong key before background work
 The lifespan opens/migrates SQLite, loads Pool, creates Rotator and starts
 HealthChecker. Shutdown awaits checker cancellation before closing SQLite and
 clearing application state. `/healthz` is unavailable outside the ready lifespan.
-API routers are mounted as empty skeletons; their endpoints follow in T4.2–T4.4.
+The proxy, pool and gateway-status routers are implemented. Gateway status is
+a replaceable runtime snapshot, initially configured but unbound.
 Gateway listeners remain Phase 5; startup does not claim they are ready.
 
 `python -m app.main` starts Uvicorn with validated BIND_HOST/ADMIN_PORT and maps
@@ -229,3 +230,24 @@ configuration or credential failures to exit 78. Non-loopback binding emits a
 warning. Direct `uvicorn app.main:app` uses the same lifespan but Uvicorn controls
 its exit status; launcher scripts will switch to the module entry point in
 T6.1/T6.2. HTTPX is a test dependency for in-process ASGI requests.
+
+
+### Phase 4 transport and UI
+
+Pool owns atomic import, detail and dead-only purge operations under its lock.
+REST imports reject an entire batch on parse errors; the parser itself remains
+pure and partial. Pool statistics read immutable snapshots without SQL counts.
+Strategy changes publish PoolStatsEvent; gateway events have an empty-payload
+hook until the real gateway integration.
+
+WebSocket clients subscribe to independent 100-item drop-oldest queues. Internal
+health subscriptions retain their overflow/resync policy. The WebSocket route
+owns and cancels receiver, sender and pending event tasks on disconnect.
+
+Jinja2 renders the dashboard, escaped feedback and OOB fragments. Browser JS is
+transport glue for HTMX and WebSocket notifications, not a second state/model
+layer. Snapshot resync repairs missed events. Current implementation renders the
+whole visible pool on periodic resync; pagination/windowing may be needed for
+large pools. AnyIO is pinned to 4.11.0 for compatibility with the existing
+Starlette TestClient; refresh the dependency set together in a future maintenance
+pass. Windows/CI execution remains deferred to T6.3.

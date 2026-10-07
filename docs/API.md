@@ -135,3 +135,22 @@ Event types :
 | `proxy_removed`  | `{proxy_id}`                                                              |
 | `pool_stats`     | same shape as `GET /api/pool/stats` (every 2 s or on change)              |
 | `gateway_event`  | `{kind: "request_start"\|"request_end", proxy_id, target, latency_ms?}`   |
+
+
+## Dashboard / HTMX
+
+`GET /` renders the Jinja2 dashboard. Assets are served from `/static`; HTMX
+2.0.11 is vendored with its license. There are no runtime CDN/font requests.
+Forms use the local `json-form` HTMX extension and submit the same JSON payloads
+as REST clients. A request with `HX-Request: true` receives escaped HTML feedback
+for import, test-one, test-all, clear-dead and strategy; ordinary requests retain
+the JSON contracts above. DELETE remains 204. `HX-Trigger: pool-refresh` requests
+a UI resync. Successful imports clear the credential textarea; line errors keep
+it for correction. Validation errors remain sanitized 422 JSON and the browser
+shows a fixed human-readable message.
+
+`GET /ui/proxies/{id}?append=true|false` renders an out-of-band row replacement,
+append or deletion. `GET /ui/snapshot` renders authoritative table/summary OOB
+fragments. The client serializes/debounces fragment requests, refreshes snapshots
+at reconnect and periodically to recover dropped WebSocket events, preserves
+keyboard focus and unsaved strategy edits, and defers row refreshes during actions.

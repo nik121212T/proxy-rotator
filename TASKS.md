@@ -61,7 +61,8 @@ Work top to bottom. Check each box when done. One task = one commit.
   - Configured addresses from validated settings; bound=null and zero counters until Phase 5 replaces the runtime snapshot. TestClient verification; AnyIO pinned for compatibility with the existing Starlette version.
 - [x] T4.5  WebSocket `/ws/events` broadcasts pool events.
   - Public event mapping, initial/change/2-second stats, empty gateway hook, per-client 100-item drop-oldest queues and explicit cancellation/unsubscribe on disconnect. Core checker subscribers retain overflow/resync behavior.
-- [ ] T4.6  Dashboard HTML (Jinja2 + HTMX) : table of proxies, forms, live updates via WS.
+- [x] T4.6  Dashboard HTML (Jinja2 + HTMX) : table of proxies, forms, live updates via WS.
+  - French light responsive dashboard, local HTMX 2.0.11 with license, JSON/HTML content negotiation, server-rendered OOB rows plus periodic resync, reconnect/error/loading/empty states and preserved draft/focus. TestClient coverage and Chromium desktop/mobile interaction checks; Phase 5 intentionally untouched.
 
 ## Phase 5 — Local gateways
 

@@ -1,0 +1,3 @@
+{% for proxy in proxies %}{% include '_row.html' %}{% else %}
+<tr id="empty-row"><td colspan="7" class="empty"><strong>Aucun proxy dans le pool</strong><p>Collez votre liste pour lancer les premières vérifications.</p><a href="#import-form">Importer des proxies →</a></td></tr>
+{% endfor %}

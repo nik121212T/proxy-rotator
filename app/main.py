@@ -9,6 +9,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from app.config import Settings
@@ -18,10 +19,11 @@ from app.health_checker import HealthChecker
 from app.models import GatewayStatus, ListenerStatus
 from app.pool import Pool
 from app.rotator import Rotator
-from app.routes import events, gateway, proxies
+from app.routes import events, gateway, proxies, ui
 from app.routes import pool as pool_routes
 from app.runtime import Runtime
 from app.salt import load_or_create_salt
+from app.ui.rendering import UI_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -81,9 +83,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.pool = None
 
     app = FastAPI(title="proxy-rotator", version="0.1.0", lifespan=lifespan)
+    app.mount("/static", StaticFiles(directory=UI_DIR / "static"), name="static")
     app.state.runtime = None
     app.state.config_failed = False
-    for router in (proxies.router, pool_routes.router, gateway.router, events.router):
+    for router in (proxies.router, pool_routes.router, gateway.router, events.router, ui.router):
         app.include_router(router)
 
     @app.exception_handler(RequestValidationError)
