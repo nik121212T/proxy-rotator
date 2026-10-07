@@ -51,7 +51,8 @@ Work top to bottom. Check each box when done. One task = one commit.
 
 ## Phase 4 — API + UI
 
-- [ ] T4.1  `app/main.py` : FastAPI app, lifespan, mount routers.
+- [x] T4.1  `app/main.py` : FastAPI app, lifespan, mount routers.
+  - Validated startup settings, off-thread key derivation, credential preflight, migrated DB, pool/rotator/checker lifecycle and readiness. Empty API routers mounted for T4.2–T4.4. `python -m app.main` maps configuration/crypto startup failures to EX_CONFIG=78; launcher scripts remain T6.1/T6.2. Local HTTP and real SQLite lifecycle tests.
 - [ ] T4.2  `app/routes/proxies.py` : REST per `docs/API.md`.
 - [ ] T4.3  `app/routes/pool.py` : stats + control endpoints.
 - [ ] T4.4  `app/routes/gateway.py` : gateway status / strategy switch.

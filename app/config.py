@@ -1,0 +1,50 @@
+"""Validated application configuration, loaded at startup rather than import."""
+
+from pathlib import Path
+from typing import Literal
+
+from pydantic import Field, SecretStr, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from yarl import URL
+
+from app.models import RotationStrategy
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env", extra="ignore", hide_input_in_errors=True, allow_inf_nan=False
+    )
+
+    master_secret: SecretStr
+    db_path: Path = Path("data") / "proxies.db"
+    health_check_interval_s: float = Field(default=300, gt=0)
+    health_timeout_s: float = Field(default=8, gt=0)
+    health_concurrency: int = Field(default=20, ge=1)
+    health_probe_url: str = "https://api.ipify.org?format=json"
+    pool_min_score: float = Field(default=40, ge=0, le=100)
+
+    bind_host: str = "127.0.0.1"
+    admin_port: int = Field(default=8080, ge=1, le=65535)
+    rotation_strategy: RotationStrategy = "weighted"
+    sticky_ttl_s: float = Field(default=900, gt=0)
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+
+    @field_validator("master_secret")
+    @classmethod
+    def configured_secret(cls, value: SecretStr) -> SecretStr:
+        if not value.get_secret_value().strip() or value.get_secret_value() == "CHANGE_ME_NOW":
+            raise ValueError("MASTER_SECRET must be configured")
+        return value
+
+    @field_validator("health_probe_url")
+    @classmethod
+    def valid_probe_url(cls, value: str) -> str:
+        try:
+            url = URL(value)
+            valid = url.scheme in {"http", "https"} and url.host and url.user is None
+            port = url.port
+        except ValueError:
+            raise ValueError("Invalid health probe URL") from None
+        if not valid or port is None or not 1 <= port <= 65535:
+            raise ValueError("Probe URL must be HTTP(S) without credentials")
+        return value

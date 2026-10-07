@@ -176,7 +176,7 @@ After loading, Pool exclusively owns its connection. Its mutation lock serialize
 write-through transactions before publishing immutable snapshots and events.
 Readers take tuple snapshots without locking. Each subscriber has a bounded
 queue; overflow requires resubscription and a snapshot reload. The health loop
-does this automatically. Application startup and shutdown wiring belongs to T4.1.
+does this automatically. FastAPI lifespan owns startup and shutdown of these services.
 
 Selection recalculates score freshness without mutating stored snapshots.
 Latency uses the rounded median of the latest 20 measurements, restoring check
@@ -206,3 +206,26 @@ service is contacted by tests.
 - **Logs**: stdout, structured, one event per line, key=value.
 - **Metrics**: in-memory counters surfaced on `GET /api/pool/stats`. No Prometheus in v1.
 - **WebSocket `/ws/events`**: broadcasts proxy state transitions + health check results for the dashboard.
+
+
+### Application entry point (T4.1)
+
+`create_app(settings=None)` defers configuration and I/O until lifespan startup.
+`Settings` reads `.env` using pydantic-settings, masks the master secret and
+validates ports, health limits and credential-free probe URLs. The salt lives
+beside DB_PATH (`data/.salt` by default), so relocating the database requires
+moving its salt as well. Salt I/O, key derivation and credential verification
+run off the event loop. Every stored credential is checked before readiness,
+including quarantined/dead records, to detect a wrong key before background work.
+
+The lifespan opens/migrates SQLite, loads Pool, creates Rotator and starts
+HealthChecker. Shutdown awaits checker cancellation before closing SQLite and
+clearing application state. `/healthz` is unavailable outside the ready lifespan.
+API routers are mounted as empty skeletons; their endpoints follow in T4.2–T4.4.
+Gateway listeners remain Phase 5; startup does not claim they are ready.
+
+`python -m app.main` starts Uvicorn with validated BIND_HOST/ADMIN_PORT and maps
+configuration or credential failures to exit 78. Non-loopback binding emits a
+warning. Direct `uvicorn app.main:app` uses the same lifespan but Uvicorn controls
+its exit status; launcher scripts will switch to the module entry point in
+T6.1/T6.2. HTTPX is a test dependency for in-process ASGI requests.

@@ -13,6 +13,7 @@ click==8.1.7
 
 # Dev / tests (install with: pip install -r requirements.txt -r requirements-dev.txt)
 # Keep these in a single file for MVP simplicity — move to requirements-dev.txt later.
+httpx==0.28.1
 pytest==8.3.3
 pytest-asyncio==0.24.0
 hypothesis==6.112.1
