@@ -145,5 +145,54 @@
   window.addEventListener("pageshow", event => {
     if (event.persisted) { stopped = false; connect(); }
   });
+
+
+  // ── File drop / picker : concat text content into #proxy-text ──────────
+  const drop = document.getElementById('proxy-drop');
+  const fileInput = document.getElementById('proxy-file');
+  const proxyText = document.getElementById('proxy-text');
+  const dropHint = document.getElementById('proxy-file-hint');
+
+  function appendLines(lines, label) {
+    const current = proxyText.value.trim();
+    const sep = current ? '\n' : '';
+    proxyText.value = current + sep + lines.trim();
+    dropHint.textContent = label;
+    proxyText.focus();
+  }
+
+  async function readFiles(files) {
+    const parts = [];
+    let total = 0;
+    for (const file of files) {
+      if (file.size > 1_000_000) {
+        dropHint.textContent = 'Fichier trop volumineux : ' + file.name + ' (max 1 MB)';
+        return;
+      }
+      total += file.size;
+      parts.push(await file.text());
+    }
+    if (!parts.length) return;
+    const kb = (total / 1024).toFixed(1);
+    appendLines(parts.join('\n'), files.length + ' fichier(s), ' + kb + ' KB ajoutés');
+  }
+
+  if (drop && fileInput && proxyText) {
+    fileInput.addEventListener('change', () => readFiles(fileInput.files || []));
+    drop.addEventListener('dragover', event => { event.preventDefault(); drop.classList.add('is-drag'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('is-drag'));
+    drop.addEventListener('drop', event => {
+      event.preventDefault();
+      drop.classList.remove('is-drag');
+      readFiles([...(event.dataTransfer?.files || [])]);
+    });
+    drop.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        fileInput.click();
+      }
+    });
+  }
+
   connect();
 })();

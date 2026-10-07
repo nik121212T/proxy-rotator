@@ -26,7 +26,15 @@
     <aside class="controls" aria-label="Gestion du pool">
       <section class="control-section"><h2>Importer une liste</h2><p class="helper">Une ligne par proxy. La vérification démarre automatiquement.</p>
         <form id="import-form" hx-post="/api/proxies/import" hx-ext="json-form" hx-target="#feedback" hx-disabled-elt="find button" autocomplete="off">
-          <label for="proxy-text">Proxies</label><textarea id="proxy-text" name="text" rows="6" required spellcheck="false" autocapitalize="off" placeholder="user:pass@hôte:port" aria-describedby="import-help"></textarea>
+          <div class="file-drop" id="proxy-drop" tabindex="0" aria-label="Déposer un fichier .txt ou .csv de proxies">
+            <input id="proxy-file" type="file" accept=".txt,.csv,.list,text/plain" multiple hidden>
+            <label for="proxy-file" class="file-drop-cta">
+              <strong>Déposer un fichier</strong>
+              <span>ou cliquer pour choisir — .txt, .csv, .list</span>
+            </label>
+            <p class="file-drop-hint" id="proxy-file-hint" aria-live="polite"></p>
+          </div>
+          <label for="proxy-text">Proxies <span class="optional">ou collez-les ici</span></label><textarea id="proxy-text" name="text" rows="6" required spellcheck="false" autocapitalize="off" placeholder="user:pass@hôte:port" aria-describedby="import-help"></textarea>
           <label for="proxy-label">Libellé <span class="optional">facultatif</span></label><input id="proxy-label" name="label" placeholder="Ex. : pool principal">
           <p id="import-help" class="helper">2 000 lignes maximum. Les lignes invalides sont ignorées, les proxies valides sont importés.</p><button type="submit" class="wide">Importer et vérifier</button>
         </form>

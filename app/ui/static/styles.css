@@ -725,3 +725,116 @@ footer {
     scroll-behavior: auto !important;
   }
 }
+
+/* ── File drop zone ──────────────────────────────────────────────────── */
+
+.file-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  margin: var(--space-3) 0 var(--space-4);
+  border: 2px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--paper-soft);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.14s ease, background-color 0.14s ease;
+}
+.file-drop:hover,
+.file-drop:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.file-drop.is-drag {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  border-style: solid;
+}
+.file-drop-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.file-drop-cta strong {
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+.file-drop-cta span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+.file-drop-hint {
+  margin: 0;
+  min-height: 1em;
+  font-size: 0.78rem;
+  color: var(--good);
+  font-weight: 500;
+}
+
+/* ── Bolder topbar + heading ─────────────────────────────────────────── */
+
+.topbar {
+  background: linear-gradient(180deg, var(--paper) 0%, var(--paper-soft) 100%);
+  box-shadow: 0 1px 0 var(--line);
+}
+.brand::before {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background:
+    linear-gradient(135deg, var(--accent) 0%, var(--good) 100%);
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
+}
+.brand {
+  font-size: 1.1rem;
+  letter-spacing: -0.015em;
+}
+
+h1 {
+  font-size: clamp(2rem, 3vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+/* Summary tiles get a card treatment with semantic emphasis */
+.summary {
+  padding: 0;
+  border: 0;
+  margin-bottom: var(--space-6);
+}
+.summary dl {
+  gap: var(--space-3);
+}
+.summary dl > div,
+.summary dl .tile {
+  padding: var(--space-4) var(--space-5);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.summary dt {
+  font-size: 0.68rem;
+}
+.summary dd {
+  font-size: 1.8rem;
+  line-height: 1;
+  margin-top: var(--space-2);
+}
+
+/* Primary action more prominent */
+button[type="submit"],
+button.wide {
+  background: linear-gradient(180deg, var(--accent) 0%, color-mix(in oklab, var(--accent) 85%, black) 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15) inset,
+    0 2px 6px rgba(37, 99, 235, 0.3);
+  padding: 11px 16px;
+  font-size: 0.92rem;
+}
