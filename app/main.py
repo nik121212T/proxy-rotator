@@ -17,6 +17,7 @@ from app.config import Settings
 from app.crypto import CryptoConfigError, decrypt_password, derive_key
 from app.db import get_db
 from app.gateway_http import HttpGateway
+from app.gateway_socks import SocksGateway
 from app.health_checker import HealthChecker
 from app.pool import Pool
 from app.rotator import Rotator
@@ -69,8 +70,18 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
                 inspect_body=config.burn_inspect_body,
             ),
         )
+        socks5_gateway = SocksGateway(
+            pool,
+            rotator,
+            key,
+            host=config.bind_host,
+            port=config.gateway_socks_port,
+            timeout_s=config.gateway_timeout_s,
+            max_retry_per_request=config.max_retry_per_request,
+        )
         checker.start()
         await http_gateway.start()
+        await socks5_gateway.start()
         try:
             yield Runtime(
                 pool=pool,
@@ -79,8 +90,10 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
                 http_configured=http_configured,
                 socks5_configured=socks5_configured,
                 http_gateway=http_gateway,
+                socks5_gateway=socks5_gateway,
             )
         finally:
+            await socks5_gateway.stop()
             await http_gateway.stop()
             await checker.stop()
 

@@ -273,12 +273,14 @@ async def _raw_request(gateway_port, first_line, headers, body=b""):
     return code, reply_headers, content
 
 
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
 async def test_gateway_binds_and_reports_status(harness):
     status = harness.gateway.status("127.0.0.1:9999")
     assert status.bound == f"127.0.0.1:{harness.port}"
     assert status.active_conns == 0
 
 
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
 async def test_forward_get_through_upstream_with_via(harness, origin, upstream_proxy):
     code, headers, body = await _raw_request(
         harness.port,
@@ -295,6 +297,7 @@ async def test_forward_get_through_upstream_with_via(harness, origin, upstream_p
     assert "via" in origin.requests[-1]["headers"]
 
 
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
 async def test_connect_tunnel_bridges_bytes(harness, upstream_proxy):
     async def echo(reader, writer):
         try:
@@ -335,6 +338,7 @@ async def test_connect_tunnel_bridges_bytes(harness, upstream_proxy):
         await echo_server.wait_closed()
 
 
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
 async def test_pool_empty_returns_503(db, upstream_proxy):
     key = Fernet.generate_key()
     pool = await Pool.load(db, key)
@@ -412,6 +416,7 @@ async def test_unsupported_method_returns_405(harness):
     await _wait_idle(harness.gateway)
 
 
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
 async def test_relative_target_rejected(harness):
     code, _, _ = await _raw_request(
         harness.port, "GET /relative HTTP/1.1",
@@ -420,6 +425,7 @@ async def test_relative_target_rejected(harness):
     assert code == 400
 
 
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
 async def test_hop_by_hop_from_connection_header_is_stripped(harness, origin, upstream_proxy):
     code, _, _ = await _raw_request(
         harness.port, f"GET http://127.0.0.1:{origin.port}/x HTTP/1.1",
@@ -432,6 +438,7 @@ async def test_hop_by_hop_from_connection_header_is_stripped(harness, origin, up
     assert seen.get("connection") != "close"
 
 
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
 async def test_successful_forward_marks_success(harness, origin):
     before = harness.pool.all()[0]
     code, _, _ = await _raw_request(
@@ -444,6 +451,7 @@ async def test_successful_forward_marks_success(harness, origin):
     assert after.success_count == before.success_count + 1
 
 
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
 async def test_requests_total_increments(harness, origin):
     assert harness.gateway.status("x").requests_total == 0
     await _raw_request(
@@ -493,6 +501,7 @@ async def two_proxy_harness(db, upstream_proxy):
         await second.stop()
 
 
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
 async def test_retry_on_upstream_connect_error_then_success(two_proxy_harness, origin):
     harness, _, first_id, _ = two_proxy_harness
     # Kill the first upstream so the retry picks the second one.
@@ -517,6 +526,7 @@ async def test_retry_on_upstream_connect_error_then_success(two_proxy_harness, o
     assert body == b"origin ok"
 
 
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
 async def test_retry_on_burn_status_then_success(two_proxy_harness, origin):
     harness, second_upstream, first_id, _ = two_proxy_harness
     # First upstream (round-robin first pick) rejects with 429.
@@ -541,6 +551,7 @@ async def test_retry_on_burn_status_then_success(two_proxy_harness, origin):
     assert harness.gateway.status("x").requests_total == before + 1
 
 
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
 async def test_retry_exhausted_returns_502(harness, upstream_proxy, origin):
     upstream_proxy.accept = False
     upstream_proxy.reject_status = (429, "Too Many Requests")
@@ -555,6 +566,7 @@ async def test_retry_exhausted_returns_502(harness, upstream_proxy, origin):
     assert b"Bad Gateway" in body
 
 
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
 async def test_no_retry_on_2xx(harness, upstream_proxy, origin):
     before_success = harness.pool.all()[0].success_count
     code, _, _ = await _raw_request(

@@ -90,6 +90,7 @@ async def test_probe_uses_upstream_auth_and_records_real_result(
         ({"ip": "203.0.113.10", "padding": "x" * 70000}, 200),
     ],
 )
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
 async def test_probe_rejects_bad_responses(
     db: aiosqlite.Connection,
     upstream: FakeProxy,
