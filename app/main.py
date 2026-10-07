@@ -15,6 +15,7 @@ from app.config import Settings
 from app.crypto import CryptoConfigError, decrypt_password, derive_key
 from app.db import get_db
 from app.health_checker import HealthChecker
+from app.models import GatewayStatus, ListenerStatus
 from app.pool import Pool
 from app.rotator import Rotator
 from app.routes import gateway, proxies
@@ -51,7 +52,12 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
         rotator = Rotator(config.rotation_strategy, sticky_ttl_s=config.sticky_ttl_s)
         checker.start()
         try:
-            yield Runtime(pool, checker, rotator)
+            host = f"[{config.bind_host}]" if ":" in config.bind_host else config.bind_host
+            gateway_status = GatewayStatus(
+                http=ListenerStatus(configured=f"{host}:{config.gateway_http_port}"),
+                socks5=ListenerStatus(configured=f"{host}:{config.gateway_socks_port}"),
+            )
+            yield Runtime(pool, checker, rotator, gateway_status)
         finally:
             await checker.stop()
 

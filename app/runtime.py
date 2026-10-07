@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from fastapi import HTTPException, Request
 
 from app.health_checker import HealthChecker
+from app.models import GatewayStatus
 from app.pool import Pool
 from app.rotator import Rotator
 
@@ -14,6 +15,7 @@ class Runtime:
     pool: Pool
     checker: HealthChecker
     rotator: Rotator
+    gateway: GatewayStatus
 
 
 async def get_runtime(request: Request) -> Runtime:

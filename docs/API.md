@@ -106,12 +106,15 @@ Body : `{strategy: "weighted"}`. Returns the new stats.
 
 ```json
 {
-  "http": {"bound": "127.0.0.1:8888", "active_conns": 7, "requests_total": 1203},
-  "socks5": {"bound": "127.0.0.1:1080", "active_conns": 2, "requests_total": 55}
+  "http": {"configured": "127.0.0.1:8888", "bound": null, "active_conns": 0, "requests_total": 0},
+  "socks5": {"configured": "127.0.0.1:1080", "bound": null, "active_conns": 0, "requests_total": 0}
 }
 ```
 
 ---
+
+Phase 4 reports configured addresses but opens no gateway sockets. Phase 5 will
+replace the runtime gateway snapshot with bound addresses and actual counters.
 
 ## WebSocket `/ws/events`
 

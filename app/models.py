@@ -106,3 +106,15 @@ class PoolStatsEvent(_DTO):
 
 
 Event = ProxyEvent | PoolStatsEvent
+
+
+class ListenerStatus(_DTO):
+    configured: str
+    bound: str | None = None
+    active_conns: Count = 0
+    requests_total: Count = 0
+
+
+class GatewayStatus(_DTO):
+    http: ListenerStatus
+    socks5: ListenerStatus

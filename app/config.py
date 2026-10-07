@@ -25,6 +25,8 @@ class Settings(BaseSettings):
 
     bind_host: str = "127.0.0.1"
     admin_port: int = Field(default=8080, ge=1, le=65535)
+    gateway_http_port: int = Field(default=8888, ge=1, le=65535)
+    gateway_socks_port: int = Field(default=1080, ge=1, le=65535)
     rotation_strategy: RotationStrategy = "weighted"
     sticky_ttl_s: float = Field(default=900, gt=0)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
