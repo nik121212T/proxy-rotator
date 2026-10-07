@@ -170,6 +170,37 @@ and translate `CryptoConfigError.exit_code` to process exit 78 (`EX_CONFIG`).
 
 ---
 
+## Domain lifecycle and health timing
+
+After loading, Pool exclusively owns its connection. Its mutation lock serializes
+write-through transactions before publishing immutable snapshots and events.
+Readers take tuple snapshots without locking. Each subscriber has a bounded
+queue; overflow requires resubscription and a snapshot reload. The health loop
+does this automatically. Application startup and shutdown wiring belongs to T4.1.
+
+Selection recalculates score freshness without mutating stored snapshots.
+Latency uses the rounded median of the latest 20 measurements, restoring check
+history from SQLite on load. Rotators only select active snapshots; an empty
+selection never permits a direct connection. Burn classification is pure;
+gateway response handling and retries remain T5.2.
+
+Health checks use aiohttp and aiohttp-socks, verified TLS, explicit upstreams,
+and SOCKS remote DNS. They ignore environment proxy settings. Concurrent checks
+for the same proxy share one job. The background loop checks newly imported
+proxies, alive proxies every 300 seconds, and quarantined proxies when due;
+dead proxies require an explicit check. Configuration/decryption failures
+propagate rather than counting against proxy health.
+
+The per-probe timeout stays 8 seconds and concurrency stays 20. Fifty stalled
+probes would otherwise take three waves, exceeding the 10-second import target.
+The implementation therefore adds a configurable 10-second batch budget:
+90% for network work (including semaphore waits), reserving the remainder for
+durable results. Unfinished checks produce a sanitized batch-deadline failure,
+including checks still queued. Persistence is awaited, so a stalled disk can
+exceed the budget; this is not a hard real-time guarantee. Local fake-upstream
+tests verify that 50 successful probes complete within 10 seconds. No external
+service is contacted by tests.
+
 ## Observability
 
 - **Logs**: stdout, structured, one event per line, key=value.

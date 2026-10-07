@@ -46,7 +46,8 @@ Work top to bottom. Check each box when done. One task = one commit.
   - Active snapshots only, fail-closed empty selection, injectable RNG/clock, bounded TTLCache sticky mappings and removed-proxy invalidation.
 - [x] T3.4  `app/burn_detector.py` : classify outcome. Tests for every signal in `SPEC.md §6`.
   - Pure status/body/timeout/connection/latency classification with safe fixed reasons; all signals and strict body-size, content-type and timing boundaries tested. Gateway retry integration remains T5.2.
-- [ ] T3.5  `app/health_checker.py` : probe one proxy; probe all with semaphore; background loop with interval. Tests with fake upstream.
+- [x] T3.5  `app/health_checker.py` : probe one proxy; probe all with semaphore; background loop with interval. Tests with fake upstream.
+  - Real local HTTP, authenticated SOCKS5 (remote DNS), and verified TLS-over-CONNECT tests; 50-proxy batch, bounded concurrency, import scheduling, quarantine retests and cancellation. Configurable batch deadline resolves the 10 s target versus queued 8 s probes; unfinished probes receive explicit failed results. Startup wiring remains T4.1.
 
 ## Phase 4 — API + UI
 
