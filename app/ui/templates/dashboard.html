@@ -24,7 +24,7 @@
   <div id="feedback" class="feedback" role="status" aria-live="polite"></div>
   <div class="workspace-grid">
     <section class="pool-panel" aria-labelledby="pool-title">
-      <div class="table-toolbar"><h2 id="pool-title">Vos proxies</h2><div class="toolbar-actions"><button type="button" class="secondary" hx-post="/api/pool/clear-dead" hx-target="#feedback" hx-disabled-elt="this">Purger les hors pool</button></div></div>
+      <div class="table-toolbar"><h2 id="pool-title">Vos proxies</h2><div class="toolbar-actions"><a class="button secondary" href="/api/proxies/export?status=alive" download>Exporter les actifs</a><button type="button" class="secondary" hx-post="/api/pool/clear-dead" hx-target="#feedback" hx-disabled-elt="this">Purger les hors pool</button></div></div>
       <div class="table-sort"><label for="proxy-sort">Trier par</label><select id="proxy-sort" name="sort">{% for value, label in sort_options.items() %}<option value="{{ value }}" {% if value == sort_order %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
       <div class="table-scroll" tabindex="0" role="region" aria-label="Table des proxies, défilement horizontal disponible">
         <table id="proxies-table"><caption class="sr-only">État et performances des proxies</caption><thead><tr><th scope="col">Proxy</th><th scope="col">État</th><th scope="col">Latence</th><th scope="col">Score</th><th scope="col">Réussite</th><th scope="col">Dernier test</th><th scope="col">Actions</th></tr></thead><tbody id="proxy-rows">{% include '_rows.html' %}</tbody></table>

@@ -64,6 +64,7 @@ def render(
         "stats": runtime.pool.stats(runtime.rotator.strategy),
         "gateway": runtime.gateway,
         "checks": runtime.checker.batch_status,
+        "pinned_ids": runtime.pool.pinned_ids(),
     }
     context.update(extra or {})
     return templates.TemplateResponse(request=request, name=template, context=context)

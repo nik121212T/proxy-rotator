@@ -241,22 +241,25 @@ button, input, select, textarea { font: inherit; color: inherit; }
 main {
   max-width: 1500px;
   margin: 0 auto;
-  padding: var(--space-8);
+  padding: var(--space-5) var(--space-8);
 }
 
 .page-heading {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: var(--space-6);
-  margin-bottom: var(--space-6);
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.page-heading p {
+  font-size: 0.85rem;
 }
 h1 {
-  margin: 0 0 var(--space-2);
-  font-size: clamp(2rem, 3.2vw, 2.6rem);
-  line-height: 1.05;
-  letter-spacing: -0.035em;
-  font-weight: 700;
+  margin: 0 0 var(--space-1);
+  font-size: clamp(1.4rem, 1.8vw, 1.7rem);
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  font-weight: 650;
 }
 h2 { margin: 0; font-size: 1.05rem; font-weight: 650; color: var(--ink); letter-spacing: -0.01em; }
 h3 { margin: 0; font-size: 0.9rem; font-weight: 600; color: var(--ink); }
@@ -277,22 +280,22 @@ p { margin: 0; color: var(--muted); }
 /* ── Summary tiles (hero stats) ──────────────────────────────────────── */
 
 .summary {
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-4);
   padding: 0;
   border: 0;
 }
 .summary dl {
   margin: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--space-2);
 }
 .summary dl > div {
   position: relative;
-  padding: var(--space-5);
+  padding: var(--space-3) var(--space-4);
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
@@ -319,10 +322,10 @@ p { margin: 0; color: var(--muted); }
 .summary dd {
   position: relative;
   margin: 0;
-  font-size: 2.4rem;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: -0.035em;
+  font-size: 1.5rem;
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
@@ -800,3 +803,19 @@ footer {
 .controls > .control-section:only-child { grid-column: 1 / -1; }
 @media (max-width: 900px) { .top-controls { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 420px) { .gateway-row { grid-template-columns: minmax(0, 1fr) auto; } .gateway-row dt { grid-column: 1 / -1; } }
+
+/* ── Pinned proxy indicator ──────────────────────────────────────────── */
+
+tr.is-pinned td {
+  background: linear-gradient(90deg, var(--accent-soft) 0%, transparent 15%);
+}
+tr.is-pinned:hover td {
+  background: linear-gradient(90deg, var(--accent-soft) 0%, var(--paper-soft) 15%);
+}
+.pin-flag {
+  display: inline-block;
+  margin-right: 4px;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.95em;
+}

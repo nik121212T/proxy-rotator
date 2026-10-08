@@ -62,6 +62,49 @@ class ProxyDetail(Proxy):
     checks: tuple[CheckResult, ...]
 
 
+@router.post("/{proxy_id}/pin", response_model=dict[str, bool])
+async def pin_proxy(
+    proxy_id: int, runtime: Services, request: Request
+) -> dict[str, bool] | HTMLResponse:
+    try:
+        added = runtime.pool.pin(proxy_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Proxy not found") from exc
+    if request.headers.get("HX-Request") == "true":
+        return feedback(request, f"Proxy #{proxy_id} épinglé.")
+    return {"pinned": True, "changed": added}
+
+
+@router.post("/{proxy_id}/unpin", response_model=dict[str, bool])
+async def unpin_proxy(
+    proxy_id: int, runtime: Services, request: Request
+) -> dict[str, bool] | HTMLResponse:
+    removed = runtime.pool.unpin(proxy_id)
+    if request.headers.get("HX-Request") == "true":
+        return feedback(request, f"Proxy #{proxy_id} désépinglé.")
+    return {"pinned": False, "changed": removed}
+
+
+@router.get("/export", response_class=Response)
+async def export_proxies(
+    runtime: Services,
+    status: Annotated[ProxyStatus | None, Query()] = "alive",
+) -> Response:
+    """Plain-text download of proxies (default: alive only)."""
+    lines = runtime.pool.export_lines(status=status)
+    body = "\n".join(lines) + ("\n" if lines else "")
+    filename = f"proxies-{status or 'all'}.txt"
+    return Response(
+        content=body,
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+            "X-Line-Count": str(len(lines)),
+        },
+    )
+
+
 @router.post("/test-all", response_model=dict[str, int])
 async def test_all(runtime: Services, request: Request) -> dict[str, int] | HTMLResponse:
     queued = runtime.checker.queue_all()

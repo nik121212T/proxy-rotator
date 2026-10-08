@@ -1,6 +1,7 @@
 """Serialized write-through pool with immutable, lock-free read snapshots."""
 
 import asyncio
+import logging
 import math
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
@@ -23,6 +24,7 @@ from app.models import (
 )
 from app.parser import ImportReport, ParsedProxy, parse_bulk
 
+logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
@@ -56,6 +58,7 @@ class Pool:
         self._min_score = min_score
         self._snapshot: tuple[Proxy, ...] = ()
         self._latencies: dict[int, tuple[int | None, ...]] = {}
+        self._pinned: set[int] = set()
         self._lock = asyncio.Lock()
         self._events = EventBus()
 
@@ -82,6 +85,46 @@ class Pool:
         now = self._clock()
         current = (p.model_copy(update={"score": health_score(p, now)}) for p in self._snapshot)
         return tuple(p for p in current if p.status == "alive" and p.score >= self._min_score)
+
+    # ── pinning ──────────────────────────────────────────────────────────
+
+    def pinned_ids(self) -> frozenset[int]:
+        return frozenset(self._pinned)
+
+    def is_pinned(self, proxy_id: int) -> bool:
+        return proxy_id in self._pinned
+
+    def pin(self, proxy_id: int) -> bool:
+        if not any(p.id == proxy_id for p in self._snapshot):
+            raise KeyError(proxy_id)
+        added = proxy_id not in self._pinned
+        self._pinned.add(proxy_id)
+        return added
+
+    def unpin(self, proxy_id: int) -> bool:
+        removed = proxy_id in self._pinned
+        self._pinned.discard(proxy_id)
+        return removed
+
+    def export_lines(self, status: str | None = None) -> tuple[str, ...]:
+        """Return canonical ``scheme://user:pass@host:port`` lines, filterable by status."""
+        from app.crypto import decrypt_password  # noqa: PLC0415
+
+        selected = self._snapshot if status is None else tuple(
+            p for p in self._snapshot if p.status == status
+        )
+        lines: list[str] = []
+        for proxy in selected:
+            try:
+                password = decrypt_password(proxy.password_enc.get_secret_value(), self._key)
+            except Exception as exc:  # noqa: BLE001  skip rows whose decryption fails
+                logger.info("export_decrypt_skipped proxy_id=%s err=%s", proxy.id, exc)
+                continue
+            lines.append(
+                f"{proxy.scheme}://{proxy.username}:{password.get_secret_value()}"
+                f"@{proxy.host}:{proxy.port}"
+            )
+        return tuple(lines)
 
     def stats(self, strategy: RotationStrategy) -> PoolStats:
         snapshot = self._snapshot

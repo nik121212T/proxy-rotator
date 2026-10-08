@@ -13,6 +13,7 @@ from app.models import Proxy, RotationStrategy
 
 class ActivePool(Protocol):
     def active(self) -> tuple[Proxy, ...]: ...
+    def pinned_ids(self) -> frozenset[int]: ...
 
 
 class Rotator:
@@ -43,6 +44,14 @@ class Rotator:
         active = pool.active()
         if not active:
             return None
+        # Pinned-first override: if any pinned proxy is active, pick among those.
+        pinned_fn = getattr(pool, "pinned_ids", None)
+        if callable(pinned_fn):
+            pinned = pinned_fn()
+            if pinned:
+                narrowed = tuple(p for p in active if p.id in pinned)
+                if narrowed:
+                    active = narrowed
         if self.strategy == "random":
             return self._rng.choice(active)
         if self.strategy == "weighted":
