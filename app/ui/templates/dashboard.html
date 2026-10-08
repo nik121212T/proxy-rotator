@@ -5,14 +5,15 @@
   <meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"selfRequestsOnly":true}'>
   <title>Pool de proxies · Proxy Rotator</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <link rel="stylesheet" href="/static/styles.css?v=compact-table-2">
-  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=compact-table-2" defer></script>
+  <link rel="stylesheet" href="/static/styles.css?v=page-shortcuts-1">
+  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=page-shortcuts-1" defer></script>
 </head>
 <body>
+<div id="page-top" tabindex="-1"></div>
 <a class="skip-link" href="#workspace">Aller au pool</a>
 <header class="topbar"><a class="brand" href="/">Proxy Rotator<span>Local</span></a><span id="connection-status" role="status">Connexion au direct…</span></header>
 <main id="workspace">
-  <div class="page-heading"><div><h1>Pool de proxies</h1><p>Vérifiez vos proxies. Gardez le contrôle sur la rotation.</p></div><a class="button secondary import-link" href="#import-form">Importer des proxies</a></div>
+  <div class="page-heading"><div><h1>Pool de proxies</h1><p>Vérifiez vos proxies. Gardez le contrôle sur la rotation.</p></div><a class="button secondary import-link" href="#import-section">↓ Importer une liste</a></div>
   {% include '_summary.html' %}
 <div class="top-controls">
       <section class="control-section"><h2>Rotation</h2><form id="strategy-form" hx-post="/api/pool/strategy" hx-ext="json-form" hx-target="#feedback" hx-disabled-elt="find button">
@@ -41,7 +42,7 @@
       <p class="table-note">Les proxies hors pool sont masqués. Les résultats se mettent à jour en direct.</p>
     </section>
     <aside class="controls" aria-label="Gestion du pool">
-      <section class="control-section"><h2>Importer une liste</h2><p class="helper">Une ligne par proxy. La vérification démarre automatiquement.</p>
+      <section id="import-section" class="control-section" tabindex="-1"><h2>Importer une liste</h2><p class="helper">Une ligne par proxy. La vérification démarre automatiquement.</p>
         <form id="import-form" hx-post="/api/proxies/import" hx-ext="json-form" hx-target="#feedback" hx-disabled-elt="find button" autocomplete="off">
           <div class="file-drop" id="proxy-drop" tabindex="0" aria-label="Déposer un fichier .txt ou .csv de proxies">
             <input id="proxy-file" type="file" accept=".txt,.csv,.list,text/plain" multiple hidden>
@@ -59,6 +60,7 @@
     </aside>
   </div>
 </main>
+<nav class="page-shortcuts" aria-label="Raccourcis de navigation"><a href="#import-section" class="button secondary" aria-label="Aller à Importer une liste">↓ Importer</a><a href="#page-top" class="button secondary" aria-label="Remonter en haut de la page" title="Remonter en haut">↑ Haut</a></nav>
 <footer>Proxy Rotator <span>Administration locale · aucune télémétrie</span></footer>
 <noscript><p class="noscript">Activez JavaScript pour importer, tester et recevoir les mises à jour.</p></noscript>
 </body>

@@ -118,3 +118,4 @@ Work top to bottom. Check each box when done. One task = one commit.
 - [x] User-requested timed rotation: “Toutes les X minutes”, interval 1–1440 minutes, stable selection until deadline, next eligible proxy on the next request, immediate replacement if unavailable; existing tunnels continue.
 - [x] User-requested Finder restart: start.command stops this project's existing Python/Uvicorn app.main processes (command + working-directory verification), SIGTERM with bounded wait then SIGKILL, before bootstrap. Other projects remain untouched; help does not stop servers.
 - [x] User-requested compact proxy table: full available width, narrower cells and wrapping metadata, visible action column; stacked labeled rows on small screens without horizontal scrolling.
+- [x] User-requested long-page shortcuts: prominent top “Importer une liste”, fixed Import/Back-to-top links, native anchors and immediate scrolling.
