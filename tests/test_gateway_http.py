@@ -168,7 +168,8 @@ class FakeUpstream:
     async def _forward_http(self, method, target, headers, reader, writer):
         self.gets.append(target)
         passthrough = {
-            k: v for k, v in headers.items()
+            k: v
+            for k, v in headers.items()
             if k not in {"proxy-authorization", "proxy-connection", "host"}
         }
         body = b""
@@ -225,7 +226,9 @@ async def harness(db, upstream_proxy):
     key = Fernet.generate_key()
     pool = await Pool.load(db, key)
     rotator = Rotator(strategy="round_robin")
-    proxy = await pool.add(parse_line(f"gatewayuser:secret-value@{upstream_proxy.host}:{upstream_proxy.port}"))
+    proxy = await pool.add(
+        parse_line(f"gatewayuser:secret-value@{upstream_proxy.host}:{upstream_proxy.port}")
+    )
     await pool.mark_success(proxy.id, 10)
     upstream_proxy.expected_auth = "Basic " + base64.b64encode(b"gatewayuser:secret-value").decode()
     gateway = HttpGateway(pool, rotator, key, port=0)
@@ -293,8 +296,12 @@ async def test_forward_get_through_upstream_with_via(harness, origin, upstream_p
     code, headers, body = await _raw_request(
         harness.port,
         f"GET http://127.0.0.1:{origin.port}/path?x=1 HTTP/1.1",
-        [("Host", f"127.0.0.1:{origin.port}"), ("User-Agent", "test-client/1.0"),
-         ("Connection", "close"), ("Keep-Alive", "timeout=5")],
+        [
+            ("Host", f"127.0.0.1:{origin.port}"),
+            ("User-Agent", "test-client/1.0"),
+            ("Connection", "close"),
+            ("Keep-Alive", "timeout=5"),
+        ],
     )
     assert code == 200
     assert body == b"origin ok"
@@ -355,7 +362,8 @@ async def test_pool_empty_returns_503(db, upstream_proxy):
     try:
         port = int((gateway.status("x").bound or "").rsplit(":", 1)[1])
         code, headers, body = await _raw_request(
-            port, "GET http://example.invalid/ HTTP/1.1",
+            port,
+            "GET http://example.invalid/ HTTP/1.1",
             [("Host", "example.invalid"), ("Connection", "close")],
         )
         assert code == 503
@@ -380,7 +388,8 @@ async def test_upstream_refuses_marks_failure_and_returns_502(harness, upstream_
     await upstream_proxy.stop()
     before_fails = harness.pool.all()[0].fail_count
     code, _, _ = await _raw_request(
-        harness.port, f"GET http://127.0.0.1:{origin.port}/ HTTP/1.1",
+        harness.port,
+        f"GET http://127.0.0.1:{origin.port}/ HTTP/1.1",
         [("Host", f"127.0.0.1:{origin.port}"), ("Connection", "close")],
     )
     assert code == 502
@@ -406,9 +415,7 @@ async def _request_single_response(host: str, port: int, raw_bytes: bytes) -> by
 
 @pytest.mark.filterwarnings("ignore::ResourceWarning")
 async def test_malformed_request_returns_400(harness):
-    data = await _request_single_response(
-        "127.0.0.1", harness.port, b"NOT a request\r\n\r\n"
-    )
+    data = await _request_single_response("127.0.0.1", harness.port, b"NOT a request\r\n\r\n")
     assert data.startswith(b"HTTP/1.1 400")
     await _wait_idle(harness.gateway)
 
@@ -427,7 +434,8 @@ async def test_unsupported_method_returns_405(harness):
 @pytest.mark.filterwarnings("ignore::ResourceWarning")
 async def test_relative_target_rejected(harness):
     code, _, _ = await _raw_request(
-        harness.port, "GET /relative HTTP/1.1",
+        harness.port,
+        "GET /relative HTTP/1.1",
         [("Host", "example.invalid"), ("Connection", "close")],
     )
     assert code == 400
@@ -436,9 +444,13 @@ async def test_relative_target_rejected(harness):
 @pytest.mark.filterwarnings("ignore::ResourceWarning")
 async def test_hop_by_hop_from_connection_header_is_stripped(harness, origin, upstream_proxy):
     code, _, _ = await _raw_request(
-        harness.port, f"GET http://127.0.0.1:{origin.port}/x HTTP/1.1",
-        [("Host", f"127.0.0.1:{origin.port}"),
-         ("X-Secret", "pet-the-cat"), ("Connection", "x-secret, close")],
+        harness.port,
+        f"GET http://127.0.0.1:{origin.port}/x HTTP/1.1",
+        [
+            ("Host", f"127.0.0.1:{origin.port}"),
+            ("X-Secret", "pet-the-cat"),
+            ("Connection", "x-secret, close"),
+        ],
     )
     assert code == 200
     seen = origin.requests[-1]["headers"]
@@ -450,7 +462,8 @@ async def test_hop_by_hop_from_connection_header_is_stripped(harness, origin, up
 async def test_successful_forward_marks_success(harness, origin):
     before = harness.pool.all()[0]
     code, _, _ = await _raw_request(
-        harness.port, f"GET http://127.0.0.1:{origin.port}/ HTTP/1.1",
+        harness.port,
+        f"GET http://127.0.0.1:{origin.port}/ HTTP/1.1",
         [("Host", f"127.0.0.1:{origin.port}"), ("Connection", "close")],
     )
     assert code == 200
@@ -463,7 +476,8 @@ async def test_successful_forward_marks_success(harness, origin):
 async def test_requests_total_increments(harness, origin):
     assert harness.gateway.status("x").requests_total == 0
     await _raw_request(
-        harness.port, f"GET http://127.0.0.1:{origin.port}/ HTTP/1.1",
+        harness.port,
+        f"GET http://127.0.0.1:{origin.port}/ HTTP/1.1",
         [("Host", f"127.0.0.1:{origin.port}"), ("Connection", "close")],
     )
     assert harness.gateway.status("x").requests_total >= 1
@@ -495,9 +509,7 @@ async def two_proxy_harness(db, upstream_proxy):
     )
     await pool.mark_success(first.id, 10)
     await pool.mark_success(second_proxy.id, 10)
-    upstream_proxy.expected_auth = (
-        "Basic " + base64.b64encode(b"gatewayuser:secret-value").decode()
-    )
+    upstream_proxy.expected_auth = "Basic " + base64.b64encode(b"gatewayuser:secret-value").decode()
     gateway = HttpGateway(pool, rotator, key, port=0, max_retry_per_request=2)
     await gateway.start()
     bound = gateway.status("configured").bound or ""
@@ -586,3 +598,53 @@ async def test_no_retry_on_2xx(harness, upstream_proxy, origin):
     await _wait_idle(harness.gateway)
     after = harness.pool.all()[0]
     assert after.success_count == before_success + 1
+
+
+@pytest.mark.parametrize("gateway_type", ["http", "socks5"])
+async def test_https_upstream_starts_tls_before_sending_credentials(db, gateway_type):
+    from app.gateway_socks import SocksGateway
+    observed = asyncio.Future()
+    finished = asyncio.Event()
+
+    async def upstream(reader, writer):
+        try:
+            observed.set_result(await reader.read(1))
+        finally:
+            writer.close()
+            await writer.wait_closed()
+            finished.set()
+
+    server = await asyncio.start_server(upstream, "127.0.0.1", 0)
+    key = Fernet.generate_key()
+    pool = await Pool.load(db, key)
+    port = server.sockets[0].getsockname()[1]
+    proxy = await pool.add(parse_line(f"https://tester:synthetic@127.0.0.1:{port}"))
+    await pool.mark_success(proxy.id, 10)
+    gateway_class = HttpGateway if gateway_type == "http" else SocksGateway
+    gateway = gateway_class(
+        pool, Rotator("round_robin"), key, port=0, timeout_s=0.5, max_retry_per_request=0
+    )
+    await gateway.start()
+    try:
+        bound = gateway.status("").bound
+        reader, writer = await asyncio.open_connection("127.0.0.1", int(bound.rsplit(":", 1)[1]))
+        try:
+            if gateway_type == "http":
+                writer.write(b"CONNECT target.invalid:443 HTTP/1.1\r\nHost: target.invalid:443\r\n\r\n")
+            else:
+                writer.write(b"\x05\x01\x00")
+                await writer.drain()
+                assert await reader.readexactly(2) == b"\x05\x00"
+                domain = b"target.invalid"
+                writer.write(b"\x05\x01\x00\x03" + bytes([len(domain)]) + domain + b"\x01\xbb")
+            await writer.drain()
+            first_byte = await asyncio.wait_for(observed, 2)
+            await asyncio.wait_for(finished.wait(), 2)
+            assert first_byte == b"\x16", "Expected TLS ClientHello, never plaintext CONNECT/auth"
+        finally:
+            writer.close()
+            await writer.wait_closed()
+    finally:
+        await gateway.stop()
+        server.close()
+        await server.wait_closed()

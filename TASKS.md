@@ -47,7 +47,7 @@ Work top to bottom. Check each box when done. One task = one commit.
 - [x] T3.4  `app/burn_detector.py` : classify outcome. Tests for every signal in `SPEC.md §6`.
   - Pure status/body/timeout/connection/latency classification with safe fixed reasons; all signals and strict body-size, content-type and timing boundaries tested. Gateway retry integration remains T5.2.
 - [x] T3.5  `app/health_checker.py` : probe one proxy; probe all with semaphore; background loop with interval. Tests with fake upstream.
-  - Real local HTTP, authenticated SOCKS5 (remote DNS), and verified TLS-over-CONNECT tests; 50-proxy batch, bounded concurrency, import scheduling, quarantine retests and cancellation. Configurable batch deadline resolves the 10 s target versus queued 8 s probes; unfinished probes receive explicit failed results. Startup wiring remains T4.1.
+  - Real local HTTP, authenticated SOCKS5 (remote DNS), and verified TLS-over-CONNECT tests; 50-proxy batch, bounded concurrency, import scheduling, quarantine retests and cancellation. Updated after review: per-probe timeouts exclude queue waits; responsive 50-proxy batches meet the target, stalled batches take longer without falsely penalizing untested proxies. Startup wiring remains T4.1.
 
 ## Phase 4 — API + UI
 
@@ -104,3 +104,9 @@ Work top to bottom. Check each box when done. One task = one commit.
 - Sticky session per client cookie.
 - Basic auth on the admin UI.
 - Browser-config helper (Firefox autoconfig, SwitchyOmega preset).
+
+## User-requested follow-up
+
+- [x] Import valid proxies while skipping malformed or unauthenticated lines; preserve error line numbers, deduplication and transactional database writes. Supersedes T4.2 whole-batch rejection per latest user instruction.
+
+- [x] Review corrections: single active manual test batch with progress; per-probe timeout after queue wait; safe CONNECT 407/TLS diagnostics; verified TLS for HTTPS upstream tunnels from both HTTP and SOCKS5 listeners; cleanup on partial startup failure; isolated gateway ports in application tests.

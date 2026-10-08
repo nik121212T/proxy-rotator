@@ -16,7 +16,7 @@ from yarl import URL
 
 from app.crypto import decrypt_password
 from app.events import Subscription
-from app.models import CheckResult, Proxy
+from app.models import CheckBatchStatus, CheckResult, Proxy
 from app.pool import Pool, utc_now
 
 
@@ -29,13 +29,12 @@ class HealthChecker:
         probe_url: str = "https://api.ipify.org?format=json",
         concurrency: int = 20,
         timeout_s: float = 8,
-        batch_timeout_s: float = 10,
         interval_s: float = 300,
         poll_interval_s: float = 0.2,
         clock: Callable[[], datetime] = utc_now,
         tls_context: ssl.SSLContext | None = None,
     ) -> None:
-        if concurrency < 1 or min(timeout_s, batch_timeout_s, interval_s, poll_interval_s) <= 0:
+        if concurrency < 1 or min(timeout_s, interval_s, poll_interval_s) <= 0:
             raise ValueError("Health checker limits must be positive")
         url = URL(probe_url)
         if url.scheme not in {"http", "https"} or not url.host or url.user is not None:
@@ -45,12 +44,12 @@ class HealthChecker:
         self.probe_url = str(url.with_path(url.raw_path, encoded=True).with_query(url.query))
         self._semaphore = asyncio.Semaphore(concurrency)
         self._timeout_s = timeout_s
-        self._batch_timeout_s = batch_timeout_s
         self._interval_s = interval_s
         self._poll_interval_s = poll_interval_s
         self._clock = clock
         self._tls_context = tls_context
         self._jobs: dict[int, asyncio.Task[CheckResult]] = {}
+        self._batch_jobs: dict[int, asyncio.Task[CheckResult]] = {}
         self._runner: asyncio.Task[None] | None = None
         self._suppressed: set[int] = set()
 
@@ -118,6 +117,15 @@ class HealthChecker:
                     status, address, error = await self._exchange(proxy, password)
             except TimeoutError:
                 error = "Timeout"
+            except aiohttp.ClientHttpProxyError as exc:
+                status = exc.status if 100 <= exc.status <= 599 else None
+                error = (
+                    "HTTP 407: proxy authentication refused"
+                    if status == 407
+                    else f"Proxy CONNECT refused (HTTP {status})"
+                )
+            except aiohttp.ClientConnectorCertificateError:
+                error = "TLS certificate verification failed"
             except (aiohttp.ClientError, ProxyError, OSError):
                 error = "Proxy connection failed"
             return CheckResult(
@@ -137,17 +145,9 @@ class HealthChecker:
             # A proxy deleted during its probe must never be resurrected.
             return
 
-    async def _job(self, proxy: Proxy, deadline: float | None) -> CheckResult:
-        try:
-            async with asyncio.timeout_at(deadline):
-                result = await self.probe(proxy)
-        except TimeoutError:
-            result = CheckResult(
-                proxy_id=proxy.id,
-                ok=False,
-                error="Batch deadline exceeded",
-                checked_at=self._clock(),
-            )
+    async def _job(self, proxy: Proxy) -> CheckResult:
+        # probe() acquires the semaphore before starting its network timeout.
+        result = await self.probe(proxy)
         persistence = asyncio.create_task(self._persist(result))
         try:
             await asyncio.shield(persistence)
@@ -156,11 +156,11 @@ class HealthChecker:
             await persistence
         return result
 
-    def _start_job(self, proxy: Proxy, deadline: float | None = None) -> asyncio.Task[CheckResult]:
+    def _start_job(self, proxy: Proxy) -> asyncio.Task[CheckResult]:
         existing = self._jobs.get(proxy.id)
         if existing is not None:
             return existing
-        task = asyncio.create_task(self._job(proxy, deadline))
+        task = asyncio.create_task(self._job(proxy))
         self._jobs[proxy.id] = task
 
         def finished(done: asyncio.Task[CheckResult]) -> None:
@@ -177,19 +177,56 @@ class HealthChecker:
             raise KeyError("Proxy is not in the pool")
         self._suppressed.discard(proxy_id)
         try:
-            return await asyncio.shield(self._start_job(proxy))
+            task = self._batch_jobs.get(proxy_id) if self.batch_running else None
+            return await asyncio.shield(task if task is not None else self._start_job(proxy))
         except asyncio.CancelledError:
             caller = asyncio.current_task()
             if caller is not None and caller.cancelling():
                 raise
             raise KeyError("Proxy check cancelled") from None
 
+    @property
+    def batch_running(self) -> bool:
+        return any(not task.done() for task in self._batch_jobs.values())
+
+    @property
+    def batch_status(self) -> CheckBatchStatus:
+        completed = failed = cancelled = 0
+        errors: dict[str, int] = {}
+        for task in self._batch_jobs.values():
+            if not task.done():
+                continue
+            completed += 1
+            if task.cancelled():
+                cancelled += 1
+                continue
+            if task.exception() is not None:
+                reason = "Internal check error"
+                failed += 1
+            else:
+                result = task.result()
+                if result.ok:
+                    continue
+                failed += 1
+                reason = result.error or "Check failed"
+            errors[reason] = errors.get(reason, 0) + 1
+        return CheckBatchStatus(
+            running=self.batch_running,
+            total=len(self._batch_jobs),
+            completed=completed,
+            failed=failed,
+            cancelled=cancelled,
+            errors=errors,
+        )
+
     def queue_all(self) -> int:
+        if self.batch_running:
+            return 0
+        self._batch_jobs = {}
         selected = self.pool.all()
-        deadline = asyncio.get_running_loop().time() + self._batch_timeout_s * 0.9
         for proxy in selected:
             self._suppressed.discard(proxy.id)
-            self._start_job(proxy, deadline)
+            self._batch_jobs[proxy.id] = self._start_job(proxy)
         return len(selected)
 
     async def cancel_one(self, proxy_id: int) -> None:
@@ -201,10 +238,8 @@ class HealthChecker:
             await asyncio.gather(task, return_exceptions=True)
 
     async def check_all(self, proxies: tuple[Proxy, ...] | None = None) -> tuple[CheckResult, ...]:
-        # Reserve 10% of the batch budget for durable writes and publication.
-        deadline = asyncio.get_running_loop().time() + self._batch_timeout_s * 0.9
         selected = self.pool.all() if proxies is None else proxies
-        tasks = [self._start_job(proxy, deadline) for proxy in selected]
+        tasks = [self._start_job(proxy) for proxy in selected]
         try:
 
             async def observed(task: asyncio.Task[CheckResult]) -> CheckResult | None:

@@ -270,35 +270,43 @@ class SocksGateway:
 
         from app.gateway_http import _basic_auth, _read_headers  # noqa: PLC0415
 
-        reader_up, writer_up = await asyncio.open_connection(proxy.host, proxy.port)
-        auth = _basic_auth(proxy, self._key)
-        request = (
-            f"CONNECT {target_host}:{target_port} HTTP/1.1\r\n"
-            f"Host: {target_host}:{target_port}\r\n"
-            f"Proxy-Authorization: Basic {auth}\r\n"
-            f"Proxy-Connection: keep-alive\r\n"
-            "\r\n"
-        ).encode("ascii")
-        writer_up.write(request)
-        await writer_up.drain()
-        status_line = await reader_up.readuntil(b"\r\n")
+        reader_up, writer_up = await asyncio.open_connection(
+            proxy.host, proxy.port, ssl=True if proxy.scheme == "https" else None
+        )
         try:
-            version, code_str, *_ = status_line.decode("latin-1").split(" ", 2)
-            code = int(code_str)
-        except (ValueError, UnicodeDecodeError) as exc:
+            auth = _basic_auth(proxy, self._key)
+            request = (
+                f"CONNECT {target_host}:{target_port} HTTP/1.1\r\n"
+                f"Host: {target_host}:{target_port}\r\n"
+                f"Proxy-Authorization: Basic {auth}\r\n"
+                f"Proxy-Connection: keep-alive\r\n"
+                "\r\n"
+            ).encode("ascii")
+            writer_up.write(request)
+            await writer_up.drain()
+            status_line = await reader_up.readuntil(b"\r\n")
+            try:
+                version, code_str, *_ = status_line.decode("latin-1").split(" ", 2)
+                code = int(code_str)
+            except (ValueError, UnicodeDecodeError) as exc:
+                with contextlib.suppress(ConnectionError, OSError):
+                    writer_up.close()
+                    await writer_up.wait_closed()
+                raise SocksGatewayError(f"Bad CONNECT reply: {status_line!r}") from exc
+            if not version.upper().startswith("HTTP/"):
+                raise SocksGatewayError(f"Bad CONNECT reply: {status_line!r}")
+            await _read_headers(reader_up)
+            if not 200 <= code < 300:
+                with contextlib.suppress(ConnectionError, OSError):
+                    writer_up.close()
+                    await writer_up.wait_closed()
+                raise SocksGatewayError(f"Upstream refused CONNECT: {code}")
+            return reader_up, writer_up
+        except BaseException:
+            writer_up.close()
             with contextlib.suppress(ConnectionError, OSError):
-                writer_up.close()
                 await writer_up.wait_closed()
-            raise SocksGatewayError(f"Bad CONNECT reply: {status_line!r}") from exc
-        if not version.upper().startswith("HTTP/"):
-            raise SocksGatewayError(f"Bad CONNECT reply: {status_line!r}")
-        await _read_headers(reader_up)
-        if not 200 <= code < 300:
-            with contextlib.suppress(ConnectionError, OSError):
-                writer_up.close()
-                await writer_up.wait_closed()
-            raise SocksGatewayError(f"Upstream refused CONNECT: {code}")
-        return reader_up, writer_up
+            raise
 
     def _pick(self, *, target_domain: str) -> Proxy | None:
         if self.rotator.strategy == "sticky":

@@ -123,3 +123,12 @@ class ListenerStatus(_DTO):
 class GatewayStatus(_DTO):
     http: ListenerStatus
     socks5: ListenerStatus
+
+
+class CheckBatchStatus(_DTO):
+    running: bool = False
+    total: Count = 0
+    completed: Count = 0
+    failed: Count = 0
+    cancelled: Count = 0
+    errors: dict[str, int] = Field(default_factory=dict)

@@ -299,7 +299,10 @@ class HttpGateway:
                 last_reason = _format_reason(exc)
                 logger.info(
                     "gateway_http_connect_upstream_failed proxy_id=%s target=%s:%s err=%s",
-                    chosen.id, host, port, exc,
+                    chosen.id,
+                    host,
+                    port,
+                    exc,
                 )
                 await self.pool.mark_fail(chosen.id, "upstream_connect_error")
                 up_reader = None
@@ -348,38 +351,44 @@ class HttpGateway:
         reader_up, writer_up = await asyncio.open_connection(
             proxy.host,
             proxy.port,
-            ssl=self._tls_context if proxy.scheme == "https" else None,
+            ssl=(self._tls_context or True) if proxy.scheme == "https" else None,
         )
-        auth = _basic_auth(proxy, self._key)
-        request = (
-            f"CONNECT {target_host}:{target_port} HTTP/1.1\r\n"
-            f"Host: {target_host}:{target_port}\r\n"
-            f"Proxy-Authorization: Basic {auth}\r\n"
-            f"Proxy-Connection: keep-alive\r\n"
-            f"Via: {_VIA_TOKEN}\r\n"
-            "\r\n"
-        ).encode("ascii")
-        writer_up.write(request)
-        await writer_up.drain()
-        status_line = await reader_up.readuntil(b"\r\n")
         try:
-            http_version, code_str, *_ = status_line.decode("latin-1").split(" ", 2)
-            code = int(code_str)
-        except (ValueError, UnicodeDecodeError) as exc:
+            auth = _basic_auth(proxy, self._key)
+            request = (
+                f"CONNECT {target_host}:{target_port} HTTP/1.1\r\n"
+                f"Host: {target_host}:{target_port}\r\n"
+                f"Proxy-Authorization: Basic {auth}\r\n"
+                f"Proxy-Connection: keep-alive\r\n"
+                f"Via: {_VIA_TOKEN}\r\n"
+                "\r\n"
+            ).encode("ascii")
+            writer_up.write(request)
+            await writer_up.drain()
+            status_line = await reader_up.readuntil(b"\r\n")
+            try:
+                http_version, code_str, *_ = status_line.decode("latin-1").split(" ", 2)
+                code = int(code_str)
+            except (ValueError, UnicodeDecodeError) as exc:
+                with contextlib.suppress(ConnectionError, OSError):
+                    writer_up.close()
+                    await writer_up.wait_closed()
+                raise HttpGatewayError(f"Bad CONNECT reply: {status_line!r}") from exc
+            if not http_version.upper().startswith("HTTP/"):
+                raise HttpGatewayError(f"Bad CONNECT reply: {status_line!r}")
+            # Drain remaining header block.
+            await _read_headers(reader_up)
+            if not 200 <= code < 300:
+                with contextlib.suppress(ConnectionError, OSError):
+                    writer_up.close()
+                    await writer_up.wait_closed()
+                raise HttpGatewayError(f"Upstream refused CONNECT: {code}")
+            return reader_up, writer_up
+        except BaseException:
+            writer_up.close()
             with contextlib.suppress(ConnectionError, OSError):
-                writer_up.close()
                 await writer_up.wait_closed()
-            raise HttpGatewayError(f"Bad CONNECT reply: {status_line!r}") from exc
-        if not http_version.upper().startswith("HTTP/"):
-            raise HttpGatewayError(f"Bad CONNECT reply: {status_line!r}")
-        # Drain remaining header block.
-        await _read_headers(reader_up)
-        if not 200 <= code < 300:
-            with contextlib.suppress(ConnectionError, OSError):
-                writer_up.close()
-                await writer_up.wait_closed()
-            raise HttpGatewayError(f"Upstream refused CONNECT: {code}")
-        return reader_up, writer_up
+            raise
 
     # ── absolute-URI forwarded request ────────────────────────────────────
 
@@ -410,9 +419,7 @@ class HttpGateway:
         if has_body_stream:
             # Non-idempotent: a single attempt only (we cannot rewind the stream).
             unbuffered = _request_body_stream(reader, headers)
-            await self._single_forward(
-                writer, method, url, clean_headers, unbuffered
-            )
+            await self._single_forward(writer, method, url, clean_headers, unbuffered)
             return
 
         attempts_left = self._max_retry + 1
@@ -424,21 +431,19 @@ class HttpGateway:
             if proxy is None or proxy.id in tried:
                 break
             tried.add(proxy.id)
-            attempt_body = (
-                _bytes_async_iter(body_bytes) if body_bytes is not None else None
-            )
+            attempt_body = _bytes_async_iter(body_bytes) if body_bytes is not None else None
             try:
                 burn = await asyncio.wait_for(
-                    self._forward_attempt(
-                        writer, method, url, clean_headers, attempt_body, proxy
-                    ),
+                    self._forward_attempt(writer, method, url, clean_headers, attempt_body, proxy),
                     timeout=self._timeout_s,
                 )
             except (TimeoutError, aiohttp.ClientError, ConnectionError, OSError) as exc:
                 last_reason = _format_reason(exc)
                 logger.info(
                     "gateway_http_forward_failed proxy_id=%s target=%s err=%s",
-                    proxy.id, url.host, exc,
+                    proxy.id,
+                    url.host,
+                    exc,
                 )
                 await self.pool.mark_fail(proxy.id, "upstream_error")
                 continue
@@ -473,7 +478,9 @@ class HttpGateway:
         except (TimeoutError, aiohttp.ClientError, ConnectionError, OSError) as exc:
             logger.info(
                 "gateway_http_forward_failed proxy_id=%s target=%s err=%s",
-                proxy.id, url.host, exc,
+                proxy.id,
+                url.host,
+                exc,
             )
             await self.pool.mark_fail(proxy.id, "upstream_error")
             with contextlib.suppress(ConnectionError, OSError):
@@ -563,8 +570,8 @@ class HttpGateway:
                 if body_burn.burned:
                     return body_burn.reason or "body marker"
 
-            status_line = (
-                f"HTTP/1.1 {response.status} {response.reason or ''}\r\n".encode("latin-1")
+            status_line = f"HTTP/1.1 {response.status} {response.reason or ''}\r\n".encode(
+                "latin-1"
             )
             out_headers = _append_via(_strip_hop_by_hop(list(response.headers.items())))
             out_headers = [
@@ -604,9 +611,7 @@ class HttpGateway:
 
     def _pick(self, *, target_domain: str) -> Proxy | None:
         if self.rotator.strategy == "sticky":
-            return self.rotator.pick(
-                self.pool, client_ip="127.0.0.1", target_domain=target_domain
-            )
+            return self.rotator.pick(self.pool, client_ip="127.0.0.1", target_domain=target_domain)
         return self.rotator.pick(self.pool)
 
     async def _reply_error(self, writer: asyncio.StreamWriter, code: int, phrase: str) -> None:

@@ -191,15 +191,19 @@ proxies, alive proxies every 300 seconds, and quarantined proxies when due;
 dead proxies require an explicit check. Configuration/decryption failures
 propagate rather than counting against proxy health.
 
-The per-probe timeout stays 8 seconds and concurrency stays 20. Fifty stalled
-probes would otherwise take three waves, exceeding the 10-second import target.
-The implementation therefore adds a configurable 10-second batch budget:
-90% for network work (including semaphore waits), reserving the remainder for
-durable results. Unfinished checks produce a sanitized batch-deadline failure,
-including checks still queued. Persistence is awaited, so a stalled disk can
-exceed the budget; this is not a hard real-time guarantee. Local fake-upstream
-tests verify that 50 successful probes complete within 10 seconds. No external
-service is contacted by tests.
+The per-probe timeout stays 8 seconds and concurrency stays 20. The timeout
+starts after acquisition of the semaphore; queue waiting never records a failed
+probe. The former 10-second whole-batch deadline was removed because it could
+quarantine proxies that were never contacted. Fifty responsive local probes
+still complete under 10 seconds in tests; slow/stalled pools take multiple waves
+and are not subject to a ten-second total guarantee.
+
+Manual test-all batches retain their member tasks until the next batch. Repeated
+requests while a batch runs return zero, while reloads see the same progress.
+Individual checks share batch members, including already-completed members while
+the rest of the batch is running. Cancellation is reported separately from failed
+checks. The server-rendered check-controls fragment polls every two seconds and
+shows completed/total plus sanitized failure reasons.
 
 ## Observability
 
@@ -235,8 +239,8 @@ T6.1/T6.2. HTTPX is a test dependency for in-process ASGI requests.
 ### Phase 4 transport and UI
 
 Pool owns atomic import, detail and dead-only purge operations under its lock.
-REST imports reject an entire batch on parse errors; the parser itself remains
-pure and partial. Pool statistics read immutable snapshots without SQL counts.
+REST imports skip malformed lines and persist valid records in one transaction;
+the parser remains pure and partial. Pool statistics read immutable snapshots without SQL counts.
 Strategy changes publish PoolStatsEvent; gateway events have an empty-payload
 hook until the real gateway integration.
 

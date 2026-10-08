@@ -10,7 +10,11 @@ from app.main import create_app
 def test_dashboard_and_local_assets(tmp_path: Path) -> None:
     app = create_app(
         Settings(
-            _env_file=None, master_secret=SecretStr("ui-test"), db_path=tmp_path / "proxies.db"
+            _env_file=None,
+            master_secret=SecretStr("ui-test"),
+            gateway_http_port=0,
+            gateway_socks_port=0,
+            db_path=tmp_path / "proxies.db",
         )
     )
     with TestClient(app) as client:
@@ -27,7 +31,11 @@ def test_dashboard_and_local_assets(tmp_path: Path) -> None:
 def test_htmx_import_returns_html_and_escapes_labels(tmp_path: Path) -> None:
     app = create_app(
         Settings(
-            _env_file=None, master_secret=SecretStr("ui-test"), db_path=tmp_path / "proxies.db"
+            _env_file=None,
+            master_secret=SecretStr("ui-test"),
+            gateway_http_port=0,
+            gateway_socks_port=0,
+            db_path=tmp_path / "proxies.db",
         )
     )
     with TestClient(app) as client:
@@ -60,7 +68,11 @@ def test_htmx_import_returns_html_and_escapes_labels(tmp_path: Path) -> None:
 def test_htmx_controls_and_error_feedback(tmp_path: Path) -> None:
     app = create_app(
         Settings(
-            _env_file=None, master_secret=SecretStr("ui-test"), db_path=tmp_path / "proxies.db"
+            _env_file=None,
+            master_secret=SecretStr("ui-test"),
+            gateway_http_port=0,
+            gateway_socks_port=0,
+            db_path=tmp_path / "proxies.db",
         )
     )
     with TestClient(app) as client:

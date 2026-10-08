@@ -30,8 +30,8 @@ Response `200`:
 }
 ```
 
-An import with any line error writes nothing (atomic batch policy).
-`imported` is zero, `skipped` counts all non-comment records, and
+Invalid lines are skipped and reported; valid records are imported together in one database transaction.
+`imported` counts valid new records, `skipped` counts invalid/duplicate records, and
 `errors[i] = {"line": 4, "reason": "Invalid proxy format"}` preserves each parse error.
 `line` is the 1-based physical line number, never the submitted credential-bearing text.
 Blank lines and full-line `#` comments are ignored. Duplicate identities
@@ -60,7 +60,16 @@ Fire a one-off health check. Response : `CheckResult`.
 
 ### `POST /api/proxies/test-all`
 
-Response : `{queued: n}`. Progress via WebSocket.
+Response: `{queued: n}`. One manual batch at a time: repeated requests during an
+active batch return `{queued: 0}` and do not restart completed members. The first
+response counts participating proxies, including already-running checks that
+are shared with the batch. Each probe has its full network timeout after its
+semaphore slot becomes available; queue waiting never records a proxy failure.
+
+HTMX receives the `check-controls` fragment, containing a disabled button during
+work, completed/total counters and safe error counts. `GET /ui/check-status`
+refreshes that fragment every two seconds. It also restores progress after reload.
+WebSocket events continue updating proxy rows and pool statistics.
 
 ### `DELETE /api/proxies/{id}`
 

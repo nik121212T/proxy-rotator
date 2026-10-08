@@ -144,27 +144,17 @@ async def test_50_proxies_complete_under_10_seconds_with_semaphore(
     assert len(pool.active()) == 50
 
 
-async def test_batch_deadline_includes_queued_probes(
-    db: aiosqlite.Connection,
-    upstream: FakeProxy,
-) -> None:
-    upstream.delay = 0.3
+async def test_queued_probes_receive_their_full_timeout(db, upstream):
+    upstream.delay = 3.2
     key = Fernet.generate_key()
     pool = await Pool.load(db, key)
-    for index in range(6):
+    for index in range(3):
         await pool.add(parse_line(f"user{index}:pw@127.0.0.1:{upstream.port}"))
-    checker = HealthChecker(
-        pool,
-        key,
-        probe_url="http://probe.invalid",
-        concurrency=2,
-        batch_timeout_s=0.1,
-    )
-    results = await asyncio.wait_for(checker.check_all(), 1)
-    assert len(results) == 6
-    assert all(result.error == "Batch deadline exceeded" for result in results)
-    assert upstream.requests == 2
-    assert all(proxy.fail_count == 1 for proxy in pool.all())
+    checker = HealthChecker(pool, key, probe_url="http://probe.invalid", concurrency=1, timeout_s=4)
+    results = await asyncio.wait_for(checker.check_all(), 15)
+    assert all(result.ok for result in results)
+    assert upstream.requests == 3
+    assert all(proxy.fail_count == 0 for proxy in pool.all())
 
 
 async def test_background_import_interval_and_quarantine_retest(
@@ -272,3 +262,25 @@ async def test_wrong_key_is_config_failure_not_proxy_failure(
     assert error.value.exit_code == 78
     assert pool.all()[0].fail_count == 0
     assert upstream.requests == 0
+
+
+async def test_test_all_does_not_restart_finished_proxies_while_batch_runs(db, upstream):
+    key = Fernet.generate_key()
+    pool = await Pool.load(db, key)
+    for index in range(3):
+        await pool.add(parse_line(f"user{index}:fake@127.0.0.1:{upstream.port}"))
+    upstream.delay = 0.08
+    checker = HealthChecker(pool, key, probe_url="http://probe.invalid", concurrency=1)
+    try:
+        assert checker.queue_all() == 3
+        async with asyncio.timeout(2):
+            while pool.all()[0].success_count != 1:
+                await asyncio.sleep(0.005)
+        assert checker.queue_all() == 0
+        async with asyncio.timeout(2):
+            while any(p.success_count == 0 for p in pool.all()):
+                await asyncio.sleep(0.005)
+        assert upstream.requests == 3
+        assert all(p.success_count == 1 for p in pool.all())
+    finally:
+        await checker.stop()

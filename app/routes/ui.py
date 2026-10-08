@@ -34,3 +34,10 @@ async def row(
     )
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@router.get("/ui/check-status", response_class=HTMLResponse)
+async def check_status(request: Request, runtime: Services) -> HTMLResponse:
+    response = render(request, "_check_controls.html", runtime)
+    response.headers["Cache-Control"] = "no-store"
+    return response

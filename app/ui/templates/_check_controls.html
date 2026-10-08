@@ -1,0 +1,6 @@
+<div id="check-controls" hx-get="/ui/check-status" hx-trigger="every 2s" hx-swap="outerHTML" hx-sync="this:drop">
+  <button id="test-all" type="button" hx-post="/api/proxies/test-all" hx-trigger="click" hx-target="#check-controls" hx-swap="outerHTML" hx-sync="#check-controls:replace" hx-disabled-elt="this" {% if checks.running %}disabled aria-busy="true"{% endif %}>{% if checks.running %}Vérification en cours…{% else %}Tout tester{% endif %}</button>
+  {% if checks.total %}<div role="status" aria-live="polite"><small>{{ checks.completed }} / {{ checks.total }} · {% if checks.running %}en cours{% else %}vérification terminée{% endif %} · {{ checks.failed }} échec(s){% if checks.cancelled %} · {{ checks.cancelled }} annulée(s){% endif %}</small>
+    {% if checks.errors %}<ul>{% for reason, count in checks.errors.items() %}<li>{{ count }} : {{ reason }}</li>{% endfor %}</ul>{% endif %}
+  </div>{% endif %}
+</div>

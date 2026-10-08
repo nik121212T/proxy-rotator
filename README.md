@@ -77,7 +77,7 @@ counters (UI status wiring remains a known limitation).
 | [Paste proxy list            ] | [round_robin         v] | HTTP bound:          |
 | [One proxy per line          ] | [Apply]                | 127.0.0.1:8888       |
 | [Import and check]             | random / weighted /    | SOCKS5 bound:        |
-| 2,000 lines max; atomic import | sticky also available  | 127.0.0.1:1080       |
+| 2,000 lines; bad lines skipped | sticky also available  | 127.0.0.1:1080       |
 +--------------------------------------------------------------------------------+
 ```
 

@@ -159,8 +159,6 @@ class Pool:
 
     async def import_text(self, text: str, *, label: str | None = None) -> ImportReport:
         report = await asyncio.to_thread(parse_bulk, text)
-        if report.errors:
-            return ImportReport(skipped=report.skipped + report.imported, errors=report.errors)
 
         async def write() -> ImportReport:
             seen = {(p.scheme, p.host, p.port, p.username) for p in self._snapshot}

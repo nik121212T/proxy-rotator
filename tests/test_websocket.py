@@ -12,7 +12,11 @@ from app.parser import parse_line
 def test_websocket_mutation_and_disconnect_cleanup(tmp_path: Path) -> None:
     app = create_app(
         Settings(
-            _env_file=None, master_secret=SecretStr("ws-test"), db_path=tmp_path / "proxies.db"
+            _env_file=None,
+            master_secret=SecretStr("ws-test"),
+            gateway_http_port=0,
+            gateway_socks_port=0,
+            db_path=tmp_path / "proxies.db",
         )
     )
     with TestClient(app) as client:
@@ -55,7 +59,11 @@ def test_websocket_mutation_and_disconnect_cleanup(tmp_path: Path) -> None:
 def test_websocket_periodic_stats_and_gateway_hook(tmp_path: Path) -> None:
     app = create_app(
         Settings(
-            _env_file=None, master_secret=SecretStr("ws-test"), db_path=tmp_path / "proxies.db"
+            _env_file=None,
+            master_secret=SecretStr("ws-test"),
+            gateway_http_port=0,
+            gateway_socks_port=0,
+            db_path=tmp_path / "proxies.db",
         )
     )
     with TestClient(app) as client, client.websocket_connect("/ws/events") as ws:

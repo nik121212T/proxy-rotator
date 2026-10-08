@@ -124,7 +124,33 @@ async def test_https_probe_traverses_authenticated_connect(
                 timeout_s=1,
             ).check_one(proxy.id)
             assert not untrusted.ok
-            assert untrusted.error == "Proxy connection failed"
+            assert untrusted.error == "TLS certificate verification failed"
     finally:
         await runner.cleanup()
         await asyncio.gather(*handlers)
+
+
+async def test_connect_authentication_failure_preserves_safe_reason(db):
+    finished = asyncio.Event()
+
+    async def reject(reader, writer):
+        try:
+            await reader.readuntil(b"\r\n\r\n")
+            writer.write(b"HTTP/1.1 407 Proxy Authentication Required\r\nContent-Length: 0\r\n\r\n")
+            await writer.drain()
+        finally:
+            writer.close()
+            await writer.wait_closed()
+            finished.set()
+
+    server = await asyncio.start_server(reject, "127.0.0.1", 0)
+    async with server:
+        key = Fernet.generate_key()
+        pool = await Pool.load(db, key)
+        port = server.sockets[0].getsockname()[1]
+        proxy = await pool.add(parse_line(f"user:synthetic-secret@127.0.0.1:{port}"))
+        result = await HealthChecker(pool, key).check_one(proxy.id)
+        await asyncio.wait_for(finished.wait(), 1)
+        assert result.status_code == 407
+        assert result.error == "HTTP 407: proxy authentication refused"
+        assert "synthetic-secret" not in result.model_dump_json()

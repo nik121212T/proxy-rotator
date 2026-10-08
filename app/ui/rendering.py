@@ -19,6 +19,7 @@ def render(
         "proxies": tuple(p for p in runtime.pool.all() if p.status != "dead"),
         "stats": runtime.pool.stats(runtime.rotator.strategy),
         "gateway": runtime.gateway,
+        "checks": runtime.checker.batch_status,
     }
     context.update(extra or {})
     return templates.TemplateResponse(request=request, name=template, context=context)

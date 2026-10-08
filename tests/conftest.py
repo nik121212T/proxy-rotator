@@ -66,6 +66,8 @@ async def running_app(
     settings = Settings(
         _env_file=None,
         master_secret=SecretStr("api-test-master"),
+        gateway_http_port=0,
+        gateway_socks_port=0,
         db_path=tmp_path / "proxies.db",
         health_probe_url="http://probe.invalid/probe",
     )

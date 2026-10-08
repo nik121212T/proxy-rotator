@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 
-async def test_import_rejects_malformed_batch_and_skips_existing(
+async def test_import_skips_malformed_lines_and_existing(
     api: tuple[httpx.AsyncClient, int],
 ) -> None:
     client, port = api
@@ -21,14 +21,14 @@ async def test_import_rejects_malformed_batch_and_skips_existing(
     )
     assert response.status_code == 200
     assert response.json() == {
-        "imported": 0,
-        "skipped": 3,
+        "imported": 1,
+        "skipped": 2,
         "errors": [{"line": 4, "reason": "Invalid proxy format"}],
     }
     assert "synthetic-password" not in response.text
-    assert (await client.get("/api/proxies")).json()["total"] == 0
+    assert (await client.get("/api/proxies")).json()["total"] == 1
     clean = await client.post("/api/proxies/import", json={"text": valid})
-    assert clean.json()["imported"] == 1
+    assert clean.json()["imported"] == 0
     again = await client.post("/api/proxies/import", json={"text": valid})
     assert again.json() == {"imported": 0, "skipped": 1, "errors": []}
 
@@ -186,8 +186,8 @@ async def test_import_line_cap_and_malformed_json(api: tuple[httpx.AsyncClient, 
     client, port = api
     text = "# comment\n" * 1999 + f"tester:fake@127.0.0.1:{port}\nother:fake@host:80"
     report = (await client.post("/api/proxies/import", json={"text": text})).json()
-    assert report["imported"] == 0
-    assert report["skipped"] == 2
+    assert report["imported"] == 1
+    assert report["skipped"] == 1
     assert report["errors"][0]["line"] == 2001
     response = await client.post(
         "/api/proxies/import",
@@ -220,21 +220,53 @@ async def test_detail_retains_latest_fifty_checks(
         assert (await cursor.fetchone())[0] == 50
 
 
-async def test_malformed_batch_leaves_no_partial_database_rows(
+async def test_malformed_and_unauthenticated_lines_leave_only_valid_database_rows(
     api: tuple[httpx.AsyncClient, int], tmp_path: Path
 ) -> None:
     import aiosqlite
 
     client, port = api
-    text = f"first:fake@127.0.0.1:{port}\nbroken\nsecond:fake@127.0.0.1:{port}"
+    text = f"first:fake@127.0.0.1:{port}\n127.0.0.1:8080\nbroken\nsecond:fake@127.0.0.1:{port}"
     report = (await client.post("/api/proxies/import", json={"text": text})).json()
     assert report == {
-        "imported": 0,
-        "skipped": 3,
-        "errors": [{"line": 2, "reason": "Invalid proxy format"}],
+        "imported": 2,
+        "skipped": 2,
+        "errors": [
+            {"line": 2, "reason": "Invalid proxy format"},
+            {"line": 3, "reason": "Invalid proxy format"},
+        ],
     }
     async with (
         aiosqlite.connect(tmp_path / "proxies.db") as conn,
         conn.execute("SELECT count(*) FROM proxies") as cursor,
     ):
-        assert (await cursor.fetchone())[0] == 0
+        assert (await cursor.fetchone())[0] == 2
+
+
+async def test_test_all_ui_tracks_one_batch_until_completion(api, running_app, probe_control):
+    client, port = api
+    app, _ = running_app
+    await app.state.runtime.checker.stop()
+    await client.post("/api/proxies/import", json={"text": f"tester:fake@127.0.0.1:{port}"})
+    release, entered = probe_control
+    release.clear()
+    try:
+        response = await client.post("/api/proxies/test-all", headers={"HX-Request": "true"})
+        assert 'id="check-controls"' in response.text
+        assert "disabled" in response.text
+        await asyncio.wait_for(entered.wait(), 1)
+        assert (await client.post("/api/proxies/test-all")).json() == {"queued": 0}
+        pending = await client.get("/ui/check-status")
+        assert "0 / 1" in pending.text
+        release.set()
+        async with asyncio.timeout(2):
+            while app.state.runtime.checker.batch_running:
+                await asyncio.sleep(0.01)
+        complete = await client.get("/ui/check-status")
+        assert "1 / 1" in complete.text
+        assert "terminée" in complete.text
+        assert " disabled" not in complete.text.replace("hx-disabled-elt", "")
+        assert app.state.pool.all()[0].success_count == 1
+    finally:
+        release.set()
+        await app.state.runtime.checker.stop()

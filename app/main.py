@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
@@ -79,10 +79,13 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
             timeout_s=config.gateway_timeout_s,
             max_retry_per_request=config.max_retry_per_request,
         )
-        checker.start()
-        await http_gateway.start()
-        await socks5_gateway.start()
-        try:
+        async with AsyncExitStack() as cleanup:
+            cleanup.push_async_callback(checker.stop)
+            checker.start()
+            cleanup.push_async_callback(http_gateway.stop)
+            await http_gateway.start()
+            cleanup.push_async_callback(socks5_gateway.stop)
+            await socks5_gateway.start()
             yield Runtime(
                 pool=pool,
                 checker=checker,
@@ -92,10 +95,6 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
                 http_gateway=http_gateway,
                 socks5_gateway=socks5_gateway,
             )
-        finally:
-            await socks5_gateway.stop()
-            await http_gateway.stop()
-            await checker.stop()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

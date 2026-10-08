@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, SecretStr
 from app.models import CheckResult, Proxy, ProxyStatus
 from app.parser import ImportReport
 from app.runtime import Runtime, get_runtime
-from app.ui.rendering import feedback
+from app.ui.rendering import feedback, render
 
 router = APIRouter(prefix="/api/proxies", tags=["proxies"])
 Services = Annotated[Runtime, Depends(get_runtime)]
@@ -66,7 +66,10 @@ class ProxyDetail(Proxy):
 async def test_all(runtime: Services, request: Request) -> dict[str, int] | HTMLResponse:
     queued = runtime.checker.queue_all()
     if request.headers.get("HX-Request") == "true":
-        return feedback(request, f"{queued} vérification(s) en cours.")
+        response = render(request, "_check_controls.html", runtime)
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["HX-Trigger"] = "pool-refresh"
+        return response
     return {"queued": queued}
 
 
@@ -90,7 +93,7 @@ async def test_proxy(
                 request,
                 "Proxy disponible."
                 if result.ok
-                else "Vérification échouée. Consultez l’état du proxy.",
+                else f"Vérification échouée : {result.error or 'raison inconnue'}.",
             )
         return result
     except KeyError:

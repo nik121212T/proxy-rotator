@@ -15,7 +15,11 @@ from app.salt import load_or_create_salt
 
 async def test_lifespan_persists_pool_and_serves_health(tmp_path: Path) -> None:
     settings = Settings(
-        _env_file=None, master_secret=SecretStr("test-master"), db_path=tmp_path / "proxies.db"
+        _env_file=None,
+        master_secret=SecretStr("test-master"),
+        gateway_http_port=0,
+        gateway_socks_port=0,
+        db_path=tmp_path / "proxies.db",
     )
     key = derive_key(settings.master_secret, load_or_create_salt(tmp_path / ".salt"))
     async with get_db(settings.db_path) as conn:
@@ -40,7 +44,11 @@ async def test_wrong_master_secret_rejected_before_readiness(tmp_path: Path) -> 
     from app.crypto import CryptoConfigError
 
     settings = Settings(
-        _env_file=None, master_secret=SecretStr("original"), db_path=tmp_path / "proxies.db"
+        _env_file=None,
+        master_secret=SecretStr("original"),
+        gateway_http_port=0,
+        gateway_socks_port=0,
+        db_path=tmp_path / "proxies.db",
     )
     key = derive_key(settings.master_secret, load_or_create_salt(tmp_path / ".salt"))
     async with get_db(settings.db_path) as conn:
@@ -125,6 +133,8 @@ async def test_lifespan_checks_imports_and_closes_database(tmp_path: Path) -> No
         settings = Settings(
             _env_file=None,
             master_secret=SecretStr("test-master"),
+            gateway_http_port=0,
+            gateway_socks_port=0,
             db_path=tmp_path / "proxies.db",
             health_probe_url="http://fake.invalid/probe",
         )
@@ -188,9 +198,41 @@ async def test_lifespan_warns_when_binding_to_lan(
     settings = Settings(
         _env_file=None,
         master_secret=SecretStr("test-master"),
+        gateway_http_port=0,
+        gateway_socks_port=0,
         db_path=tmp_path / "proxies.db",
         bind_host="0.0.0.0",  # noqa: S104 — verify warning only; no listener is opened
     )
     app = create_app(settings)
     async with app.router.lifespan_context(app):
         assert "event=lan_binding" in caplog.text
+
+
+async def test_gateway_start_failure_cleans_started_services(tmp_path):
+    import asyncio
+
+    from app.main import services
+
+    occupied = await asyncio.start_server(lambda reader, writer: writer.close(), "127.0.0.1", 0)
+    baseline = asyncio.all_tasks()
+    settings = Settings(
+        _env_file=None,
+        master_secret=SecretStr("test-master"),
+        db_path=tmp_path / "failure.db",
+        gateway_http_port=0,
+        gateway_socks_port=occupied.sockets[0].getsockname()[1],
+    )
+    leaked = set()
+    try:
+        with pytest.raises(OSError):
+            async with services(settings):
+                pytest.fail("Occupied SOCKS port must fail startup")
+        await asyncio.sleep(0)
+        leaked = asyncio.all_tasks() - baseline
+        assert not leaked, "Startup failure must stop health checker and subscriptions"
+    finally:
+        occupied.close()
+        await occupied.wait_closed()
+        for task in leaked:
+            task.cancel()
+        await asyncio.gather(*leaked, return_exceptions=True)
