@@ -870,3 +870,25 @@ tr.is-pinned:hover td {
 .page-shortcuts a { min-height: 44px; background: var(--paper); border-color: var(--line); }
 #import-section { scroll-margin-top: 24px; }
 footer { padding-bottom: 88px; }
+
+/* ── Dichvusocks provider widget ─────────────────────────────────────── */
+.dichvusocks-balance {
+  display: flex; flex-direction: column; gap: 2px;
+  margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3);
+  background: var(--paper-soft); border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.dichvusocks-balance dt {
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--muted); margin: 0;
+}
+.dichvusocks-balance dd {
+  margin: 0; font: 0.82rem/1.4 var(--font-mono); color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.dichvusocks-actions {
+  display: flex; gap: var(--space-2); margin-top: var(--space-3);
+}
+.dichvusocks-actions button { flex: 1; }
+.helper.good { color: var(--good); }
+.helper.error { color: var(--danger); }

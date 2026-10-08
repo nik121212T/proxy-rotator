@@ -78,6 +78,9 @@ def render(
         "selection": runtime.rotator.selection,
         "interval_minutes": runtime.rotator.interval_minutes,
         "geo_enabled": bool(runtime.geo and runtime.geo.enabled),
+        "provider_dichvusocks_enabled": bool(
+            runtime.dichvusocks and runtime.dichvusocks.enabled
+        ),
     }
     context.update(extra or {})
     return templates.TemplateResponse(request=request, name=template, context=context)

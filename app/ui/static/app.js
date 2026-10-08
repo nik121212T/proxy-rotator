@@ -235,3 +235,95 @@
 
   connect();
 })();
+
+  // ── Dichvusocks provider widget ───────────────────────────────────────
+  (async function initDichvusocks() {
+    const section = document.getElementById('dichvusocks-section');
+    if (!section) return;
+    const countrySel = document.getElementById('dichvusocks-country');
+    const limitInput = document.getElementById('dichvusocks-limit');
+    const previewBtn = document.getElementById('dichvusocks-preview');
+    const importBtn  = document.getElementById('dichvusocks-import');
+    const hint       = document.getElementById('dichvusocks-hint');
+    const balanceEl  = document.querySelector('#dichvusocks-balance [data-field="balance"]');
+
+    function setHint(msg, kind) {
+      hint.textContent = msg || '';
+      hint.className = 'helper' + (kind ? ' ' + kind : '');
+    }
+
+    async function loadBalance() {
+      try {
+        const r = await fetch('/api/providers/dichvusocks/user-info');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const body = await r.json();
+        const u = body.user || body;
+        const pts = u.point ?? '—';
+        const views = u.totalView ?? 0;
+        const plan = u.plan ?? '—';
+        balanceEl.textContent = `${u.username || 'compte'} · ${pts} pts · plan ${plan} · ${views} vues`;
+      } catch (err) {
+        balanceEl.textContent = 'Indisponible : ' + err.message;
+      }
+    }
+
+    async function loadCountries() {
+      try {
+        const r = await fetch('/api/providers/dichvusocks/countries');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const list = await r.json();
+        for (const c of list) {
+          const opt = document.createElement('option');
+          opt.value = c;
+          opt.textContent = c;
+          countrySel.appendChild(opt);
+        }
+      } catch (err) {
+        setHint('Pays indisponibles : ' + err.message, 'error');
+      }
+    }
+
+    previewBtn.addEventListener('click', async () => {
+      setHint('Aperçu en cours…');
+      previewBtn.disabled = true;
+      const params = new URLSearchParams({
+        limit: limitInput.value || '5',
+      });
+      if (countrySel.value) params.set('country', countrySel.value);
+      try {
+        const r = await fetch('/api/providers/dichvusocks/preview?' + params);
+        const body = await r.json();
+        if (!r.ok) throw new Error(body.detail || 'HTTP ' + r.status);
+        setHint(`${body.length} sock(s) disponible(s) pour ${countrySel.value || 'tous les pays'}. Aucun crédit débité.`, 'good');
+      } catch (err) {
+        setHint('Aperçu KO : ' + err.message, 'error');
+      } finally {
+        previewBtn.disabled = false;
+      }
+    });
+
+    importBtn.addEventListener('click', async () => {
+      const n = parseInt(limitInput.value || '0', 10);
+      if (!n || n < 1) { setHint('Choisissez un nombre entre 1 et 50.', 'error'); return; }
+      if (!window.confirm(`Importer ${n} proxy(s) ? Cela débitera ${n} crédit(s).`)) return;
+      setHint('Import en cours…');
+      importBtn.disabled = true;
+      const params = new URLSearchParams({ limit: String(n) });
+      if (countrySel.value) params.set('country', countrySel.value);
+      try {
+        const r = await fetch('/api/providers/dichvusocks/import?' + params, { method: 'POST' });
+        const body = await r.json();
+        if (!r.ok) throw new Error(body.detail || 'HTTP ' + r.status);
+        setHint(`Importés : ${body.imported} · dédupliqués : ${body.deduped} · ignorés : ${(body.skipped || []).length}`, 'good');
+        schedule(true);
+        loadBalance();
+      } catch (err) {
+        setHint('Import KO : ' + err.message, 'error');
+      } finally {
+        importBtn.disabled = false;
+      }
+    });
+
+    await Promise.all([loadBalance(), loadCountries()]);
+  })();
+
