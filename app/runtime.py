@@ -6,6 +6,7 @@ from fastapi import HTTPException, Request
 
 from app.gateway_http import HttpGateway
 from app.gateway_socks import SocksGateway
+from app.geolocation import GeolocationService
 from app.health_checker import HealthChecker
 from app.models import GatewayStatus, ListenerStatus
 from app.pool import Pool
@@ -21,6 +22,7 @@ class Runtime:
     socks5_configured: str
     http_gateway: HttpGateway | None = field(default=None)
     socks5_gateway: SocksGateway | None = field(default=None)
+    geo: GeolocationService | None = field(default=None)
 
     @property
     def gateway(self) -> GatewayStatus:

@@ -18,10 +18,11 @@ from app.crypto import CryptoConfigError, decrypt_password, derive_key
 from app.db import get_db
 from app.gateway_http import HttpGateway
 from app.gateway_socks import SocksGateway
+from app.geolocation import GeolocationService
 from app.health_checker import HealthChecker
 from app.pool import Pool
 from app.rotator import Rotator
-from app.routes import events, gateway, proxies, ui
+from app.routes import events, gateway, geo, proxies, ui
 from app.routes import pool as pool_routes
 from app.runtime import Runtime
 from app.salt import load_or_create_salt
@@ -86,6 +87,14 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
             await http_gateway.start()
             cleanup.push_async_callback(socks5_gateway.stop)
             await socks5_gateway.start()
+            geo_service = GeolocationService(
+                conn,
+                enabled=config.geolocation_enabled,
+                provider_url=config.geolocation_provider_url,
+                cache_ttl_s=config.geolocation_cache_ttl_s,
+                timeout_s=config.geolocation_timeout_s,
+            )
+            await geo_service.ensure_schema()
             yield Runtime(
                 pool=pool,
                 checker=checker,
@@ -94,6 +103,7 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
                 socks5_configured=socks5_configured,
                 http_gateway=http_gateway,
                 socks5_gateway=socks5_gateway,
+                geo=geo_service,
             )
 
 
@@ -119,7 +129,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.mount("/static", StaticFiles(directory=UI_DIR / "static"), name="static")
     app.state.runtime = None
     app.state.config_failed = False
-    for router in (proxies.router, pool_routes.router, gateway.router, events.router, ui.router):
+    for router in (proxies.router, pool_routes.router, gateway.router, events.router, geo.router, ui.router):
         app.include_router(router)
 
     @app.exception_handler(RequestValidationError)

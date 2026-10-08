@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     sticky_ttl_s: float = Field(default=900, gt=0)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
+    # ── Geolocation (opt-in; sends ONLY exit IPs to a third-party service) ─
+    geolocation_enabled: bool = False
+    geolocation_provider_url: str = "http://ip-api.com/json/{ip}?fields=status,country,countryCode"
+    geolocation_cache_ttl_s: int = Field(default=30 * 24 * 3600, ge=60)
+    geolocation_timeout_s: float = Field(default=4.0, gt=0)
+
     @field_validator("master_secret")
     @classmethod
     def configured_secret(cls, value: SecretStr) -> SecretStr:
