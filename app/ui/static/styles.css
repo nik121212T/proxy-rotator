@@ -836,3 +836,31 @@ tr.is-pinned:hover td {
 .gateway-test-action button { white-space: nowrap; }
 .gateway-row .gateway-test-result { grid-column: 1 / -1; grid-row: 4; font: inherit; font-size: .85rem; }
 .gateway-test-result:empty { display: none; }
+
+/* Keep endpoints and actions in view; import no longer narrows the pool table. */
+.workspace-grid { grid-template-columns: minmax(0, 1fr); }
+#proxies-table { table-layout: fixed; font-size: .82rem; }
+#proxies-table th, #proxies-table td { padding: 10px 8px; }
+#proxies-table th { font-size: .65rem; letter-spacing: .025em; white-space: normal; }
+#proxies-table th:first-child { width: 30%; }
+#proxies-table th:nth-child(2) { width: 14%; }
+#proxies-table th:nth-child(3) { width: 10%; }
+#proxies-table th:nth-child(4) { width: 9%; }
+#proxies-table th:nth-child(5) { width: 10%; }
+#proxies-table th:nth-child(6) { width: 14%; }
+#proxies-table th:last-child { width: 13%; }
+#proxies-table .endpoint { font-size: .82rem; }
+#proxies-table .row-meta { display: block; max-width: 100%; white-space: normal; overflow-wrap: anywhere; font-size: .65rem; letter-spacing: 0; }
+#proxies-table .status { padding: 3px 6px; font-size: .68rem; }
+#proxies-table .row-actions button { display: block; margin-left: auto; padding: 5px 3px; font-size: .78rem; }
+#proxies-table time { white-space: normal; }
+@media (max-width: 640px) {
+  #proxies-table, #proxies-table tbody { display: block; }
+  #proxies-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  #proxies-table tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 10px; border-bottom: 1px solid var(--line); }
+  #proxies-table td { display: block; padding: 6px; border: 0; text-align: left; }
+  #proxies-table td:first-child, #proxies-table td.row-actions, #proxies-table td[colspan] { grid-column: 1 / -1; }
+  #proxies-table td[data-label]::before { content: attr(data-label); display: block; font-size: .65rem; color: var(--muted); margin-bottom: 4px; }
+  #proxies-table .row-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+  #proxies-table .row-actions button { margin: 0; min-height: 40px; }
+}
