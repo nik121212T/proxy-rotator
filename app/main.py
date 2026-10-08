@@ -21,8 +21,9 @@ from app.gateway_socks import SocksGateway
 from app.geolocation import GeolocationService
 from app.health_checker import HealthChecker
 from app.pool import Pool
+from app.providers.dichvusocks import DichvusocksClient
 from app.rotator import Rotator
-from app.routes import events, gateway, geo, proxies, ui
+from app.routes import events, gateway, geo, providers, proxies, ui
 from app.routes import pool as pool_routes
 from app.runtime import Runtime
 from app.salt import load_or_create_salt
@@ -96,6 +97,11 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
                 timeout_s=config.geolocation_timeout_s,
             )
             await geo_service.ensure_schema()
+            dichvusocks_client = DichvusocksClient(
+                token=config.dichvusocks_api_token,
+                base_url=config.dichvusocks_base_url,
+                timeout_s=config.dichvusocks_timeout_s,
+            )
             cleanup.push_async_callback(geo_service.stop)
             geo_service.start(pool)
             yield Runtime(
@@ -107,6 +113,7 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
                 http_gateway=http_gateway,
                 socks5_gateway=socks5_gateway,
                 geo=geo_service,
+                dichvusocks=dichvusocks_client,
             )
 
 
@@ -132,7 +139,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.mount("/static", StaticFiles(directory=UI_DIR / "static"), name="static")
     app.state.runtime = None
     app.state.config_failed = False
-    for router in (proxies.router, pool_routes.router, gateway.router, events.router, geo.router, ui.router):
+    for router in (proxies.router, pool_routes.router, gateway.router, events.router, geo.router, providers.router, ui.router):
         app.include_router(router)
 
     @app.exception_handler(RequestValidationError)

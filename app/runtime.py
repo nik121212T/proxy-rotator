@@ -11,6 +11,7 @@ from app.geolocation import GeolocationService
 from app.health_checker import HealthChecker
 from app.models import GatewayStatus, ListenerStatus
 from app.pool import Pool
+from app.providers.dichvusocks import DichvusocksClient
 from app.rotator import Rotator
 
 
@@ -24,6 +25,7 @@ class Runtime:
     http_gateway: HttpGateway | None = field(default=None)
     socks5_gateway: SocksGateway | None = field(default=None)
     geo: GeolocationService | None = field(default=None)
+    dichvusocks: DichvusocksClient | None = field(default=None)
     gateway_test_locks: dict[str, asyncio.Lock] = field(default_factory=dict)
 
     def activity(self) -> dict[str, object]:

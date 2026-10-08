@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     geolocation_cache_ttl_s: int = Field(default=30 * 24 * 3600, ge=60)
     geolocation_timeout_s: float = Field(default=4.0, gt=0)
 
+    # ── Dichvusocks provider (opt-in SOCKS5 import source) ─────────────────
+    dichvusocks_api_token: SecretStr | None = None
+    dichvusocks_base_url: str = "https://dichvusocks.net/api/v1"
+    dichvusocks_import_max: int = Field(default=50, ge=1, le=500)
+    dichvusocks_timeout_s: float = Field(default=10.0, gt=0)
+
     @field_validator("master_secret")
     @classmethod
     def configured_secret(cls, value: SecretStr) -> SecretStr:
