@@ -316,22 +316,23 @@ class HttpGateway:
             await self._reply_error(writer, 502, f"Bad Gateway: {last_reason}")
             return
 
-        writer.write(b"HTTP/1.1 200 Connection Established\r\n\r\n")
-        try:
-            await writer.drain()
-        except (ConnectionError, OSError):
-            with contextlib.suppress(ConnectionError, OSError):
-                up_writer.close()
-                await up_writer.wait_closed()
-            return
+        with self.pool.activity.track(chosen.id, "HTTP"):
+            writer.write(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+            try:
+                await writer.drain()
+            except (ConnectionError, OSError):
+                with contextlib.suppress(ConnectionError, OSError):
+                    up_writer.close()
+                    await up_writer.wait_closed()
+                return
 
-        try:
-            await asyncio.gather(_pipe(reader, up_writer), _pipe(up_reader, writer))
-        finally:
-            with contextlib.suppress(ConnectionError, OSError):
-                up_writer.close()
-                await up_writer.wait_closed()
-            await self.pool.mark_success(chosen.id, 0)
+            try:
+                await asyncio.gather(_pipe(reader, up_writer), _pipe(up_reader, writer))
+            finally:
+                with contextlib.suppress(ConnectionError, OSError):
+                    up_writer.close()
+                    await up_writer.wait_closed()
+                await self.pool.mark_success(chosen.id, 0)
 
     async def _open_upstream_tunnel(
         self, proxy: Proxy, target_host: str, target_port: int
@@ -548,65 +549,67 @@ class HttpGateway:
                 ssl=self._tls_context if self._tls_context is not None else True,
             ) as response,
         ):
-            # Status-based burn classification BEFORE forwarding anything.
-            burn = self._burn.classify(status_code=response.status)
-            if burn.burned:
-                response.release()
-                return burn.reason or f"HTTP {response.status}"
+            with self.pool.activity.track(proxy.id, "HTTP"):
+                # Status-based burn classification BEFORE forwarding anything.
+                burn = self._burn.classify(status_code=response.status)
+                if burn.burned:
+                    response.release()
+                    return burn.reason or f"HTTP {response.status}"
 
-            # Optional body-marker classification for small, inspectable bodies.
-            upstream_cl = response.headers.get("Content-Length")
-            content_type = response.headers.get("Content-Type") or ""
-            peek_body: bytes | None = None
-            if (
-                upstream_cl is not None
-                and upstream_cl.isdigit()
-                and int(upstream_cl) <= 128 * 1024
-                and self._burn.inspect_body
-                and _is_inspectable(content_type)
-            ):
-                peek_body = await response.read()
-                body_burn = self._burn.classify(
-                    status_code=response.status,
-                    body=peek_body,
-                    content_type=content_type,
+                # Optional body-marker classification for small, inspectable bodies.
+                upstream_cl = response.headers.get("Content-Length")
+                content_type = response.headers.get("Content-Type") or ""
+                peek_body: bytes | None = None
+                if (
+                    upstream_cl is not None
+                    and upstream_cl.isdigit()
+                    and int(upstream_cl) <= 128 * 1024
+                    and self._burn.inspect_body
+                    and _is_inspectable(content_type)
+                ):
+                    peek_body = await response.read()
+                    body_burn = self._burn.classify(
+                        status_code=response.status,
+                        body=peek_body,
+                        content_type=content_type,
+                    )
+                    if body_burn.burned:
+                        return body_burn.reason or "body marker"
+
+                status_line = f"HTTP/1.1 {response.status} {response.reason or ''}\r\n".encode(
+                    "latin-1"
                 )
-                if body_burn.burned:
-                    return body_burn.reason or "body marker"
+                out_headers = _append_via(_strip_hop_by_hop(list(response.headers.items())))
+                out_headers = [
+                    (name, value)
+                    for name, value in out_headers
+                    if name.lower() not in {"content-length", "transfer-encoding"}
+                ]
+                if peek_body is not None:
+                    out_headers.append(("Content-Length", str(len(peek_body))))
+                    writer.write(status_line + _format_response_headers(out_headers) + b"\r\n")
+                    writer.write(peek_body)
+                    await writer.drain()
+                elif upstream_cl is None:
+                    out_headers.append(("Transfer-Encoding", "chunked"))
+                    use_chunked = True
+                else:
+                    out_headers.append(("Content-Length", upstream_cl))
+                    use_chunked = False
+                if peek_body is None:
+                    writer.write(status_line + _format_response_headers(out_headers) + b"\r\n")
+                    await writer.drain()
+                    async for chunk in response.content.iter_any():
+                        if use_chunked:
+                            writer.write(f"{len(chunk):x}\r\n".encode("ascii"))
+                        writer.write(chunk)
+                        if use_chunked:
+                            writer.write(b"\r\n")
+                        await writer.drain()
+                    if use_chunked:
+                        writer.write(b"0\r\n\r\n")
+                        await writer.drain()
 
-            status_line = f"HTTP/1.1 {response.status} {response.reason or ''}\r\n".encode(
-                "latin-1"
-            )
-            out_headers = _append_via(_strip_hop_by_hop(list(response.headers.items())))
-            out_headers = [
-                (name, value)
-                for name, value in out_headers
-                if name.lower() not in {"content-length", "transfer-encoding"}
-            ]
-            if peek_body is not None:
-                out_headers.append(("Content-Length", str(len(peek_body))))
-                writer.write(status_line + _format_response_headers(out_headers) + b"\r\n")
-                writer.write(peek_body)
-                await writer.drain()
-            elif upstream_cl is None:
-                out_headers.append(("Transfer-Encoding", "chunked"))
-                use_chunked = True
-            else:
-                out_headers.append(("Content-Length", upstream_cl))
-                use_chunked = False
-            if peek_body is None:
-                writer.write(status_line + _format_response_headers(out_headers) + b"\r\n")
-                await writer.drain()
-                async for chunk in response.content.iter_any():
-                    if use_chunked:
-                        writer.write(f"{len(chunk):x}\r\n".encode("ascii"))
-                    writer.write(chunk)
-                    if use_chunked:
-                        writer.write(b"\r\n")
-                    await writer.drain()
-                if use_chunked:
-                    writer.write(b"0\r\n\r\n")
-                    await writer.drain()
         latency_ms = max(1, int((loop.time() - started) * 1000))
         await self.pool.mark_success(proxy.id, latency_ms)
         return None

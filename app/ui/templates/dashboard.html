@@ -5,8 +5,8 @@
   <meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"selfRequestsOnly":true}'>
   <title>Pool de proxies · Proxy Rotator</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <link rel="stylesheet" href="/static/styles.css?v=progress-sort-1">
-  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=progress-sort-1" defer></script>
+  <link rel="stylesheet" href="/static/styles.css?v=activity-1">
+  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=activity-1" defer></script>
 </head>
 <body>
 <a class="skip-link" href="#workspace">Aller au pool</a>
@@ -16,10 +16,19 @@
   {% include '_summary.html' %}
 <div class="top-controls">
       <section class="control-section"><h2>Rotation</h2><form id="strategy-form" hx-post="/api/pool/strategy" hx-ext="json-form" hx-target="#feedback" hx-disabled-elt="find button">
-        <label for="strategy">Mode de sélection</label><select id="strategy" name="strategy">{% for value,label in [('weighted','Pondérée par le score'),('round_robin','À tour de rôle'),('random','Aléatoire'),('sticky','Stable par domaine')] %}<option value="{{ value }}" {% if stats.strategy == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><button type="submit" class="secondary wide">Appliquer la stratégie</button>
+        <label for="strategy">Mode de sélection</label><select id="strategy" name="strategy">{% for value,label in [('weighted','Pondérée par le score'),('round_robin','À tour de rôle'),('random','Aléatoire'),('sticky','Stable par domaine'),('timed','Toutes les X minutes')] %}<option value="{{ value }}" {% if stats.strategy == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><label for="rotation-minutes">Durée en minutes (mode temporisé)</label><input id="rotation-minutes" name="interval_minutes" type="number" min="1" max="1440" step="1" value="{{ interval_minutes }}" required><p class="helper">Le changement s’applique à la prochaine connexion après ce délai. Les connexions ouvertes continuent ; un proxy indisponible est remplacé immédiatement.</p><button type="submit" class="secondary wide">Appliquer la stratégie</button>
+      </form>
+      <form id="selection-form" hx-post="/api/pool/selection" hx-ext="json-form" hx-target="#feedback" hx-disabled-elt="find button">
+        <h3>Choisir les proxies utilisés</h3>
+        <label for="selection-country">Pays de sortie vérifié</label><select id="selection-country" name="country"><option value="">Tous les pays</option>{% for code, name in countries %}<option value="{{ code }}" {% if selection.country == code %}selected{% endif %}>{{ name }} ({{ code }})</option>{% endfor %}</select>
+        <label for="selection-score">Score de santé minimum (sur 100)</label><input id="selection-score" type="number" name="min_score" min="0" max="100" value="{{ selection.min_score }}" required>
+        <label class="pin-only"><input type="checkbox" name="pinned_only" {% if selection.pinned_only %}checked{% endif %}> Uniquement les proxies épinglés</label>
+        <button type="submit" class="secondary wide">Appliquer la sélection</button>
+        <p class="helper">Aucun proxy correspondant = connexion refusée. Les épingles et filtres sont réinitialisés au redémarrage.</p>
       </form></section>
 {% include '_gateway.html' %}
 </div>
+  {% include '_activity.html' %}
   {% include '_check_controls.html' %}
   <div id="feedback" class="feedback" role="status" aria-live="polite"></div>
   <div class="workspace-grid">

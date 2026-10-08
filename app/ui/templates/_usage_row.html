@@ -1,0 +1,4 @@
+<tr><td>{% if use.proxy %}#{{ use.proxy_id }} · {{ use.proxy.host }}:{{ use.proxy.port }}{% else %}#{{ use.proxy_id }} · retiré du pool{% endif %}<small>{{ use.gateway }}</small></td>
+<td>{% if use.exit %}{{ use.exit.ip }}<small>Vérifiée : {{ use.exit.checked_at }}</small>{% else %}Non vérifiée{% endif %}</td>
+<td>{{ use.country or 'Inconnu' }}</td><td>{% if use.proxy %}{{ '%.0f'|format(use.proxy.score) }} / 100<small>{% set count = use.proxy.success_count + use.proxy.fail_count %}{{ '%.0f'|format(100 * use.proxy.success_count / count) if count else '—' }} % de réussite</small>{% else %}—{% endif %}</td>
+<td>{{ '%.1f'|format(use.duration_s) }} s<small>Début : {{ use.started_at }}</small></td></tr>

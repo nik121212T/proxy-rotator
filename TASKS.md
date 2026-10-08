@@ -112,3 +112,7 @@ Work top to bottom. Check each box when done. One task = one commit.
 - [x] Review corrections: single active manual test batch with progress; per-probe timeout after queue wait; safe CONNECT 407/TLS diagnostics; verified TLS for HTTPS upstream tunnels from both HTTP and SOCKS5 listeners; cleanup on partial startup failure; isolated gateway ports in application tests.
 
 - [x] User-requested dashboard clarity: general batch progress bar and outcome counts, persistent live sorting, Rotation/Passerelles moved above the table, live gateway activity/counters.
+
+- [x] User-requested live usage: active and recent HTTP/SOCKS5 connections, last verified exit IP and changes, country lookup integration (opt-in), health score and elapsed connection time; country/minimum-score/strict-pin selection for new connections.
+- [x] User-requested gateway tests: separate HTTP and SOCKS5 buttons, bounded end-to-end IP request through each actual listener, no direct fallback, duplicate-test guard and persistent feedback during live refresh.
+- [x] User-requested timed rotation: “Toutes les X minutes”, interval 1–1440 minutes, stable selection until deadline, next eligible proxy on the next request, immediate replacement if unavailable; existing tunnels continue.

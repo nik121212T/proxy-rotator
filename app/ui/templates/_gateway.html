@@ -4,6 +4,8 @@
     {% for name, listener in [('HTTP', gateway.http), ('SOCKS5', gateway.socks5)] %}
     <div class="gateway-row{% if not listener.bound %} offline{% endif %}">
       <dt>{{ name }}</dt>
+      <dd class="gateway-test-action"><button type="button" data-gateway-test="{{ name|lower }}" class="secondary">Tester la connexion</button></dd>
+      <dd class="gateway-test-result" data-gateway-result="{{ name|lower }}" role="status" aria-live="polite"></dd>
       <dd>{{ listener.bound or listener.configured }}</dd>
       <dd><span class="status {% if listener.bound %}status-alive{% else %}status-dead{% endif %}">{% if not listener.bound %}Hors service{% elif listener.active_conns %}En utilisation{% else %}En écoute{% endif %}</span></dd>
       <dd class="gateway-counters">{{ listener.active_conns }} connexion(s) active(s) · {{ listener.requests_total }} requête(s) reçue(s)</dd>

@@ -58,9 +58,8 @@ Browser setup: see [`docs/BROWSER_SETUP.md`](docs/BROWSER_SETUP.md).
 Open <http://127.0.0.1:8080> after startup. The interface uses server-rendered
 HTML, locally bundled HTMX and WebSocket updates. Illustrative data below;
 the bound addresses shown in this sketch assume the default listeners started.
-The current Gateway panel displays configured addresses and still has a static
-"Non démarrées" label; use `/api/gateway/status` for actual bound addresses and
-counters (UI status wiring remains a known limitation).
+The Gateway panel displays actual bound addresses, live counters and connection
+test buttons for both HTTP and SOCKS5.
 
 ```text
 +--------------------------------------------------------------------------------+
@@ -177,3 +176,25 @@ process group, waits up to five seconds, then uses SIGKILL if needed. Exit 0
 means the rotation proof passed; exit 1 means failure or missing prerequisites.
 This live smoke is deliberately **not run in CI**; automated tests use fake
 local upstreams and isolated script harnesses instead.
+
+### Live proxy usage
+
+The top panels show active connections and recent completed connections, the
+selected upstream, last verified exit IP, country (when known), health score and
+elapsed connection time. The exit IP is the latest health-probe observation;
+a provider may change it per request. The score is not bandwidth or a prediction
+of remaining lifetime. Changes of observed exit IP appear after another probe.
+
+Country lookup is opt-in (`GEOLOCATION_ENABLED=true`): the configured provider
+receives exit IPs, never credentials. Without it, country remains unknown.
+Country/score/pinned-only filters affect new connections and reset on restart.
+
+Each gateway has a **Tester la connexion** button. It makes a real IP request
+through that listener, reports the exit IP and elapsed time, and stops after
+10 seconds. At least one eligible working upstream is required. This also
+exercises rotation; it does not merely check whether the port is open.
+
+Rotation **Toutes les X minutes** keeps the same eligible proxy for the selected
+interval (1–1440 minutes). The next connection after expiry selects the next
+proxy. Existing tunnels continue. An unavailable proxy is replaced immediately;
+with only one eligible proxy, a different IP cannot be guaranteed.

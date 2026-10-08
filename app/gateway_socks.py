@@ -136,14 +136,16 @@ class SocksGateway:
                 await self._reply(writer, failure_rep)
                 return
 
-            await self._reply(writer, _REP_SUCCESS)
-            try:
-                await asyncio.gather(_pipe(reader, up_writer), _pipe(up_reader, writer))
-            finally:
-                with contextlib.suppress(ConnectionError, OSError):
-                    up_writer.close()
-                    await up_writer.wait_closed()
-                await self.pool.mark_success(chosen.id, 0)
+            with self.pool.activity.track(chosen.id, "SOCKS5"):
+                await self._reply(writer, _REP_SUCCESS)
+                try:
+                    await asyncio.gather(_pipe(reader, up_writer), _pipe(up_reader, writer))
+                finally:
+                    with contextlib.suppress(ConnectionError, OSError):
+                        up_writer.close()
+                        await up_writer.wait_closed()
+                    await self.pool.mark_success(chosen.id, 0)
+
         except SocksGatewayError as exc:
             logger.warning("gateway_socks_protocol_error err=%s", exc)
         except TimeoutError:

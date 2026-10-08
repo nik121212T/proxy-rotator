@@ -6,9 +6,45 @@
       if (name === "htmx:configRequest") event.detail.headers["Content-Type"] = "application/json";
     },
     encodeParameters(xhr, parameters, element) {
-      return JSON.stringify(Object.fromEntries(new FormData(element)));
+      const data = Object.fromEntries(new FormData(element));
+      if (element.id === "strategy-form") data.interval_minutes = Number(data.interval_minutes);
+      if (element.id === "selection-form") {
+        data.country = data.country || null;
+        data.min_score = Number(data.min_score);
+        data.pinned_only = element.querySelector('[name="pinned_only"]').checked;
+      }
+      return JSON.stringify(data);
     }
   });
+
+  const gatewayTests = new Map();
+  function syncGatewayTests() {
+    document.querySelectorAll("[data-gateway-test]").forEach(button => {
+      const state = gatewayTests.get(button.dataset.gatewayTest);
+      button.disabled = Boolean(state?.busy);
+      button.textContent = state?.busy ? "Test en cours…" : "Tester la connexion";
+      const output = document.querySelector(`[data-gateway-result="${button.dataset.gatewayTest}"]`);
+      if (output) output.textContent = state?.message || "";
+    });
+  }
+  document.addEventListener("click", async event => {
+    const button = event.target.closest("[data-gateway-test]");
+    if (!button) return;
+    const kind = button.dataset.gatewayTest;
+    if (gatewayTests.get(kind)?.busy) return;
+    gatewayTests.set(kind, {busy: true, message: "Vérification de bout en bout…"});
+    syncGatewayTests();
+    try {
+      const response = await fetch(`/api/gateway/${kind}/test`, {method: "POST"});
+      const result = await response.json();
+      const message = response.ok ? result.message + (result.ok ? ` IP de sortie : ${result.exit_ip} · ${result.latency_ms} ms` : "") : "Test indisponible. Réessayez.";
+      gatewayTests.set(kind, {busy: false, message});
+    } catch {
+      gatewayTests.set(kind, {busy: false, message: "Serveur inaccessible. Réessayez."});
+    }
+    syncGatewayTests();
+  });
+  document.addEventListener("htmx:afterSettle", syncGatewayTests);
 
   const status = document.getElementById("connection-status");
   const feedback = document.getElementById("feedback");
@@ -46,6 +82,13 @@
       const order = document.getElementById("proxy-sort").value;
       await htmx.ajax("GET", `/ui/snapshot?sort=${encodeURIComponent(order)}`, {target: "#proxies-table", swap: "none"});
       lastSnapshot = Date.now();
+      const countrySelect = document.getElementById("selection-country");
+      document.querySelectorAll("#activity-panel [data-country-code]").forEach(item => {
+        const code = item.dataset.countryCode;
+        if (![...countrySelect.options].some(option => option.value === code)) {
+          countrySelect.add(new Option(item.dataset.countryName + " (" + code + ")", code));
+        }
+      });
     } catch {
       showError("Mise à jour interrompue. Une nouvelle tentative suivra la reconnexion.");
     } finally {

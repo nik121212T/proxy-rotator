@@ -303,3 +303,80 @@ async def test_gateway_panel_shows_live_activity_and_top_position(api, running_a
     assert ">En utilisation</span>" not in snapshot
     assert "En écoute" in snapshot
     assert "1 requête(s) reçue(s)" in snapshot
+
+
+async def test_activity_and_selection_api_exposes_only_public_proxy_metadata(api, running_app):
+    from datetime import UTC, datetime
+
+    from app.models import CheckResult
+
+    client, port = api
+    app, _ = running_app
+    runtime = app.state.runtime
+    await runtime.checker.stop()
+    await client.post(
+        "/api/proxies/import", json={"text": f"tester:synthetic-password@127.0.0.1:{port}"}
+    )
+    proxy = runtime.pool.all()[0]
+    await runtime.pool.apply_check(
+        CheckResult(
+            proxy_id=proxy.id,
+            ok=True,
+            exit_ip="203.0.113.8",
+            latency_ms=10,
+            checked_at=datetime.now(UTC),
+        )
+    )
+    runtime.pool.set_country("203.0.113.8", "FR", "France")
+    with runtime.pool.activity.track(proxy.id, "HTTP"):
+        data = await client.get("/api/gateway/activity")
+        assert data.status_code == 200
+        assert data.json()["active"][0]["proxy"]["id"] == proxy.id
+        assert data.json()["active"][0]["country"] == "France"
+        assert data.json()["active"][0]["exit"]["ip"] == "203.0.113.8"
+        assert "synthetic-password" not in data.text
+        assert "password_enc" not in data.text
+        html = (await client.get("/ui/snapshot")).text
+        assert "203.0.113.8" in html and "France" in html
+    response = await client.post(
+        "/api/pool/selection", json={"country": "FR", "min_score": 80, "pinned_only": True}
+    )
+    assert response.status_code == 200
+    assert runtime.rotator.pick(runtime.pool) is None
+    runtime.pool.pin(proxy.id)
+    assert runtime.rotator.pick(runtime.pool).id == proxy.id
+    assert (await client.post("/api/pool/selection", json={"min_score": 101})).status_code == 422
+
+
+@pytest.mark.parametrize("kind", ["http", "socks5"])
+async def test_gateway_connection_probe(api, running_app, kind):
+    client, port = api
+    app, _ = running_app
+    await app.state.runtime.checker.stop()
+    empty = await client.post(f"/api/gateway/{kind}/test")
+    assert empty.status_code == 200
+    assert empty.json()["ok"] is False
+    from tests.test_gateway_http import FakeUpstream
+
+    upstream = FakeUpstream()
+    await upstream.start()
+    try:
+        app.state.runtime.checker.probe_url = f"http://127.0.0.1:{port}/probe"
+        await client.post(
+            "/api/proxies/import", json={"text": f"tester:fake@127.0.0.1:{upstream.port}"}
+        )
+        proxy = app.state.runtime.pool.all()[0]
+        await app.state.runtime.pool.mark_success(proxy.id, 10)
+        result = await client.post(f"/api/gateway/{kind}/test")
+        assert result.status_code == 200
+        assert result.json()["ok"] is True
+        assert result.json()["exit_ip"] == "203.0.113.30"
+        assert result.json()["latency_ms"] >= 0
+        async with asyncio.timeout(2):
+            while app.state.runtime.pool.activity.active():
+                await asyncio.sleep(0.01)
+        assert app.state.runtime.pool.activity.recent()[0].gateway == kind.upper()
+    finally:
+        await upstream.stop()
+    page = await client.get("/")
+    assert f'data-gateway-test="{kind}"' in page.text

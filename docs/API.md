@@ -165,3 +165,28 @@ at reconnect and periodically to recover dropped WebSocket events, preserves
 keyboard focus and unsaved strategy edits, and defers row refreshes during actions.
 
 Dashboard and `/ui/snapshot` accept `sort=best|issues|latency|score|success|recent|added` (unknown values fall back to best). Sorting is stable by proxy ID for ties; unmeasured latency and success rates sort last. Live snapshots preserve the current sort and refresh gateway connection/request counters.
+
+## Live usage and selection
+
+`GET /api/gateway/activity` returns `active` and `recent` (up to 20 completed
+connections). Items contain connection_id, proxy_id, gateway, started_at,
+duration_s, public proxy metadata, last verified exit observation and country.
+Exit observations come from health probes, not decryption of HTTPS tunnels.
+
+`POST /api/pool/selection`: `{ "country": "FR", "min_score": 80, "pinned_only": false }`.
+Country can be null; score is 0–100. Filters apply to new connections only and
+fail closed when no eligible proxy remains. Filters and pins reset on restart.
+
+`POST /api/gateway/http/test` and `POST /api/gateway/socks5/test` send the configured
+health probe through the corresponding bound listener. Result: `ok`, `exit_ip`
+(null on failure), `latency_ms`, `message`. Deadline 10 seconds, no redirects or
+direct fallback. Concurrent duplicate tests return 409. Tests consume a normal
+rotation selection and contribute to gateway counters/activity.
+
+Timed rotation: `POST /api/pool/strategy` also accepts
+`{"strategy":"timed","interval_minutes":5}` (integer 1–1440, default 1).
+The interval starts when a proxy is selected. On the first request after expiry,
+the next eligible proxy is selected; an unavailable proxy is replaced immediately.
+Existing tunnels are never forcibly closed. Applying the strategy resets the timer.
+Only one eligible proxy means it will be reused; a different exit IP is not guaranteed.
+The dashboard interval resets to one minute on application restart.

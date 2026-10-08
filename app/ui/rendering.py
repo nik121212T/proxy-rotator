@@ -65,6 +65,19 @@ def render(
         "gateway": runtime.gateway,
         "checks": runtime.checker.batch_status,
         "pinned_ids": runtime.pool.pinned_ids(),
+        "activity": runtime.activity(),
+        "exits": runtime.pool.exit_observations(),
+        "country_names": {p.id: runtime.pool.country_name(p.id) for p in runtime.pool.all()},
+        "countries": sorted(
+            {
+                (runtime.pool.country_code(p.id), runtime.pool.country_name(p.id))
+                for p in runtime.pool.all()
+                if runtime.pool.country_code(p.id)
+            }
+        ),
+        "selection": runtime.rotator.selection,
+        "interval_minutes": runtime.rotator.interval_minutes,
+        "geo_enabled": bool(runtime.geo and runtime.geo.enabled),
     }
     context.update(extra or {})
     return templates.TemplateResponse(request=request, name=template, context=context)

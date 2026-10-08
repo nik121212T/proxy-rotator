@@ -14,12 +14,15 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from ipaddress import ip_address
 
 import aiohttp
 import aiosqlite
+
+from app.pool import Pool
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +53,8 @@ class GeolocationService:
         self._provider_url = provider_url
         self._cache_ttl = timedelta(seconds=cache_ttl_s)
         self._timeout_s = timeout_s
-        self._inflight: dict[str, asyncio.Future[GeoLookup | None]] = {}
+        self._inflight: dict[str, asyncio.Task[GeoLookup | None]] = {}
+        self._worker: asyncio.Task[None] | None = None
 
     @property
     def enabled(self) -> bool:
@@ -88,18 +92,51 @@ class GeolocationService:
         if cached is not None:
             return cached
 
-        # Coalesce concurrent lookups of the same IP.
-        inflight = self._inflight.get(ip)
-        if inflight is not None:
-            return await inflight
-        future: asyncio.Future[GeoLookup | None] = asyncio.get_running_loop().create_future()
-        self._inflight[ip] = future
-        try:
-            fresh = await self._fetch_provider(ip)
-            future.set_result(fresh)
-            return fresh
-        finally:
-            self._inflight.pop(ip, None)
+        # Shield the shared request: one disconnected caller cannot strand others.
+        task = self._inflight.get(ip)
+        if task is None:
+            task = asyncio.create_task(self._fetch_provider(ip))
+            self._inflight[ip] = task
+
+            def finished(done: asyncio.Task[GeoLookup | None]) -> None:
+                self._inflight.pop(ip, None)
+                if not done.cancelled():
+                    done.exception()
+
+            task.add_done_callback(finished)
+        return await asyncio.shield(task)
+
+    def start(self, pool: Pool) -> None:
+        if self._enabled and self._worker is None:
+            self._worker = asyncio.create_task(self._refresh_pool(pool))
+
+    async def stop(self) -> None:
+        if self._worker is not None:
+            self._worker.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._worker
+            self._worker = None
+        pending = tuple(self._inflight.values())
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+
+    async def _refresh_pool(self, pool: Pool) -> None:
+        next_check: dict[str, float] = {}
+        loop = asyncio.get_running_loop()
+        while True:
+            ips = {str(value.ip) for value in pool.exit_observations().values()}
+            next_check = {ip: when for ip, when in next_check.items() if ip in ips}
+            for ip in sorted(ips):
+                if next_check.get(ip, 0) > loop.time():
+                    continue
+                hit = await self.lookup(ip)
+                if hit and hit.country_code and hit.country:
+                    pool.set_country(ip, hit.country_code, hit.country)
+                next_check[ip] = loop.time() + (self._cache_ttl.total_seconds() if hit else 60)
+                # Serial, paced requests; cached data never blocks gateway selection.
+                await asyncio.sleep(1.5)
+            await asyncio.sleep(1)
 
     async def _fetch_cached(self, ip: str) -> GeoLookup | None:
         async with self._conn.execute(
@@ -131,9 +168,14 @@ class GeolocationService:
             ):
                 if response.status != 200:
                     return None
-                payload = await response.read()
-        except (aiohttp.ClientError, TimeoutError, OSError) as exc:
-            logger.info("geolocation_fetch_failed ip=%s err=%s", ip, exc)
+                body = bytearray()
+                async for chunk in response.content.iter_chunked(4096):
+                    body.extend(chunk)
+                    if len(body) > 65536:
+                        return None
+                payload = bytes(body)
+        except (aiohttp.ClientError, TimeoutError, OSError):
+            logger.info("geolocation_fetch_failed")
             return None
 
         country, country_code = _parse_provider_payload(payload)
@@ -163,13 +205,20 @@ class GeolocationService:
 def _parse_provider_payload(payload: bytes) -> tuple[str | None, str | None]:
     try:
         data = json.loads(payload)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
         return None, None
     if not isinstance(data, dict):
         return None, None
-    if data.get("status") not in {"success", None}:
+    if data.get("status") not in ("success", None):
         return None, None
     country = data.get("country") if isinstance(data.get("country"), str) else None
     code_raw = data.get("countryCode")
-    country_code = code_raw.upper() if isinstance(code_raw, str) and len(code_raw) == 2 else None
+    country_code = (
+        code_raw.upper()
+        if isinstance(code_raw, str)
+        and len(code_raw) == 2
+        and code_raw.isascii()
+        and code_raw.isalpha()
+        else None
+    )
     return country, country_code

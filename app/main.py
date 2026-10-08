@@ -87,14 +87,17 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
             await http_gateway.start()
             cleanup.push_async_callback(socks5_gateway.stop)
             await socks5_gateway.start()
+            geo_conn = await cleanup.enter_async_context(get_db(config.db_path))
             geo_service = GeolocationService(
-                conn,
+                geo_conn,
                 enabled=config.geolocation_enabled,
                 provider_url=config.geolocation_provider_url,
                 cache_ttl_s=config.geolocation_cache_ttl_s,
                 timeout_s=config.geolocation_timeout_s,
             )
             await geo_service.ensure_schema()
+            cleanup.push_async_callback(geo_service.stop)
+            geo_service.start(pool)
             yield Runtime(
                 pool=pool,
                 checker=checker,

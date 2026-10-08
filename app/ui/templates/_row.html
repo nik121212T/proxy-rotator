@@ -1,6 +1,6 @@
 {% set is_pinned = pinned_ids and proxy.id in pinned_ids %}
 <tr id="proxy-{{ proxy.id }}"{% if is_pinned %} class="is-pinned"{% endif %} {% if row_oob %}hx-swap-oob="outerHTML"{% endif %}>
-  <td><strong class="endpoint">{% if is_pinned %}<span class="pin-flag" title="Épinglé en priorité">★</span> {% endif %}{{ '[' ~ proxy.host ~ ']' if ':' in proxy.host else proxy.host }}:{{ proxy.port }}</strong><span class="row-meta">{{ proxy.scheme|upper }} · {{ proxy.username }}{% if proxy.label %} · {{ proxy.label }}{% endif %}</span></td>
+  <td><strong class="endpoint">{% if is_pinned %}<span class="pin-flag" title="Épinglé en priorité">★</span> {% endif %}{{ '[' ~ proxy.host ~ ']' if ':' in proxy.host else proxy.host }}:{{ proxy.port }}</strong>{% set observed = exits.get(proxy.id) %}<span class="row-meta">Sortie : {{ observed.ip if observed else 'non vérifiée' }} · {{ country_names.get(proxy.id) or 'pays inconnu' }}</span><span class="row-meta">{{ proxy.scheme|upper }} · {{ proxy.username }}{% if proxy.label %} · {{ proxy.label }}{% endif %}</span></td>
   <td><span class="status status-{{ proxy.status }}">{{ {'alive':'Disponible','unknown':'À vérifier','quarantine':'Quarantaine','dead':'Hors pool'}[proxy.status] }}</span></td>
   <td class="numeric">{{ proxy.latency_ms if proxy.latency_ms is not none else '—' }}{% if proxy.latency_ms is not none %}<span class="unit"> ms</span>{% endif %}</td>
   <td class="numeric">{{ '%.0f'|format(proxy.score) }}<span class="unit"> /100</span></td>

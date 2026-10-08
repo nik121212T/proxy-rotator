@@ -72,3 +72,37 @@ def test_sticky_key_expiry_and_removed_proxy() -> None:
 def test_invalid_strategy_is_not_silently_accepted() -> None:
     with pytest.raises(ValueError):
         Rotator("unsupported")
+
+
+def test_selection_restricts_country_score_and_pins_without_fallback():
+    class CountryPool(ActivePool):
+        def country_code(self, proxy_id):
+            return {1: "FR", 2: "US", 3: "FR"}.get(proxy_id)
+
+        def pinned_ids(self):
+            return frozenset({3})
+
+    pool = CountryPool((proxy(1, 90), proxy(2, 95), proxy(3, 60)))
+    rotator = Rotator("round_robin")
+    from app.models import RotationSelection
+
+    rotator.selection = RotationSelection(country="FR", min_score=80)
+    assert rotator.pick(pool).id == 1
+    rotator.selection = RotationSelection(country="FR", min_score=80, pinned_only=True)
+    assert rotator.pick(pool) is None
+
+
+def test_timed_rotation_holds_until_deadline_and_replaces_unavailable_proxy():
+    now = 0.0
+    pool = ActivePool((proxy(1), proxy(2), proxy(3)))
+    rotator = Rotator("timed", clock=lambda: now)
+    rotator.configure("timed", interval_minutes=2)
+    assert rotator.pick(pool).id == 1
+    now = 119.9
+    assert rotator.pick(pool).id == 1
+    now = 120
+    assert rotator.pick(pool).id == 2
+    pool.proxies = (proxy(1), proxy(3))
+    assert rotator.pick(pool).id in {1, 3}
+    pool.proxies = ()
+    assert rotator.pick(pool) is None

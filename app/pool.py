@@ -11,10 +11,12 @@ from typing import TypeVar
 import aiosqlite
 
 from app import repository
+from app.activity import GatewayActivity
 from app.db import transaction
 from app.events import EventBus, Subscription
 from app.models import (
     CheckResult,
+    ExitObservation,
     GatewayEvent,
     PoolStats,
     PoolStatsEvent,
@@ -59,8 +61,11 @@ class Pool:
         self._snapshot: tuple[Proxy, ...] = ()
         self._latencies: dict[int, tuple[int | None, ...]] = {}
         self._pinned: set[int] = set()
+        self._exits: dict[int, ExitObservation] = {}
+        self._countries: dict[str, tuple[str, str]] = {}
         self._lock = asyncio.Lock()
         self._events = EventBus()
+        self.activity = GatewayActivity()
 
     @classmethod
     async def load(
@@ -74,9 +79,38 @@ class Pool:
         pool = cls(conn, key, clock=clock, min_score=min_score)
         pool._snapshot = tuple(await repository.list_proxies(conn))
         for proxy in pool._snapshot:
-            history = await repository.list_checks(conn, proxy.id, limit=20)
-            pool._latencies[proxy.id] = tuple(check.latency_ms for check in reversed(history))
+            history = await repository.list_checks(conn, proxy.id, limit=50)
+            pool._latencies[proxy.id] = tuple(check.latency_ms for check in reversed(history[:20]))
+            for check in reversed(history):
+                pool._observe_exit(check)
         return pool
+
+    def _observe_exit(self, check: CheckResult) -> None:
+        if not check.ok or check.exit_ip is None:
+            return
+        old = self._exits.get(check.proxy_id)
+        changed = old is not None and old.ip != check.exit_ip
+        self._exits[check.proxy_id] = ExitObservation(
+            ip=check.exit_ip, checked_at=check.checked_at,
+            previous_ip=old.ip if changed and old is not None else (old.previous_ip if old else None),
+            changed_at=check.checked_at if changed else (old.changed_at if old else None),
+        )
+
+    def exit_observations(self) -> dict[int, ExitObservation]:
+        return dict(self._exits)
+
+    def set_country(self, ip: str, code: str, name: str) -> None:
+        self._countries[ip] = (code, name)
+
+    def country_code(self, proxy_id: int) -> str | None:
+        observed = self._exits.get(proxy_id)
+        country = self._countries.get(str(observed.ip)) if observed else None
+        return country[0] if country else None
+
+    def country_name(self, proxy_id: int) -> str | None:
+        observed = self._exits.get(proxy_id)
+        country = self._countries.get(str(observed.ip)) if observed else None
+        return country[1] if country else None
 
     def all(self) -> tuple[Proxy, ...]:
         return self._snapshot
@@ -156,6 +190,8 @@ class Pool:
             self._snapshot = tuple(p for p in self._snapshot if p.id not in removed)
             for proxy_id in removed:
                 self._latencies.pop(proxy_id, None)
+                self._exits.pop(proxy_id, None)
+                self._pinned.discard(proxy_id)
                 self._events.publish(ProxyEvent(type="removed", proxy_id=proxy_id))
             return len(removed)
 
@@ -243,6 +279,8 @@ class Pool:
             if removed is not None:
                 self._snapshot = tuple(p for p in self._snapshot if p.id != proxy_id)
                 self._latencies.pop(proxy_id, None)
+                self._exits.pop(proxy_id, None)
+                self._pinned.discard(proxy_id)
                 self._events.publish(ProxyEvent(type="removed", proxy_id=proxy_id))
             return removed
 
@@ -316,6 +354,8 @@ class Pool:
                     await repository.record_check(self._conn, check)
                 saved = await repository.update_proxy_health(self._conn, updated)
             self._latencies[proxy_id] = history
+            if check:
+                self._observe_exit(check)
             self._publish_proxy(saved)
             if check:
                 self._events.publish(

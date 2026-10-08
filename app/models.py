@@ -26,7 +26,7 @@ Count = Annotated[int, Field(ge=0, strict=True)]
 Identifier = Annotated[int, Field(gt=0, strict=True)]
 Score = Annotated[float, Field(ge=0, le=100, allow_inf_nan=False)]
 ProxyStatus = Literal["unknown", "alive", "quarantine", "dead"]
-RotationStrategy = Literal["round_robin", "random", "weighted", "sticky"]
+RotationStrategy = Literal["round_robin", "random", "weighted", "sticky", "timed"]
 
 
 class _DTO(BaseModel):
@@ -132,3 +132,16 @@ class CheckBatchStatus(_DTO):
     failed: Count = 0
     cancelled: Count = 0
     errors: dict[str, int] = Field(default_factory=dict)
+
+
+class RotationSelection(_DTO):
+    country: str | None = Field(default=None, pattern=r"^[A-Z]{2}$")
+    min_score: Score = 0
+    pinned_only: bool = False
+
+
+class ExitObservation(_DTO):
+    ip: IPvAnyAddress
+    checked_at: UtcDatetime
+    previous_ip: IPvAnyAddress | None = None
+    changed_at: UtcDatetime | None = None

@@ -8,7 +8,7 @@ from typing import Protocol
 
 from cachetools import TTLCache  # type: ignore[import-untyped]
 
-from app.models import Proxy, RotationStrategy
+from app.models import Proxy, RotationSelection, RotationStrategy
 
 
 class ActivePool(Protocol):
@@ -25,14 +25,27 @@ class Rotator:
         sticky_ttl_s: float = 900,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        if strategy not in {"round_robin", "random", "weighted", "sticky"}:
+        if strategy not in {"round_robin", "random", "weighted", "sticky", "timed"}:
             raise ValueError("Unsupported rotation strategy")
         if sticky_ttl_s <= 0:
             raise ValueError("Sticky TTL must be positive")
+        self._clock = clock
+        self.interval_minutes = 1
+        self._timed_id: int | None = None
+        self._deadline = 0.0
+        self.selection = RotationSelection()
         self.strategy = strategy
         self._last_id: int | None = None
         self._rng = rng or random.SystemRandom()
         self._sticky: TTLCache[tuple[str, str], int] = TTLCache(4096, sticky_ttl_s, timer=clock)
+
+    def configure(self, strategy: RotationStrategy, *, interval_minutes: int = 1) -> None:
+        if not 1 <= interval_minutes <= 1440:
+            raise ValueError("Interval must be between 1 and 1440 minutes")
+        self.strategy = strategy
+        self.interval_minutes = interval_minutes
+        self._timed_id = None
+        self._deadline = 0.0
 
     def pick(
         self,
@@ -41,17 +54,34 @@ class Rotator:
         client_ip: str = "",
         target_domain: str = "",
     ) -> Proxy | None:
-        active = pool.active()
+        country_of = getattr(pool, "country_code", lambda proxy_id: None)
+        active = tuple(
+            p
+            for p in pool.active()
+            if p.score >= self.selection.min_score
+            and (self.selection.country is None or country_of(p.id) == self.selection.country)
+        )
         if not active:
             return None
         # Pinned-first override: if any pinned proxy is active, pick among those.
         pinned_fn = getattr(pool, "pinned_ids", None)
         if callable(pinned_fn):
             pinned = pinned_fn()
-            if pinned:
+            if pinned or self.selection.pinned_only:
                 narrowed = tuple(p for p in active if p.id in pinned)
-                if narrowed:
+                if narrowed or self.selection.pinned_only:
                     active = narrowed
+        if not active:
+            return None
+        if self.strategy == "timed":
+            match = next((p for p in active if p.id == self._timed_id), None)
+            if match is not None and self._clock() < self._deadline:
+                return match
+            previous = next((i for i, p in enumerate(active) if p.id == self._timed_id), -1)
+            selected = active[(previous + 1) % len(active)]
+            self._timed_id = selected.id
+            self._deadline = self._clock() + self.interval_minutes * 60
+            return selected
         if self.strategy == "random":
             return self._rng.choice(active)
         if self.strategy == "weighted":

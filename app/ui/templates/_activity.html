@@ -1,0 +1,14 @@
+<section id="activity-panel" class="activity-panel" aria-labelledby="activity-title" {% if oob %}hx-swap-oob="outerHTML"{% endif %}>
+  <div class="activity-heading"><h2 id="activity-title">Proxies en cours d’utilisation</h2><strong>{{ activity.active|length }} connexion(s)</strong></div>
+  <p class="helper">IP de sortie = dernière observation d’un test, pas une mesure de chaque tunnel. Le score sur 100 mesure la santé, pas le débit ni une durée de vie garantie.</p>
+  {% if not geo_enabled %}<p class="helper">Pays : géolocalisation désactivée. Activez GEOLOCATION_ENABLED dans .env uniquement si vous acceptez d’envoyer les IP de sortie au service configuré.</p>{% endif %}
+  <div class="table-scroll"><table class="activity-table"><thead><tr><th>Proxy utilisé</th><th>Dernière IP de sortie</th><th>Pays</th><th>Santé</th><th>Connexion</th></tr></thead><tbody>
+    {% for use in activity.active %}{% include '_usage_row.html' %}{% else %}<tr><td colspan="5">Aucun trafic en cours via les passerelles. Un proxy « Disponible » n’est pas forcément utilisé.</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% if activity.recent %}<h3>Dernières connexions terminées</h3><div class="table-scroll"><table class="activity-table"><thead><tr><th>Proxy utilisé</th><th>Dernière IP de sortie</th><th>Pays</th><th>Santé</th><th>Durée</th></tr></thead><tbody>{% for use in activity.recent[:5] %}{% include '_usage_row.html' %}{% endfor %}</tbody></table></div>{% endif %}
+  <div class="exit-observations"><h3>IP de sortie vérifiées</h3>
+    {% for proxy in proxies %}{% set observed = exits.get(proxy.id) %}{% if observed %}<p>#{{ proxy.id }} · {{ proxy.host }}:{{ proxy.port }} → <strong>{{ observed.ip }}</strong> · {{ country_names.get(proxy.id) or 'pays inconnu' }} · <time datetime="{{ observed.checked_at.isoformat() }}">{{ observed.checked_at.strftime('%H:%M:%S') }} UTC</time>{% if observed.previous_ip %}<span> · changement observé : {{ observed.previous_ip }} → {{ observed.ip }}</span>{% endif %}</p>{% endif %}{% endfor %}
+    {% if not exits %}<p>Aucune IP de sortie confirmée. Lancez un test réussi pour la connaître.</p>{% endif %}
+  </div>
+  {% for code, name in countries %}<span hidden data-country-code="{{ code }}" data-country-name="{{ name }}"></span>{% endfor %}
+</section>
