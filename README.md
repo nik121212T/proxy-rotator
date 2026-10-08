@@ -198,3 +198,9 @@ Rotation **Toutes les X minutes** keeps the same eligible proxy for the selected
 interval (1–1440 minutes). The next connection after expiry selects the next
 proxy. Existing tunnels continue. An unavailable proxy is replaced immediately;
 with only one eligible proxy, a different IP cannot be guaranteed.
+
+On macOS, double-click `start.command` to restart this project's server. The
+launcher first asks the existing instance to stop, waits up to 10 seconds, then
+forces termination if necessary. Active proxy connections are interrupted.
+Processes from other project directories are left untouched; a port occupied
+by another application must be resolved separately.
