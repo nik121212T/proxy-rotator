@@ -237,8 +237,10 @@ class HttpGateway:
             self._active_tasks.add(task)
         self._active_conns += 1
         try:
-            method, target, _ = await _read_request_line(reader)
-            headers = await _read_headers(reader)
+            # Slow-loris guard: bound how long we wait for the request headers.
+            async with asyncio.timeout(self._timeout_s):
+                method, target, _ = await _read_request_line(reader)
+                headers = await _read_headers(reader)
             self._requests_total += 1
             if method == "CONNECT":
                 await self._handle_connect(reader, writer, target)
@@ -250,6 +252,8 @@ class HttpGateway:
             logger.warning("gateway_http_bad_request err=%s", exc)
             with contextlib.suppress(ConnectionError, OSError):
                 await self._reply_error(writer, 400, "Bad Request")
+        except TimeoutError:
+            logger.info("gateway_http_handshake_timeout bind=%s:%s", *(self._bound or ("?", "?")))
         except (ConnectionError, asyncio.IncompleteReadError, OSError):
             pass
         except asyncio.CancelledError:

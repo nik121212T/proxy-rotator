@@ -122,9 +122,11 @@ class SocksGateway:
             self._active_tasks.add(task)
         self._active_conns += 1
         try:
-            if not await self._negotiate_methods(reader, writer):
-                return
-            target_host, target_port = await self._read_request(reader, writer)
+            # Slow-loris guard: bound the SOCKS5 handshake.
+            async with asyncio.timeout(self._timeout_s):
+                if not await self._negotiate_methods(reader, writer):
+                    return
+                target_host, target_port = await self._read_request(reader, writer)
             self._requests_total += 1
 
             chosen, up_reader, up_writer, failure_rep = await self._open_tunnel_with_retry(
@@ -144,6 +146,8 @@ class SocksGateway:
                 await self.pool.mark_success(chosen.id, 0)
         except SocksGatewayError as exc:
             logger.warning("gateway_socks_protocol_error err=%s", exc)
+        except TimeoutError:
+            logger.info("gateway_socks_handshake_timeout bind=%s:%s", *(self._bound or ("?", "?")))
         except (ConnectionError, asyncio.IncompleteReadError, OSError):
             pass
         except asyncio.CancelledError:
