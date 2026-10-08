@@ -165,8 +165,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-5);
-  padding: var(--space-4) var(--space-8);
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
   background: var(--topbar-bg);
   color: var(--topbar-ink);
   border-bottom: 1px solid var(--topbar-line);
@@ -241,7 +241,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 main {
   max-width: 1500px;
   margin: 0 auto;
-  padding: var(--space-5) var(--space-8);
+  padding: var(--space-4) var(--space-5);
 }
 
 .page-heading {
@@ -521,8 +521,8 @@ button.secondary:hover, .secondary:hover {
 /* ── Forms ──────────────────────────────────────────────────────────── */
 
 .control-section {
-  padding: var(--space-5) var(--space-6);
-  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-3);
 }
 .control-section h2 { margin-bottom: var(--space-2); }
 .helper {
@@ -621,7 +621,7 @@ input:focus, textarea:focus, select:focus {
 /* ── Gateway panel ──────────────────────────────────────────────────── */
 
 .gateway-note {
-  padding: var(--space-5) var(--space-6);
+  padding: var(--space-3) var(--space-4);
 }
 .gateway-note h2 {
   font-size: 0.95rem;
@@ -636,11 +636,11 @@ input:focus, textarea:focus, select:focus {
   display: grid;
   grid-template-columns: 60px minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   background: var(--paper-soft);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
 }
 .gateway-row dt {
   font-size: 0.68rem;
@@ -749,8 +749,8 @@ footer {
     align-items: flex-start;
     gap: var(--space-3);
   }
-  h1 { font-size: 1.75rem; }
-  .summary dd { font-size: 1.9rem; }
+  h1 { font-size: 1.3rem; }
+  .summary dd { font-size: 1.3rem; }
   .table-toolbar {
     align-items: flex-start;
     flex-direction: column;

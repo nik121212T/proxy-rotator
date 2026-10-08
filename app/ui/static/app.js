@@ -76,7 +76,7 @@
     if (stopped) return;
     socket = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws/events`);
     socket.onopen = () => {
-      status.textContent = "● En direct";
+      status.textContent = "En direct";
       status.classList.add("connected");
       schedule(true);
     };
