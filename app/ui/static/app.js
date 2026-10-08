@@ -12,7 +12,6 @@
 
   const status = document.getElementById("connection-status");
   const feedback = document.getElementById("feedback");
-  const pendingRows = new Set();
   const busyRows = new Map();
   const strategySelect = document.getElementById("strategy");
   let strategyDirty = false;
@@ -43,20 +42,10 @@
     const focusedElement = document.activeElement;
     const focusId = focusedElement?.closest("#proxy-rows") ? focusedElement.id : null;
     try {
-      if (needsSnapshot) {
-        needsSnapshot = false;
-        pendingRows.clear();
-        await htmx.ajax("GET", "/ui/snapshot", {target: "#proxies-table", swap: "none"});
-        lastSnapshot = Date.now();
-      } else {
-        const ids = [...pendingRows];
-        pendingRows.clear();
-        for (const id of ids) {
-          const append = !document.getElementById(`proxy-${id}`);
-          const empty = Boolean(document.getElementById("empty-row"));
-          await htmx.ajax("GET", `/ui/proxies/${id}?append=${append}&empty=${empty}`, {target: "#proxies-table", swap: "none"});
-        }
-      }
+      needsSnapshot = false;
+      const order = document.getElementById("proxy-sort").value;
+      await htmx.ajax("GET", `/ui/snapshot?sort=${encodeURIComponent(order)}`, {target: "#proxies-table", swap: "none"});
+      lastSnapshot = Date.now();
     } catch {
       showError("Mise à jour interrompue. Une nouvelle tentative suivra la reconnexion.");
     } finally {
@@ -66,15 +55,22 @@
           (document.activeElement === document.body && !focusedElement.isConnected))) {
         document.getElementById(focusId)?.focus({preventScroll: true});
       }
-      if (needsSnapshot || pendingRows.size) schedule();
+      if (needsSnapshot) schedule();
     }
   }
 
-  function schedule(full = false, id = null) {
-    if (full) needsSnapshot = true;
-    if (Number.isSafeInteger(id) && id > 0) pendingRows.add(id);
-    if (!scheduled && !updating) scheduled = setTimeout(refresh, 80);
+  function schedule() {
+    needsSnapshot = true;
+    if (!scheduled && !updating) scheduled = setTimeout(refresh, 250);
   }
+
+  const sortSelect = document.getElementById("proxy-sort");
+  sortSelect.addEventListener("change", () => {
+    const url = new URL(location.href);
+    url.searchParams.set("sort", sortSelect.value);
+    history.replaceState(null, "", url);
+    schedule();
+  });
 
   function connect() {
     if (stopped) return;

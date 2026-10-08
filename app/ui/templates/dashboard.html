@@ -5,8 +5,8 @@
   <meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"selfRequestsOnly":true}'>
   <title>Pool de proxies · Proxy Rotator</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js" defer></script>
+  <link rel="stylesheet" href="/static/styles.css?v=progress-sort-1">
+  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=progress-sort-1" defer></script>
 </head>
 <body>
 <a class="skip-link" href="#workspace">Aller au pool</a>
@@ -14,10 +14,18 @@
 <main id="workspace">
   <div class="page-heading"><div><h1>Pool de proxies</h1><p>Vérifiez vos proxies. Gardez le contrôle sur la rotation.</p></div><a class="button secondary import-link" href="#import-form">Importer des proxies</a></div>
   {% include '_summary.html' %}
+<div class="top-controls">
+      <section class="control-section"><h2>Rotation</h2><form id="strategy-form" hx-post="/api/pool/strategy" hx-ext="json-form" hx-target="#feedback" hx-disabled-elt="find button">
+        <label for="strategy">Mode de sélection</label><select id="strategy" name="strategy">{% for value,label in [('weighted','Pondérée par le score'),('round_robin','À tour de rôle'),('random','Aléatoire'),('sticky','Stable par domaine')] %}<option value="{{ value }}" {% if stats.strategy == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><button type="submit" class="secondary wide">Appliquer la stratégie</button>
+      </form></section>
+{% include '_gateway.html' %}
+</div>
+  {% include '_check_controls.html' %}
   <div id="feedback" class="feedback" role="status" aria-live="polite"></div>
   <div class="workspace-grid">
     <section class="pool-panel" aria-labelledby="pool-title">
-      <div class="table-toolbar"><h2 id="pool-title">Vos proxies</h2><div class="toolbar-actions">{% include '_check_controls.html' %}<button type="button" class="secondary" hx-post="/api/pool/clear-dead" hx-target="#feedback" hx-disabled-elt="this">Purger les hors pool</button></div></div>
+      <div class="table-toolbar"><h2 id="pool-title">Vos proxies</h2><div class="toolbar-actions"><button type="button" class="secondary" hx-post="/api/pool/clear-dead" hx-target="#feedback" hx-disabled-elt="this">Purger les hors pool</button></div></div>
+      <div class="table-sort"><label for="proxy-sort">Trier par</label><select id="proxy-sort" name="sort">{% for value, label in sort_options.items() %}<option value="{{ value }}" {% if value == sort_order %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
       <div class="table-scroll" tabindex="0" role="region" aria-label="Table des proxies, défilement horizontal disponible">
         <table id="proxies-table"><caption class="sr-only">État et performances des proxies</caption><thead><tr><th scope="col">Proxy</th><th scope="col">État</th><th scope="col">Latence</th><th scope="col">Score</th><th scope="col">Réussite</th><th scope="col">Dernier test</th><th scope="col">Actions</th></tr></thead><tbody id="proxy-rows">{% include '_rows.html' %}</tbody></table>
       </div>
@@ -38,24 +46,6 @@
           <label for="proxy-label">Libellé <span class="optional">facultatif</span></label><input id="proxy-label" name="label" placeholder="Ex. : pool principal">
           <p id="import-help" class="helper">2 000 lignes maximum. Les lignes invalides sont ignorées, les proxies valides sont importés.</p><button type="submit" class="wide">Importer et vérifier</button>
         </form>
-      </section>
-      <section class="control-section"><h2>Rotation</h2><form id="strategy-form" hx-post="/api/pool/strategy" hx-ext="json-form" hx-target="#feedback" hx-disabled-elt="find button">
-        <label for="strategy">Mode de sélection</label><select id="strategy" name="strategy">{% for value,label in [('weighted','Pondérée par le score'),('round_robin','À tour de rôle'),('random','Aléatoire'),('sticky','Stable par domaine')] %}<option value="{{ value }}" {% if stats.strategy == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><button type="submit" class="secondary wide">Appliquer la stratégie</button>
-      </form></section>
-      <section class="gateway-note" aria-labelledby="gw-title">
-        <h2 id="gw-title">Passerelles</h2>
-        <dl class="gateway-list">
-          <div class="gateway-row{% if not gateway.http.bound %} offline{% endif %}">
-            <dt>HTTP</dt>
-            <dd>{{ gateway.http.bound or gateway.http.configured }}</dd>
-            <span class="status {% if gateway.http.bound %}status-alive{% else %}status-dead{% endif %}">{% if gateway.http.bound %}En écoute{% else %}Hors service{% endif %}</span>
-          </div>
-          <div class="gateway-row{% if not gateway.socks5.bound %} offline{% endif %}">
-            <dt>SOCKS5</dt>
-            <dd>{{ gateway.socks5.bound or gateway.socks5.configured }}</dd>
-            <span class="status {% if gateway.socks5.bound %}status-alive{% else %}status-dead{% endif %}">{% if gateway.socks5.bound %}En écoute{% else %}Hors service{% endif %}</span>
-          </div>
-        </dl>
       </section>
     </aside>
   </div>

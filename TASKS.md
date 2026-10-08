@@ -110,3 +110,5 @@ Work top to bottom. Check each box when done. One task = one commit.
 - [x] Import valid proxies while skipping malformed or unauthenticated lines; preserve error line numbers, deduplication and transactional database writes. Supersedes T4.2 whole-batch rejection per latest user instruction.
 
 - [x] Review corrections: single active manual test batch with progress; per-probe timeout after queue wait; safe CONNECT 407/TLS diagnostics; verified TLS for HTTPS upstream tunnels from both HTTP and SOCKS5 listeners; cleanup on partial startup failure; isolated gateway ports in application tests.
+
+- [x] User-requested dashboard clarity: general batch progress bar and outcome counts, persistent live sorting, Rotation/Passerelles moved above the table, live gateway activity/counters.

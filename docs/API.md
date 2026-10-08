@@ -68,7 +68,7 @@ semaphore slot becomes available; queue waiting never records a proxy failure.
 
 HTMX receives the `check-controls` fragment, containing a disabled button during
 work, completed/total counters and safe error counts. `GET /ui/check-status`
-refreshes that fragment every two seconds. It also restores progress after reload.
+refreshes that fragment every two seconds, including a native progress bar and outcome totals. It also restores progress after reload.
 WebSocket events continue updating proxy rows and pool statistics.
 
 ### `DELETE /api/proxies/{id}`
@@ -163,3 +163,5 @@ append or deletion. `GET /ui/snapshot` renders authoritative table/summary OOB
 fragments. The client serializes/debounces fragment requests, refreshes snapshots
 at reconnect and periodically to recover dropped WebSocket events, preserves
 keyboard focus and unsaved strategy edits, and defers row refreshes during actions.
+
+Dashboard and `/ui/snapshot` accept `sort=best|issues|latency|score|success|recent|added` (unknown values fall back to best). Sorting is stable by proxy ID for ties; unmeasured latency and success rates sort last. Live snapshots preserve the current sort and refresh gateway connection/request counters.

@@ -1,0 +1,14 @@
+<section id="gateway-panel" class="gateway-note" aria-labelledby="gw-title" {% if oob %}hx-swap-oob="outerHTML"{% endif %}>
+  <h2 id="gw-title">Passerelles</h2>
+  <dl class="gateway-list">
+    {% for name, listener in [('HTTP', gateway.http), ('SOCKS5', gateway.socks5)] %}
+    <div class="gateway-row{% if not listener.bound %} offline{% endif %}">
+      <dt>{{ name }}</dt>
+      <dd>{{ listener.bound or listener.configured }}</dd>
+      <dd><span class="status {% if listener.bound %}status-alive{% else %}status-dead{% endif %}">{% if not listener.bound %}Hors service{% elif listener.active_conns %}En utilisation{% else %}En écoute{% endif %}</span></dd>
+      <dd class="gateway-counters">{{ listener.active_conns }} connexion(s) active(s) · {{ listener.requests_total }} requête(s) reçue(s)</dd>
+    </div>
+    {% endfor %}
+  </dl>
+  <p class="gateway-help">Compteurs depuis le démarrage. « En écoute » = prête ; « En utilisation » = connexion active. Les connexions très courtes peuvent passer entre deux actualisations.</p>
+</section>

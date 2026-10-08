@@ -1,6 +1,11 @@
-<div id="check-controls" hx-get="/ui/check-status" hx-trigger="every 2s" hx-swap="outerHTML" hx-sync="this:drop">
-  <button id="test-all" type="button" hx-post="/api/proxies/test-all" hx-trigger="click" hx-target="#check-controls" hx-swap="outerHTML" hx-sync="#check-controls:replace" hx-disabled-elt="this" {% if checks.running %}disabled aria-busy="true"{% endif %}>{% if checks.running %}Vérification en cours…{% else %}Tout tester{% endif %}</button>
-  {% if checks.total %}<div role="status" aria-live="polite"><small>{{ checks.completed }} / {{ checks.total }} · {% if checks.running %}en cours{% else %}vérification terminée{% endif %} · {{ checks.failed }} échec(s){% if checks.cancelled %} · {{ checks.cancelled }} annulée(s){% endif %}</small>
-    {% if checks.errors %}<ul>{% for reason, count in checks.errors.items() %}<li>{{ count }} : {{ reason }}</li>{% endfor %}</ul>{% endif %}
-  </div>{% endif %}
-</div>
+<section id="check-controls" class="batch-panel" aria-labelledby="batch-title" hx-get="/ui/check-status" hx-trigger="every 2s" hx-swap="outerHTML" hx-sync="this:drop">
+  {% set percent = (100 * checks.completed // checks.total) if checks.total else 0 %}
+  <div class="batch-heading">
+    <div><h2 id="batch-title">Progression générale</h2><p id="batch-state">{% if checks.running %}Vérification en cours…{% elif checks.total %}Vérification terminée{% else %}Lancez « Tout tester » pour vérifier le pool.{% endif %}</p></div>
+    <button id="test-all" type="button" hx-post="/api/proxies/test-all" hx-trigger="click" hx-target="#check-controls" hx-swap="outerHTML" hx-sync="#check-controls:replace" hx-disabled-elt="this" {% if checks.running %}disabled aria-busy="true"{% endif %}>{% if checks.running %}Vérification en cours…{% else %}Tout tester{% endif %}</button>
+  </div>
+  <div class="batch-meter-label" role="status" aria-live="polite"><span>{{ checks.completed }} / {{ checks.total }} vérification(s) terminée(s)</span><strong>{{ percent }} %</strong></div>
+  <progress id="batch-progress" value="{{ checks.completed }}" max="{{ checks.total or 1 }}" aria-label="Progression générale des vérifications" aria-describedby="batch-state">{{ percent }} %</progress>
+  <div class="batch-outcomes"><span>{{ checks.completed - checks.failed - checks.cancelled }} réussie(s)</span><span>{{ checks.failed }} échec(s)</span>{% if checks.cancelled %}<span>{{ checks.cancelled }} annulée(s)</span>{% endif %}</div>
+  {% if checks.errors %}<details><summary>Détail des échecs</summary><ul>{% for reason, count in checks.errors.items() %}<li>{{ count }} : {{ reason }}</li>{% endfor %}</ul></details>{% endif %}
+</section>

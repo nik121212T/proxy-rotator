@@ -258,15 +258,48 @@ async def test_test_all_ui_tracks_one_batch_until_completion(api, running_app, p
         assert (await client.post("/api/proxies/test-all")).json() == {"queued": 0}
         pending = await client.get("/ui/check-status")
         assert "0 / 1" in pending.text
+        assert '<progress id="batch-progress" value="0" max="1"' in pending.text
         release.set()
         async with asyncio.timeout(2):
             while app.state.runtime.checker.batch_running:
                 await asyncio.sleep(0.01)
         complete = await client.get("/ui/check-status")
         assert "1 / 1" in complete.text
+        assert '<progress id="batch-progress" value="1" max="1"' in complete.text
+        assert "100 %" in complete.text
         assert "terminée" in complete.text
         assert " disabled" not in complete.text.replace("hx-disabled-elt", "")
         assert app.state.pool.all()[0].success_count == 1
     finally:
         release.set()
         await app.state.runtime.checker.stop()
+
+
+async def test_gateway_panel_shows_live_activity_and_top_position(api, running_app):
+    client, _ = api
+    app, _ = running_app
+    page = (await client.get("/")).text
+    assert page.index('id="strategy-form"') < page.index('id="proxies-table"')
+    assert page.index('id="gateway-panel"') < page.index('id="proxies-table"')
+    port = int(app.state.runtime.gateway.http.bound.rsplit(":", 1)[1])
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        async with asyncio.timeout(2):
+            while app.state.runtime.gateway.http.active_conns != 1:
+                await asyncio.sleep(0.01)
+        snapshot = (await client.get("/ui/snapshot")).text
+        assert ">En utilisation</span>" in snapshot
+        assert "1 connexion(s) active(s)" in snapshot
+        writer.write(b"GET http://target.invalid/ HTTP/1.1\r\nHost: target.invalid\r\n\r\n")
+        await writer.drain()
+        await asyncio.wait_for(reader.read(), 2)
+    finally:
+        writer.close()
+        await writer.wait_closed()
+    async with asyncio.timeout(2):
+        while app.state.runtime.gateway.http.active_conns:
+            await asyncio.sleep(0.01)
+    snapshot = (await client.get("/ui/snapshot")).text
+    assert ">En utilisation</span>" not in snapshot
+    assert "En écoute" in snapshot
+    assert "1 requête(s) reçue(s)" in snapshot
