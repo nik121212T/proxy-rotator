@@ -43,6 +43,16 @@ async def clear_dead(runtime: Services, request: Request) -> dict[str, int] | HT
     return {"deleted": deleted}
 
 
+@router.post("/clear-all", response_model=dict[str, int])
+async def clear_all(runtime: Services, request: Request) -> dict[str, int] | HTMLResponse:
+    for proxy in runtime.pool.all():
+        await runtime.checker.cancel_one(proxy.id)
+    deleted = await runtime.pool.clear_all()
+    if request.headers.get("HX-Request") == "true":
+        return feedback(request, f"Pool réinitialisé — {deleted} proxy(s) supprimé(s).")
+    return {"deleted": deleted}
+
+
 @router.post("/selection", response_model=RotationSelection)
 async def selection(
     body: RotationSelection, runtime: Services, request: Request

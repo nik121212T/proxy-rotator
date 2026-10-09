@@ -66,3 +66,20 @@ async def test_clear_dead_preserves_alive_and_quarantine(api, running_app) -> No
     assert (stats["total"], stats["alive"], stats["quarantine"], stats["dead"]) == (2, 1, 1, 0)
     assert (await client.get(f"/api/proxies/{ids[2]}")).status_code == 404
     assert (await client.post("/api/pool/clear-dead")).json() == {"deleted": 0}
+
+
+async def test_clear_all_wipes_pool(api, running_app) -> None:
+    client, port = api
+    app, _ = running_app
+    await client.post(
+        "/api/proxies/import",
+        json={"text": "\n".join(f"user{i}:fake@127.0.0.1:{port}" for i in range(3))},
+    )
+    assert (await client.get("/api/pool/stats")).json()["total"] == 3
+    response = await client.post("/api/pool/clear-all")
+    assert response.status_code == 200
+    assert response.json() == {"deleted": 3}
+    stats = (await client.get("/api/pool/stats")).json()
+    assert (stats["total"], stats["alive"], stats["quarantine"], stats["dead"]) == (0, 0, 0, 0)
+    assert app.state.runtime.pool.pinned_ids() == set()
+    assert (await client.post("/api/pool/clear-all")).json() == {"deleted": 0}

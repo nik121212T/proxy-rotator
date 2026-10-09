@@ -51,7 +51,7 @@
   const busyRows = new Map();
   const strategySelect = document.getElementById("strategy");
   let strategyDirty = false;
-  strategySelect.addEventListener("change", () => { strategyDirty = true; });
+  strategySelect?.addEventListener("change", () => { strategyDirty = true; });
 
   function syncBusyRows() {
     document.querySelectorAll("[data-live-disabled]").forEach(button => {
@@ -74,6 +74,7 @@
   async function refresh() {
     scheduled = null;
     if (updating || stopped || busyRows.size) return;
+    if (!document.getElementById("proxy-sort")) return;
     updating = true;
     const focusedElement = document.activeElement;
     const focusId = focusedElement?.closest("#proxy-rows") ? focusedElement.id : null;
@@ -108,7 +109,7 @@
   }
 
   const sortSelect = document.getElementById("proxy-sort");
-  sortSelect.addEventListener("change", () => {
+  sortSelect?.addEventListener("change", () => {
     const url = new URL(location.href);
     url.searchParams.set("sort", sortSelect.value);
     history.replaceState(null, "", url);
@@ -168,6 +169,11 @@
   document.body.addEventListener("htmx:afterRequest", event => {
     if (event.detail.xhr.getResponseHeader("X-Clear-Import") === "true") {
       document.getElementById("import-form").reset();
+      const drop = document.getElementById('proxy-drop');
+      const hint = document.getElementById('proxy-file-hint');
+      if (drop) drop.classList.remove('is-loaded');
+      if (hint) { hint.innerHTML = ''; hint.dataset.state = ''; }
+      document.querySelectorAll('.pulse-cta').forEach(el => el.classList.remove('pulse-cta'));
     }
   });
   document.body.addEventListener("htmx:responseError", event => {
@@ -192,33 +198,56 @@
   const proxyText = document.getElementById('proxy-text');
   const dropHint = document.getElementById('proxy-file-hint');
 
-  function appendLines(lines, label) {
+  function countProxyLines(text) {
+    return text.split(/\r?\n/).filter(line => line.trim() && !line.trim().startsWith('#')).length;
+  }
+
+  function setDropState(mode, html) {
+    if (!dropHint) return;
+    dropHint.innerHTML = html;
+    dropHint.dataset.state = mode;
+    const drop = document.getElementById('proxy-drop');
+    if (drop) drop.classList.toggle('is-loaded', mode === 'loaded');
+  }
+
+  function highlightImportButton() {
+    const btn = document.querySelector('#import-form button[type="submit"]');
+    if (!btn) return;
+    btn.classList.add('pulse-cta');
+    btn.focus({preventScroll: true});
+  }
+
+  function appendLines(lines) {
     const current = proxyText.value.trim();
     const sep = current ? '\n' : '';
     proxyText.value = current + sep + lines.trim();
-    dropHint.textContent = label;
-    proxyText.focus();
   }
 
   async function readFiles(files) {
+    const names = [];
     const parts = [];
     let total = 0;
     for (const file of files) {
       if (file.size > 1_000_000) {
-        dropHint.textContent = 'Fichier trop volumineux : ' + file.name + ' (max 1 MB)';
+        setDropState('error', '<strong>Fichier trop volumineux</strong><span>' + file.name + ' dépasse 1 MB</span>');
         return;
       }
       total += file.size;
+      names.push(file.name);
       parts.push(await file.text());
     }
     if (!parts.length) return;
+    const combined = parts.join('\n');
+    appendLines(combined);
     const kb = (total / 1024).toFixed(1);
-    appendLines(parts.join('\n'), files.length + ' fichier(s), ' + kb + ' KB ajoutés — import en cours…');
-    const form = document.getElementById('import-form');
-    if (form) {
-      if (window.htmx) window.htmx.trigger(form, 'submit');
-      else form.requestSubmit();
-    }
+    const proxies = countProxyLines(proxyText.value);
+    const label = names.length === 1 ? names[0] : names.length + ' fichiers';
+    setDropState('loaded',
+      '<strong>✓ ' + label + ' chargé</strong>' +
+      '<span>' + proxies + ' ligne(s) · ' + kb + ' KB — prêt à importer</span>' +
+      '<span class="drop-cta-tip">Cliquez sur <em>Importer et vérifier</em> ci-dessous</span>'
+    );
+    highlightImportButton();
   }
 
   if (drop && fileInput && proxyText) {
@@ -243,7 +272,8 @@
     });
   }
 
-  connect();
+  if (document.getElementById("proxy-sort")) connect();
+  else if (status) { status.textContent = ""; status.hidden = true; }
 })();
 
   // ── Dichvusocks provider widget ───────────────────────────────────────

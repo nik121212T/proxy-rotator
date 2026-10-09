@@ -197,6 +197,22 @@ class Pool:
 
         return await self._mutate(write)
 
+    async def clear_all(self) -> int:
+        async def write() -> int:
+            ids = tuple(p.id for p in self._snapshot)
+            async with transaction(self._conn):
+                for proxy_id in ids:
+                    await repository.delete_proxy(self._conn, proxy_id)
+            self._snapshot = ()
+            self._latencies.clear()
+            self._exits.clear()
+            self._pinned.clear()
+            for proxy_id in ids:
+                self._events.publish(ProxyEvent(type="removed", proxy_id=proxy_id))
+            return len(ids)
+
+        return await self._mutate(write)
+
     @property
     def subscriber_count(self) -> int:
         return self._events.subscriber_count
