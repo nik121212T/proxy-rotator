@@ -1002,6 +1002,8 @@ footer { padding-bottom: 88px; }
 .test-result:empty { display: none; }
 .test-result.is-ok { background: var(--good-soft, rgba(22,163,74,.14)); color: var(--good, #16a34a); }
 .test-result.is-ko { background: var(--danger-soft, rgba(220,38,38,.14)); color: var(--danger, #dc2626); }
+.test-result { transition: opacity .35s ease; opacity: 1; }
+.test-result.fading { opacity: 0; }
 
 /* Hide the legacy .topbar if any template still renders it alongside */
 .topbar + .topnav, .topnav + .topbar { display: none; }

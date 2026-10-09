@@ -96,6 +96,7 @@
         feedback.textContent = "";
         feedback.setAttribute("role", "status");
       }
+      restoreChips();
     } catch {
       showError("Mise à jour interrompue. Une nouvelle tentative suivra la reconnexion.");
     } finally {
@@ -172,6 +173,76 @@
     }
   });
   document.body.addEventListener("pool-refresh", () => schedule(true));
+
+  // Keep per-row Tester chips visible for ~3s even if the tbody is
+  // re-rendered by a snapshot swap in the meantime.
+  const chipState = new Map(); // id -> {html, cls, ts}
+  const chipTimers = new Map();
+  const CHIP_TTL_MS = 3000;
+  function freezeChip(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    chipState.set(id, {html: el.innerHTML, cls: el.className, ts: Date.now()});
+    clearTimeout(chipTimers.get(id));
+    chipTimers.set(id, setTimeout(() => fadeChip(id), CHIP_TTL_MS));
+  }
+  function fadeChip(id) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.classList.add("fading");
+      setTimeout(() => {
+        const still = document.getElementById(id);
+        if (still && still.classList.contains("fading")) {
+          still.className = "test-result";
+          still.innerHTML = "";
+        }
+      }, 400);
+    }
+    chipState.delete(id);
+    chipTimers.delete(id);
+  }
+  function restoreChips() {
+    const now = Date.now();
+    chipState.forEach((state, id) => {
+      if (now - state.ts >= CHIP_TTL_MS) { chipState.delete(id); return; }
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.className = state.cls;
+      el.innerHTML = state.html;
+    });
+  }
+  document.body.addEventListener("click", async event => {
+    const btn = event.target.closest("[data-test-proxy]");
+    if (!btn) return;
+    event.preventDefault();
+    if (btn.disabled) return;
+    const proxyId = btn.dataset.testProxy;
+    const chipId = "test-result-" + proxyId;
+    btn.disabled = true;
+    try {
+      const resp = await fetch(`/api/proxies/${proxyId}/test`, {
+        method: "POST", headers: {"HX-Request": "true"},
+      });
+      const html = await resp.text();
+      const temp = document.createElement("template");
+      temp.innerHTML = html.trim();
+      const newChip = temp.content.querySelector("#" + CSS.escape(chipId));
+      if (newChip) {
+        const current = document.getElementById(chipId);
+        if (current) {
+          current.className = newChip.className;
+          current.textContent = newChip.textContent;
+          current.dataset.fresh = "1";
+          freezeChip(chipId);
+        }
+      }
+      if (resp.headers.get("HX-Trigger") === "pool-refresh") {
+        document.body.dispatchEvent(new Event("pool-refresh", {bubbles: true}));
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  });
   document.body.addEventListener("htmx:afterRequest", event => {
     if (event.detail.xhr.getResponseHeader("X-Clear-Import") === "true") {
       document.getElementById("import-form").reset();
