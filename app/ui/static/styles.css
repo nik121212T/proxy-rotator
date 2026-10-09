@@ -582,8 +582,10 @@ input:focus, textarea:focus, select:focus {
   background: var(--paper-soft);
   text-align: center;
   cursor: pointer;
+  user-select: none;
   transition: border-color 0.14s ease, background-color 0.14s ease;
 }
+.file-drop-cta, .file-drop-cta * { pointer-events: none; }
 .file-drop:hover,
 .file-drop:focus-visible,
 .file-drop.is-drag {

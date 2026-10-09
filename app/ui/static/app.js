@@ -213,11 +213,21 @@
     }
     if (!parts.length) return;
     const kb = (total / 1024).toFixed(1);
-    appendLines(parts.join('\n'), files.length + ' fichier(s), ' + kb + ' KB ajoutés');
+    appendLines(parts.join('\n'), files.length + ' fichier(s), ' + kb + ' KB ajoutés — import en cours…');
+    const form = document.getElementById('import-form');
+    if (form) {
+      if (window.htmx) window.htmx.trigger(form, 'submit');
+      else form.requestSubmit();
+    }
   }
 
   if (drop && fileInput && proxyText) {
     fileInput.addEventListener('change', () => readFiles(fileInput.files || []));
+    drop.addEventListener('click', event => {
+      if (event.target.closest('input, textarea, button, a, label')) return;
+      event.preventDefault();
+      fileInput.click();
+    });
     drop.addEventListener('dragover', event => { event.preventDefault(); drop.classList.add('is-drag'); });
     drop.addEventListener('dragleave', () => drop.classList.remove('is-drag'));
     drop.addEventListener('drop', event => {
