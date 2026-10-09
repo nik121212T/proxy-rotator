@@ -1,0 +1,5 @@
+<div class="topnav-gateways" id="topnav-gateways" aria-label="État des passerelles"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>
+  {% for name, listener in [('HTTP', gateway.http), ('SOCKS5', gateway.socks5)] %}
+  <span class="topnav-gw status {% if not listener.bound %}status-dead{% elif listener.active_conns %}status-alive is-active{% else %}status-alive{% endif %}" title="{{ listener.bound or listener.configured }} · {% if not listener.bound %}Hors service{% elif listener.active_conns %}En utilisation{% else %}En écoute{% endif %}"><span class="gw-name">{{ name }}</span><span class="gw-state">{% if not listener.bound %}Hors service{% elif listener.active_conns %}En utilisation{% else %}En écoute{% endif %}</span></span>
+  {% endfor %}
+</div>

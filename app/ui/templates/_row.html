@@ -12,7 +12,8 @@
     {% else %}
       <button type="button" class="quiet" hx-post="/api/proxies/{{ proxy.id }}/pin" hx-target="#feedback" hx-disabled-elt="this" aria-label="Épingler {{ proxy.host }}:{{ proxy.port }}">Épingler</button>
     {% endif %}
-    <button type="button" id="test-{{ proxy.id }}" class="quiet" hx-post="/api/proxies/{{ proxy.id }}/test" hx-target="#feedback" hx-disabled-elt="this" aria-label="Tester {{ proxy.host }}:{{ proxy.port }}">Tester</button>
+    <button type="button" id="test-{{ proxy.id }}" class="quiet" hx-post="/api/proxies/{{ proxy.id }}/test" hx-swap="none" hx-disabled-elt="this" aria-label="Tester {{ proxy.host }}:{{ proxy.port }}">Tester</button>
+    <span id="test-result-{{ proxy.id }}" class="test-result" aria-live="polite"></span>
     <button type="button" id="remove-{{ proxy.id }}" class="quiet danger" hx-delete="/api/proxies/{{ proxy.id }}" hx-swap="none" hx-disabled-elt="this" aria-label="Retirer {{ proxy.host }}:{{ proxy.port }}">Retirer</button>
   </td>
 </tr>

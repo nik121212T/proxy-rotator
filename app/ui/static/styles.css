@@ -935,6 +935,39 @@ footer { padding-bottom: 88px; }
 }
 .topnav #connection-status { margin-left: auto; }
 
+/* Compact gateway state pills inside the top nav. */
+.topnav-gateways {
+  display: inline-flex; gap: 8px; margin-left: var(--space-3);
+}
+.topnav-gw {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 10px; border-radius: var(--radius-pill);
+  background: rgba(255,255,255,.05); border: 1px solid var(--topbar-line);
+  font-size: .72rem; font-weight: 600; letter-spacing: .04em;
+  color: var(--topbar-ink); line-height: 1;
+}
+.topnav-gw .gw-name { color: var(--topbar-muted); text-transform: uppercase; font-size: .66rem; }
+.topnav-gw .gw-state { color: var(--topbar-ink); }
+.topnav-gw.is-active { box-shadow: 0 0 0 1px rgba(34,197,94,.35) inset; }
+.topnav-gw::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--topbar-muted); flex-shrink: 0;
+}
+.topnav-gw.status-alive::before { background: var(--good); box-shadow: 0 0 0 3px rgba(22,163,74,.22); }
+.topnav-gw.status-dead::before { background: var(--danger); }
+.topnav-gw.status::before { position: static; }
+
+/* Inline test result chip next to Tester button inside row-actions. */
+.test-result {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: var(--radius-pill);
+  font-size: .74rem; font-weight: 600; line-height: 1.4;
+  margin-left: 4px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.test-result:empty { display: none; }
+.test-result.is-ok { background: var(--good-soft, rgba(22,163,74,.14)); color: var(--good, #16a34a); }
+.test-result.is-ko { background: var(--danger-soft, rgba(220,38,38,.14)); color: var(--danger, #dc2626); }
+
 /* Hide the legacy .topbar if any template still renders it alongside */
 .topbar + .topnav, .topnav + .topbar { display: none; }
 

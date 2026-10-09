@@ -1,6 +1,8 @@
 <template><tbody id="proxy-rows" hx-swap-oob="outerHTML">{% include '_rows.html' %}</tbody></template>
 {% set oob = true %}{% include '_summary.html' %}
 
+{% include '_topnav_gateways.html' %}
+
 {% include '_gateway.html' %}
 
 {% include '_activity.html' %}

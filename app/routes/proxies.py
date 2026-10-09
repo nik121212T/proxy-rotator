@@ -132,12 +132,21 @@ async def test_proxy(
     try:
         result = await runtime.checker.check_one(proxy_id)
         if request.headers.get("HX-Request") == "true":
-            return feedback(
-                request,
-                "Proxy disponible."
+            from app.ui.rendering import templates
+
+            text = (
+                f"OK · {result.latency_ms} ms"
                 if result.ok
-                else f"Vérification échouée : {result.error or 'raison inconnue'}.",
+                else f"KO · {(result.error or 'échec')[:28]}"
             )
+            response = templates.TemplateResponse(
+                request=request,
+                name="_test_result.html",
+                context={"proxy_id": proxy_id, "ok": result.ok, "text": text},
+            )
+            response.headers["HX-Trigger"] = "pool-refresh"
+            response.headers["Cache-Control"] = "no-store"
+            return response
         return result
     except KeyError:
         raise HTTPException(status_code=404, detail="Proxy not found") from None

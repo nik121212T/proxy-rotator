@@ -281,7 +281,8 @@ async def test_gateway_panel_shows_live_activity_and_top_position(api, running_a
     page = (await client.get("/")).text
     settings_page = (await client.get("/parametres")).text
     assert settings_page.index('id="strategy-form"') < settings_page.index('id="gateway-panel"')
-    assert page.index('id="gateway-panel"') < page.index('id="proxies-table"')
+    assert 'id="topnav-gateways"' in page
+    assert 'id="gateway-panel"' not in page
     port = int(app.state.runtime.gateway.http.bound.rsplit(":", 1)[1])
     reader, writer = await asyncio.open_connection("127.0.0.1", port)
     try:
@@ -379,5 +380,5 @@ async def test_gateway_connection_probe(api, running_app, kind):
         assert app.state.runtime.pool.activity.recent()[0].gateway == kind.upper()
     finally:
         await upstream.stop()
-    page = await client.get("/")
+    page = await client.get("/parametres")
     assert f'data-gateway-test="{kind}"' in page.text

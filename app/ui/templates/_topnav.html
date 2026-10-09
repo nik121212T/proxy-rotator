@@ -4,5 +4,6 @@
     <a href="/" class="topnav-tab{% if active_page == 'dashboard' %} is-active{% endif %}">Dashboard</a>
     <a href="/parametres" class="topnav-tab{% if active_page == 'settings' %} is-active{% endif %}">Paramètres</a>
   </div>
+  {% include '_topnav_gateways.html' %}
   <span id="connection-status" role="status">Connexion au direct…</span>
 </nav>
