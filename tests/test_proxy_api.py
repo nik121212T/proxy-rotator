@@ -291,7 +291,8 @@ async def test_gateway_panel_shows_live_activity_and_top_position(api, running_a
                 await asyncio.sleep(0.01)
         snapshot = (await client.get("/ui/snapshot")).text
         assert ">En utilisation</span>" in snapshot
-        assert "1 connexion(s) active(s)" in snapshot
+        settings_page = (await client.get("/parametres")).text
+        assert "1 connexion(s) active(s)" in settings_page
         writer.write(b"GET http://target.invalid/ HTTP/1.1\r\nHost: target.invalid\r\n\r\n")
         await writer.drain()
         await asyncio.wait_for(reader.read(), 2)
@@ -304,7 +305,8 @@ async def test_gateway_panel_shows_live_activity_and_top_position(api, running_a
     snapshot = (await client.get("/ui/snapshot")).text
     assert ">En utilisation</span>" not in snapshot
     assert "En écoute" in snapshot
-    assert "1 requête(s) reçue(s)" in snapshot
+    settings_page = (await client.get("/parametres")).text
+    assert "1 requête(s) reçue(s)" in settings_page
 
 
 async def test_activity_and_selection_api_exposes_only_public_proxy_metadata(api, running_app):

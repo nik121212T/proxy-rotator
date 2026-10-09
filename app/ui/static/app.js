@@ -84,12 +84,18 @@
       await htmx.ajax("GET", `/ui/snapshot?sort=${encodeURIComponent(order)}`, {target: "#proxies-table", swap: "none"});
       lastSnapshot = Date.now();
       const countrySelect = document.getElementById("selection-country");
-      document.querySelectorAll("#activity-panel [data-country-code]").forEach(item => {
-        const code = item.dataset.countryCode;
-        if (![...countrySelect.options].some(option => option.value === code)) {
-          countrySelect.add(new Option(item.dataset.countryName + " (" + code + ")", code));
-        }
-      });
+      if (countrySelect) {
+        document.querySelectorAll("#activity-panel [data-country-code]").forEach(item => {
+          const code = item.dataset.countryCode;
+          if (![...countrySelect.options].some(option => option.value === code)) {
+            countrySelect.add(new Option(item.dataset.countryName + " (" + code + ")", code));
+          }
+        });
+      }
+      if (feedback?.getAttribute("role") === "alert" && feedback.textContent.startsWith("Mise à jour")) {
+        feedback.textContent = "";
+        feedback.setAttribute("role", "status");
+      }
     } catch {
       showError("Mise à jour interrompue. Une nouvelle tentative suivra la reconnexion.");
     } finally {
@@ -131,7 +137,7 @@
         schedule(false, message.payload.proxy_id);
       } else if (message.type === "pool_stats") {
         const select = document.getElementById("strategy");
-        if (!strategyDirty && document.activeElement !== select) select.value = message.payload.strategy;
+        if (select && !strategyDirty && document.activeElement !== select) select.value = message.payload.strategy;
         // Periodic authoritative HTML snapshots repair missed/dropped events.
         if (Date.now() - lastSnapshot >= 1800) schedule(true);
       }
