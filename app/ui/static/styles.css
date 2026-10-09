@@ -892,3 +892,57 @@ footer { padding-bottom: 88px; }
 .dichvusocks-actions button { flex: 1; }
 .helper.good { color: var(--good); }
 .helper.error { color: var(--danger); }
+
+/* ── Top navigation bar (replaces old .topbar) ───────────────────────── */
+.topnav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-3) var(--space-5);
+  background: var(--topbar-bg);
+  color: var(--topbar-ink);
+  border-bottom: 1px solid var(--topbar-line);
+}
+.topnav .brand {
+  display: inline-flex; align-items: center; gap: var(--space-3);
+  color: var(--topbar-ink); font-size: 1.05rem; font-weight: 700;
+  letter-spacing: -0.015em; text-decoration: none;
+}
+.topnav .brand::before {
+  content: ""; width: 24px; height: 24px; border-radius: 7px;
+  background: conic-gradient(from 210deg, #0ea5e9, #22d3ee, #a78bfa, #0ea5e9);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.1) inset, 0 4px 14px rgba(14,165,233,.3);
+}
+.topnav .brand span {
+  padding: 2px 8px; background: rgba(255,255,255,.06);
+  color: var(--topbar-muted); border: 1px solid var(--topbar-line);
+  border-radius: var(--radius-sm); font-size: .68rem; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase;
+}
+.topnav-tabs {
+  display: flex; gap: 2px; margin-left: var(--space-4);
+  background: rgba(255,255,255,.04); padding: 3px; border-radius: var(--radius-pill);
+}
+.topnav-tab {
+  padding: 6px 14px; border-radius: var(--radius-pill);
+  color: var(--topbar-muted); text-decoration: none;
+  font-size: .85rem; font-weight: 600;
+  transition: background-color .14s, color .14s;
+}
+.topnav-tab:hover { color: var(--topbar-ink); }
+.topnav-tab.is-active {
+  background: rgba(255,255,255,.14); color: var(--topbar-ink);
+}
+.topnav #connection-status { margin-left: auto; }
+
+/* Hide the legacy .topbar if any template still renders it alongside */
+.topbar + .topnav, .topnav + .topbar { display: none; }
+
+/* ── Settings grid ───────────────────────────────────────────────────── */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+.settings-grid .control-section { margin-bottom: 0; }

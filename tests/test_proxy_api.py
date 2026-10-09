@@ -279,7 +279,8 @@ async def test_gateway_panel_shows_live_activity_and_top_position(api, running_a
     client, _ = api
     app, _ = running_app
     page = (await client.get("/")).text
-    assert page.index('id="strategy-form"') < page.index('id="proxies-table"')
+    settings_page = (await client.get("/parametres")).text
+    assert settings_page.index('id="strategy-form"') < settings_page.index('id="gateway-panel"')
     assert page.index('id="gateway-panel"') < page.index('id="proxies-table"')
     port = int(app.state.runtime.gateway.http.bound.rsplit(":", 1)[1])
     reader, writer = await asyncio.open_connection("127.0.0.1", port)

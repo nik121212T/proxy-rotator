@@ -3,92 +3,33 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"selfRequestsOnly":true}'>
-  <title>Pool de proxies · Proxy Rotator</title>
+  <title>Dashboard · Proxy Rotator</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <link rel="stylesheet" href="/static/styles.css?v=page-shortcuts-1">
-  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=page-shortcuts-1" defer></script>
+  <link rel="stylesheet" href="/static/styles.css?v=split-pages-1">
+  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=split-pages-1" defer></script>
 </head>
 <body>
 <div id="page-top" tabindex="-1"></div>
 <a class="skip-link" href="#workspace">Aller au pool</a>
-<header class="topbar"><a class="brand" href="/">Proxy Rotator<span>Local</span></a><span id="connection-status" role="status">Connexion au direct…</span></header>
+{% include '_topnav.html' %}
 <main id="workspace">
-  <div class="page-heading"><div><h1>Pool de proxies</h1><p>Vérifiez vos proxies. Gardez le contrôle sur la rotation.</p></div><a class="button secondary import-link" href="#import-section">↓ Importer une liste</a></div>
+  <div class="page-heading"><div><h1>Pool de proxies</h1><p>Vue en direct : proxies utilisés, IP de sortie, état du pool.</p></div></div>
   {% include '_summary.html' %}
-<div class="top-controls">
-      <section class="control-section"><h2>Rotation</h2><form id="strategy-form" hx-post="/api/pool/strategy" hx-ext="json-form" hx-target="#feedback" hx-disabled-elt="find button">
-        <label for="strategy">Mode de sélection</label><select id="strategy" name="strategy">{% for value,label in [('weighted','Pondérée par le score'),('round_robin','À tour de rôle'),('random','Aléatoire'),('sticky','Stable par domaine'),('timed','Toutes les X minutes')] %}<option value="{{ value }}" {% if stats.strategy == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><label for="rotation-minutes">Durée en minutes (mode temporisé)</label><input id="rotation-minutes" name="interval_minutes" type="number" min="1" max="1440" step="1" value="{{ interval_minutes }}" required><p class="helper">Le changement s’applique à la prochaine connexion après ce délai. Les connexions ouvertes continuent ; un proxy indisponible est remplacé immédiatement.</p><button type="submit" class="secondary wide">Appliquer la stratégie</button>
-      </form>
-      <form id="selection-form" hx-post="/api/pool/selection" hx-ext="json-form" hx-target="#feedback" hx-disabled-elt="find button">
-        <h3>Choisir les proxies utilisés</h3>
-        <label for="selection-country">Pays de sortie vérifié</label><select id="selection-country" name="country"><option value="">Tous les pays</option>{% for code, name in countries %}<option value="{{ code }}" {% if selection.country == code %}selected{% endif %}>{{ name }} ({{ code }})</option>{% endfor %}</select>
-        <label for="selection-score">Score de santé minimum (sur 100)</label><input id="selection-score" type="number" name="min_score" min="0" max="100" value="{{ selection.min_score }}" required>
-        <label class="pin-only"><input type="checkbox" name="pinned_only" {% if selection.pinned_only %}checked{% endif %}> Uniquement les proxies épinglés</label>
-        <button type="submit" class="secondary wide">Appliquer la sélection</button>
-        <p class="helper">Aucun proxy correspondant = connexion refusée. Les épingles et filtres sont réinitialisés au redémarrage.</p>
-      </form></section>
-{% include '_gateway.html' %}
-</div>
+  {% include '_gateway.html' %}
   {% include '_activity.html' %}
   {% include '_check_controls.html' %}
   <div id="feedback" class="feedback" role="status" aria-live="polite"></div>
-  <div class="workspace-grid">
-    <section class="pool-panel" aria-labelledby="pool-title">
-      <div class="table-toolbar"><h2 id="pool-title">Vos proxies</h2><div class="toolbar-actions"><a class="button secondary" href="/api/proxies/export?status=alive" download>Exporter les actifs</a><button type="button" class="secondary" hx-post="/api/pool/clear-dead" hx-target="#feedback" hx-disabled-elt="this">Purger les hors pool</button></div></div>
-      <div class="table-sort"><label for="proxy-sort">Trier par</label><select id="proxy-sort" name="sort">{% for value, label in sort_options.items() %}<option value="{{ value }}" {% if value == sort_order %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
-      <div class="table-scroll" tabindex="0" role="region" aria-label="Table des proxies, défilement horizontal disponible">
-        <table id="proxies-table"><caption class="sr-only">État et performances des proxies</caption><thead><tr><th scope="col">Proxy</th><th scope="col">État</th><th scope="col">Latence</th><th scope="col">Score</th><th scope="col">Réussite</th><th scope="col">Dernier test</th><th scope="col">Actions</th></tr></thead><tbody id="proxy-rows">{% include '_rows.html' %}</tbody></table>
-      </div>
-      <p class="table-note">Les proxies hors pool sont masqués. Les résultats se mettent à jour en direct.</p>
-    </section>
-    <aside class="controls" aria-label="Gestion du pool">
-      <section id="import-section" class="control-section" tabindex="-1"><h2>Importer une liste</h2><p class="helper">Une ligne par proxy. La vérification démarre automatiquement.</p>
-        <form id="import-form" hx-post="/api/proxies/import" hx-ext="json-form" hx-target="#feedback" hx-disabled-elt="find button" autocomplete="off">
-          <div class="file-drop" id="proxy-drop" tabindex="0" aria-label="Déposer un fichier .txt ou .csv de proxies">
-            <input id="proxy-file" type="file" accept=".txt,.csv,.list,text/plain" multiple hidden>
-            <label for="proxy-file" class="file-drop-cta">
-              <strong>Déposer un fichier</strong>
-              <span>ou cliquer pour choisir — .txt, .csv, .list</span>
-            </label>
-            <p class="file-drop-hint" id="proxy-file-hint" aria-live="polite"></p>
-          </div>
-          <label for="proxy-text">Proxies <span class="optional">ou collez-les ici</span></label><textarea id="proxy-text" name="text" rows="6" required spellcheck="false" autocapitalize="off" placeholder="user:pass@hôte:port" aria-describedby="import-help"></textarea>
-          <label for="proxy-label">Libellé <span class="optional">facultatif</span></label><input id="proxy-label" name="label" placeholder="Ex. : pool principal">
-          <p id="import-help" class="helper">2 000 lignes maximum. Les lignes invalides sont ignorées, les proxies valides sont importés.</p><button type="submit" class="wide">Importer et vérifier</button>
-        </form>
-      </section>
-      <section id="dichvusocks-section" class="control-section" aria-labelledby="dichvusocks-title" data-enabled="{{ 'true' if provider_dichvusocks_enabled else 'false' }}">
-        <h2 id="dichvusocks-title">Fournisseur Dichvusocks</h2>
-        <p class="helper">Importez des SOCKS5 depuis votre compte dichvusocks.net. Chaque import débite votre crédit.</p>
-
-        <div id="dichvusocks-token-card">
-          <label for="dichvusocks-token">Token API</label>
-          <input id="dichvusocks-token" type="password" autocomplete="off" placeholder="Collez votre Bearer token" value="">
-          <div class="dichvusocks-actions">
-            <button type="button" id="dichvusocks-save-token">Enregistrer le token</button>
-            <button type="button" id="dichvusocks-clear-token" class="secondary">Oublier le token</button>
-          </div>
-          <p id="dichvusocks-token-hint" class="helper" aria-live="polite"></p>
-        </div>
-
-        <dl id="dichvusocks-balance" class="dichvusocks-balance" hidden><dt>Compte</dt><dd data-field="balance">Chargement…</dd></dl>
-        <form id="dichvusocks-form" autocomplete="off" hidden>
-          <label for="dichvusocks-country">Pays</label>
-          <select id="dichvusocks-country" name="country"><option value="">Tous</option></select>
-          <label for="dichvusocks-limit">Nombre à importer <span class="optional">1–50</span></label>
-          <input id="dichvusocks-limit" name="limit" type="number" min="1" max="50" value="5">
-          <div class="dichvusocks-actions">
-            <button type="button" id="dichvusocks-preview" class="secondary">Aperçu (gratuit)</button>
-            <button type="button" id="dichvusocks-import">Importer</button>
-          </div>
-          <p id="dichvusocks-hint" class="helper" aria-live="polite"></p>
-        </form>
-      </section>
-    </aside>
-  </div>
+  <section class="pool-panel" aria-labelledby="pool-title">
+    <div class="table-toolbar"><h2 id="pool-title">Vos proxies</h2><div class="toolbar-actions"><a class="button secondary" href="/api/proxies/export?status=alive" download>Exporter les actifs</a><button type="button" class="secondary" hx-post="/api/pool/clear-dead" hx-target="#feedback" hx-disabled-elt="this">Purger les hors pool</button><a class="button" href="/parametres">⚙ Paramètres</a></div></div>
+    <div class="table-sort"><label for="proxy-sort">Trier par</label><select id="proxy-sort" name="sort">{% for value, label in sort_options.items() %}<option value="{{ value }}" {% if value == sort_order %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="table-scroll" tabindex="0" role="region" aria-label="Table des proxies, défilement horizontal disponible">
+      <table id="proxies-table"><caption class="sr-only">État et performances des proxies</caption><thead><tr><th scope="col">Proxy</th><th scope="col">État</th><th scope="col">Latence</th><th scope="col">Score</th><th scope="col">Réussite</th><th scope="col">Dernier test</th><th scope="col">Actions</th></tr></thead><tbody id="proxy-rows">{% include '_rows.html' %}</tbody></table>
+    </div>
+    <p class="table-note">Pool vide ? <a href="/parametres#import-form">Importez des proxies</a>. Les hors pool sont masqués.</p>
+  </section>
 </main>
-<nav class="page-shortcuts" aria-label="Raccourcis de navigation"><a href="#import-section" class="button secondary" aria-label="Aller à Importer une liste">↓ Importer</a><a href="#page-top" class="button secondary" aria-label="Remonter en haut de la page" title="Remonter en haut">↑ Haut</a></nav>
+<nav class="page-shortcuts" aria-label="Raccourcis de navigation"><a href="/parametres#import-form" class="button secondary" aria-label="Aller à Importer une liste">↓ Importer</a><a href="#page-top" class="button secondary" aria-label="Remonter en haut" title="Remonter en haut">↑ Haut</a></nav>
 <footer>Proxy Rotator <span>Administration locale · aucune télémétrie</span></footer>
-<noscript><p class="noscript">Activez JavaScript pour importer, tester et recevoir les mises à jour.</p></noscript>
+<noscript><p class="noscript">Activez JavaScript pour recevoir les mises à jour.</p></noscript>
 </body>
 </html>

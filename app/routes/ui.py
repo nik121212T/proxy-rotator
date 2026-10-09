@@ -11,7 +11,12 @@ router = APIRouter()
 
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, runtime: Services) -> HTMLResponse:
-    return render(request, "dashboard.html", runtime)
+    return render(request, "dashboard.html", runtime, {"active_page": "dashboard"})
+
+
+@router.get("/parametres", response_class=HTMLResponse)
+async def settings(request: Request, runtime: Services) -> HTMLResponse:
+    return render(request, "settings.html", runtime, {"active_page": "settings"})
 
 
 @router.get("/ui/snapshot", response_class=HTMLResponse)
