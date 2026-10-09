@@ -240,6 +240,60 @@
   (async function initDichvusocks() {
     const section = document.getElementById('dichvusocks-section');
     if (!section) return;
+    const tokenCard   = document.getElementById('dichvusocks-token-card');
+    const tokenInput  = document.getElementById('dichvusocks-token');
+    const tokenHint   = document.getElementById('dichvusocks-token-hint');
+    const saveTokenBtn= document.getElementById('dichvusocks-save-token');
+    const clearTokenBtn=document.getElementById('dichvusocks-clear-token');
+    const balanceCard = document.getElementById('dichvusocks-balance');
+    const importForm  = document.getElementById('dichvusocks-form');
+
+    function reveal(enabled) {
+      balanceCard.hidden = !enabled;
+      importForm.hidden  = !enabled;
+      clearTokenBtn.hidden = !enabled;
+      section.dataset.enabled = enabled ? 'true' : 'false';
+    }
+    reveal(section.dataset.enabled === 'true');
+
+    saveTokenBtn && saveTokenBtn.addEventListener('click', async () => {
+      const token = (tokenInput.value || '').trim();
+      if (!token) { tokenHint.textContent = 'Collez un token non vide.'; tokenHint.className = 'helper error'; return; }
+      saveTokenBtn.disabled = true;
+      tokenHint.textContent = 'Enregistrement…';
+      tokenHint.className = 'helper';
+      try {
+        const r = await fetch('/api/providers/dichvusocks/token', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ token }),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        tokenInput.value = '';
+        tokenHint.textContent = 'Token enregistré (chiffré).';
+        tokenHint.className = 'helper good';
+        reveal(true);
+        await Promise.all([loadBalance(), loadCountries()]);
+      } catch (err) {
+        tokenHint.textContent = 'Enregistrement KO : ' + err.message;
+        tokenHint.className = 'helper error';
+      } finally {
+        saveTokenBtn.disabled = false;
+      }
+    });
+
+    clearTokenBtn && clearTokenBtn.addEventListener('click', async () => {
+      if (!window.confirm('Oublier le token Dichvusocks ?')) return;
+      try {
+        const r = await fetch('/api/providers/dichvusocks/token', { method: 'DELETE' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        reveal(false);
+        tokenHint.textContent = 'Token effacé.';
+        tokenHint.className = 'helper';
+      } catch (err) {
+        tokenHint.textContent = 'Erreur : ' + err.message;
+        tokenHint.className = 'helper error';
+      }
+    });
     const countrySel = document.getElementById('dichvusocks-country');
     const limitInput = document.getElementById('dichvusocks-limit');
     const previewBtn = document.getElementById('dichvusocks-preview');
@@ -324,6 +378,8 @@
       }
     });
 
-    await Promise.all([loadBalance(), loadCountries()]);
+    if (section.dataset.enabled === 'true') {
+      await Promise.all([loadBalance(), loadCountries()]);
+    }
   })();
 

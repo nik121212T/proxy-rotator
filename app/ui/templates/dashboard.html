@@ -57,12 +57,22 @@
           <p id="import-help" class="helper">2 000 lignes maximum. Les lignes invalides sont ignorées, les proxies valides sont importés.</p><button type="submit" class="wide">Importer et vérifier</button>
         </form>
       </section>
-      {% if provider_dichvusocks_enabled %}
-      <section id="dichvusocks-section" class="control-section" aria-labelledby="dichvusocks-title">
+      <section id="dichvusocks-section" class="control-section" aria-labelledby="dichvusocks-title" data-enabled="{{ 'true' if provider_dichvusocks_enabled else 'false' }}">
         <h2 id="dichvusocks-title">Fournisseur Dichvusocks</h2>
-        <p class="helper">Importez des SOCKS5 depuis votre compte. Chaque import débite votre crédit.</p>
-        <dl id="dichvusocks-balance" class="dichvusocks-balance"><dt>Compte</dt><dd data-field="balance">Chargement…</dd></dl>
-        <form id="dichvusocks-form" autocomplete="off">
+        <p class="helper">Importez des SOCKS5 depuis votre compte dichvusocks.net. Chaque import débite votre crédit.</p>
+
+        <div id="dichvusocks-token-card">
+          <label for="dichvusocks-token">Token API</label>
+          <input id="dichvusocks-token" type="password" autocomplete="off" placeholder="Collez votre Bearer token" value="">
+          <div class="dichvusocks-actions">
+            <button type="button" id="dichvusocks-save-token">Enregistrer le token</button>
+            <button type="button" id="dichvusocks-clear-token" class="secondary">Oublier le token</button>
+          </div>
+          <p id="dichvusocks-token-hint" class="helper" aria-live="polite"></p>
+        </div>
+
+        <dl id="dichvusocks-balance" class="dichvusocks-balance" hidden><dt>Compte</dt><dd data-field="balance">Chargement…</dd></dl>
+        <form id="dichvusocks-form" autocomplete="off" hidden>
           <label for="dichvusocks-country">Pays</label>
           <select id="dichvusocks-country" name="country"><option value="">Tous</option></select>
           <label for="dichvusocks-limit">Nombre à importer <span class="optional">1–50</span></label>
@@ -74,7 +84,6 @@
           <p id="dichvusocks-hint" class="helper" aria-live="polite"></p>
         </form>
       </section>
-      {% endif %}
     </aside>
   </div>
 </main>

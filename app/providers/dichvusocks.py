@@ -59,6 +59,10 @@ class DichvusocksClient:
     def enabled(self) -> bool:
         return self._token is not None and bool(self._token.get_secret_value().strip())
 
+    def set_token(self, token: SecretStr | None) -> None:
+        """Swap the live API token at runtime (no restart required)."""
+        self._token = token
+
     # ── public API ────────────────────────────────────────────────────────
 
     async def user_info(self) -> dict[str, Any]:

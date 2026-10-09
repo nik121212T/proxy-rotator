@@ -22,6 +22,8 @@ class Runtime:
     rotator: Rotator
     http_configured: str
     socks5_configured: str
+    fernet_key: bytes = b""
+    db_conn: object | None = None  # aiosqlite.Connection; typed loosely to avoid import cost
     http_gateway: HttpGateway | None = field(default=None)
     socks5_gateway: SocksGateway | None = field(default=None)
     geo: GeolocationService | None = field(default=None)

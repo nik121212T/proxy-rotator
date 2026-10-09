@@ -97,8 +97,12 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
                 timeout_s=config.geolocation_timeout_s,
             )
             await geo_service.ensure_schema()
+            from app import provider_store  # noqa: PLC0415
+
+            await provider_store.ensure_schema(conn)
+            stored_token = await provider_store.get_token(conn, "dichvusocks", key)
             dichvusocks_client = DichvusocksClient(
-                token=config.dichvusocks_api_token,
+                token=stored_token or config.dichvusocks_api_token,
                 base_url=config.dichvusocks_base_url,
                 timeout_s=config.dichvusocks_timeout_s,
             )
@@ -109,11 +113,13 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
                 checker=checker,
                 rotator=rotator,
                 http_configured=http_configured,
+                fernet_key=key,
                 socks5_configured=socks5_configured,
                 http_gateway=http_gateway,
                 socks5_gateway=socks5_gateway,
                 geo=geo_service,
                 dichvusocks=dichvusocks_client,
+                db_conn=conn,
             )
 
 

@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
+from pydantic import BaseModel, ConfigDict, SecretStr
 
 from app.parser import parse_line
 from app.providers.dichvusocks import DichvusocksClient, DichvusocksError
@@ -120,3 +121,37 @@ def _require_client(runtime: Runtime) -> DichvusocksClient:
     if client is None or not client.enabled:
         raise HTTPException(status_code=404, detail="Dichvusocks provider disabled")
     return client
+
+
+class TokenPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: SecretStr
+
+
+@router.post("/token", status_code=204)
+async def set_token(payload: TokenPayload, runtime: Services) -> Response:
+    """Persist the Dichvusocks API token (encrypted) and hot-swap into the client."""
+    if runtime.db_conn is None or not runtime.fernet_key:
+        raise HTTPException(status_code=500, detail="Secret store unavailable")
+    from app import provider_store  # noqa: PLC0415
+
+    await provider_store.set_token(
+        runtime.db_conn, "dichvusocks", payload.token, runtime.fernet_key  # type: ignore[arg-type]
+    )
+    if runtime.dichvusocks is not None:
+        runtime.dichvusocks.set_token(payload.token)
+    return Response(status_code=204)
+
+
+@router.delete("/token", status_code=204)
+async def clear_token(runtime: Services) -> Response:
+    if runtime.db_conn is None or not runtime.fernet_key:
+        raise HTTPException(status_code=500, detail="Secret store unavailable")
+    from app import provider_store  # noqa: PLC0415
+
+    await provider_store.set_token(
+        runtime.db_conn, "dichvusocks", None, runtime.fernet_key  # type: ignore[arg-type]
+    )
+    if runtime.dichvusocks is not None:
+        runtime.dichvusocks.set_token(None)
+    return Response(status_code=204)
