@@ -144,7 +144,10 @@ class SocksGateway:
                     with contextlib.suppress(ConnectionError, OSError):
                         up_writer.close()
                         await up_writer.wait_closed()
-                    await self.pool.mark_success(chosen.id, 0)
+                    with contextlib.suppress(KeyError):
+                        # Liveness only: a tunnel has no request latency, and the
+                        # proxy may have been deleted while the tunnel was open.
+                        await self.pool.mark_tunnel_success(chosen.id)
 
         except SocksGatewayError as exc:
             logger.warning("gateway_socks_protocol_error err=%s", exc)

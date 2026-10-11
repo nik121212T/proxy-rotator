@@ -18,6 +18,7 @@ import asyncio
 import base64
 import contextlib
 import logging
+import re
 import ssl
 from collections.abc import AsyncIterator, Iterable
 from typing import Final
@@ -52,14 +53,41 @@ _FORWARDED_METHODS: Final[frozenset[str]] = frozenset(
     {"GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"}
 )
 
+# RFC 9110 section 9.2.2: only idempotent methods may be replayed after a
+# failure, because the origin may already have applied the request.
+_IDEMPOTENT_METHODS: Final[frozenset[str]] = frozenset(
+    {"GET", "HEAD", "PUT", "DELETE", "OPTIONS", "TRACE"}
+)
+
 _VIA_TOKEN: Final[str] = "1.1 proxy-rotator"
 _MAX_REQUEST_LINE: Final[int] = 8192
 _MAX_HEADERS_BYTES: Final[int] = 32 * 1024
 _TUNNEL_CHUNK: Final[int] = 64 * 1024
 
+# RFC 9112 section 7.1: ``chunk-size = 1*HEXDIG``. The RFC also requires
+# recipients to defend against integer-conversion overflow, so the size field
+# is bounded well above any real-world chunk.
+_CHUNK_SIZE = re.compile(rb"[0-9A-Fa-f]{1,16}\Z")
+_MAX_CHUNK_LINE_BYTES: Final[int] = 1024
+_MAX_TRAILER_FIELDS: Final[int] = 32
+
 
 class HttpGatewayError(Exception):
     """Raised when the gateway cannot complete a client request."""
+
+
+class _AttemptState:
+    """Tracks whether one upstream attempt already committed bytes to the client.
+
+    Once a status line has been written the response is on the wire; retrying
+    would append a second HTTP response to the first one (RFC 9112 section 9.2).
+    """
+
+    __slots__ = ("burn_reason", "response_started")
+
+    def __init__(self) -> None:
+        self.response_started = False
+        self.burn_reason: str | None = None
 
 
 def _strip_hop_by_hop(headers: list[tuple[str, str]]) -> list[tuple[str, str]]:
@@ -332,7 +360,10 @@ class HttpGateway:
                 with contextlib.suppress(ConnectionError, OSError):
                     up_writer.close()
                     await up_writer.wait_closed()
-                await self.pool.mark_success(chosen.id, 0)
+                with contextlib.suppress(KeyError):
+                    # A tunnel is not a latency measurement, and the proxy may
+                    # have been deleted while the tunnel was open.
+                    await self.pool.mark_tunnel_success(chosen.id)
 
     async def _open_upstream_tunnel(
         self, proxy: Proxy, target_host: str, target_port: int
@@ -412,6 +443,11 @@ class HttpGateway:
         if url.scheme not in {"http", "https"} or not url.host:
             raise HttpGatewayError(f"Unsupported absolute URI: {target!r}")
 
+        # RFC 9112 sections 6.1/6.3: reject ambiguous framing before reading a
+        # body. A rejection here propagates to the 400 handler, which then
+        # closes the connection as the RFC requires.
+        headers = _normalize_body_framing(headers)
+
         clean_headers = _append_via(_strip_hop_by_hop(headers))
         header_names = {name.lower() for name, _ in clean_headers}
         if "host" not in header_names:
@@ -421,10 +457,16 @@ class HttpGateway:
         # Buffer small bodies so we can retry on burn; otherwise stream once.
         body_bytes = await _collect_body_if_small(reader, headers)
         has_body_stream = body_bytes is None and _has_body(headers)
-        if has_body_stream:
-            # Non-idempotent: a single attempt only (we cannot rewind the stream).
-            unbuffered = _request_body_stream(reader, headers)
-            await self._single_forward(writer, method, url, clean_headers, unbuffered)
+        if has_body_stream or method not in _IDEMPOTENT_METHODS:
+            # A streamed body cannot be rewound, and a non-idempotent method
+            # (RFC 9110 section 9.2.2, RFC 9112 section 9.3.1) must never be
+            # replayed once the origin may have applied it. Both take exactly
+            # one attempt, whatever the outcome.
+            if has_body_stream:
+                attempt_body: AsyncIterator[bytes] | None = _request_body_stream(reader, headers)
+            else:
+                attempt_body = _bytes_async_iter(body_bytes) if body_bytes is not None else None
+            await self._single_forward(writer, method, url, clean_headers, attempt_body)
             return
 
         attempts_left = self._max_retry + 1
@@ -437,12 +479,26 @@ class HttpGateway:
                 break
             tried.add(proxy.id)
             attempt_body = _bytes_async_iter(body_bytes) if body_bytes is not None else None
+            state = _AttemptState()
             try:
-                burn = await asyncio.wait_for(
-                    self._forward_attempt(writer, method, url, clean_headers, attempt_body, proxy),
-                    timeout=self._timeout_s,
+                burn = await self._forward_attempt(
+                    writer, method, url, clean_headers, attempt_body, proxy, state
                 )
-            except (TimeoutError, aiohttp.ClientError, ConnectionError, OSError) as exc:
+            except (
+                HttpGatewayError,
+                TimeoutError,
+                aiohttp.ClientError,
+                ConnectionError,
+                OSError,
+            ) as exc:
+                if _caused_by_client_framing(exc):
+                    await self._reply_client_body_error(writer, exc)
+                    return
+                if state.response_started:
+                    # The response is already committed to the client: a retry
+                    # would concatenate a second response into the same stream.
+                    await self._note_interrupted_stream(proxy, url, exc)
+                    return
                 last_reason = _format_reason(exc)
                 logger.info(
                     "gateway_http_forward_failed proxy_id=%s target=%s err=%s",
@@ -475,12 +531,21 @@ class HttpGateway:
         if proxy is None:
             await self._reply_error(writer, 503, "Pool Empty")
             return
+        state = _AttemptState()
         try:
-            burn = await asyncio.wait_for(
-                self._forward_attempt(writer, method, url, clean_headers, body, proxy),
-                timeout=self._timeout_s,
+            await self._forward_attempt(
+                writer, method, url, clean_headers, body, proxy, state, retry_on_burn=False
             )
-        except (TimeoutError, aiohttp.ClientError, ConnectionError, OSError) as exc:
+        except (HttpGatewayError, TimeoutError, aiohttp.ClientError, ConnectionError, OSError) as exc:
+            if _caused_by_client_framing(exc):
+                # The client sent a malformed body: its error, not the proxy's.
+                await self._reply_client_body_error(writer, exc)
+                return
+            if state.response_started:
+                # The response is already committed to the client: a retry would
+                # concatenate a second response into the same stream.
+                await self._note_interrupted_stream(proxy, url, exc)
+                return
             logger.info(
                 "gateway_http_forward_failed proxy_id=%s target=%s err=%s",
                 proxy.id,
@@ -491,10 +556,6 @@ class HttpGateway:
             with contextlib.suppress(ConnectionError, OSError):
                 await self._reply_error(writer, 502, "Bad Gateway")
             return
-        if burn is not None:
-            await self.pool.mark_fail(proxy.id, burn)
-            with contextlib.suppress(ConnectionError, OSError):
-                await self._reply_error(writer, 502, f"Bad Gateway: {burn}")
 
     async def _forward_attempt(
         self,
@@ -504,13 +565,23 @@ class HttpGateway:
         headers: list[tuple[str, str]],
         body: AsyncIterator[bytes] | None,
         proxy: Proxy,
+        state: _AttemptState,
+        *,
+        retry_on_burn: bool = True,
     ) -> str | None:
         """Perform one upstream attempt.
 
         Returns ``None`` when the response was successfully streamed to the
         client; returns a short burn reason string when the response was
         classified as burned *before* any bytes left the gateway (so the
-        caller can safely retry on a different proxy).
+        caller can safely retry on a different proxy). ``state`` records the
+        moment the response becomes unrecoverable, so the caller never retries
+        over bytes that already reached the client.
+
+        With ``retry_on_burn=False`` the attempt is not replayable: a burned
+        response is forwarded to the client unchanged (so the client sees the
+        origin's real status) and the burn is recorded in ``state`` instead of
+        being turned into a retry.
         """
         loop = asyncio.get_running_loop()
         started = loop.time()
@@ -536,7 +607,9 @@ class HttpGateway:
                 trust_env=False,
                 auto_decompress=False,
                 skip_auto_headers={"User-Agent", "Accept-Encoding"},
-                timeout=aiohttp.ClientTimeout(total=None, sock_connect=self._timeout_s),
+                timeout=aiohttp.ClientTimeout(
+                    total=None, sock_connect=self._timeout_s, sock_read=self._timeout_s
+                ),
             ) as session,
             session.request(
                 method,
@@ -553,8 +626,10 @@ class HttpGateway:
                 # Status-based burn classification BEFORE forwarding anything.
                 burn = self._burn.classify(status_code=response.status)
                 if burn.burned:
-                    response.release()
-                    return burn.reason or f"HTTP {response.status}"
+                    if retry_on_burn:
+                        response.release()
+                        return burn.reason or f"HTTP {response.status}"
+                    state.burn_reason = burn.reason or f"HTTP {response.status}"
 
                 # Optional body-marker classification for small, inspectable bodies.
                 upstream_cl = response.headers.get("Content-Length")
@@ -574,7 +649,9 @@ class HttpGateway:
                         content_type=content_type,
                     )
                     if body_burn.burned:
-                        return body_burn.reason or "body marker"
+                        if retry_on_burn:
+                            return body_burn.reason or "body marker"
+                        state.burn_reason = body_burn.reason or "body marker"
 
                 status_line = f"HTTP/1.1 {response.status} {response.reason or ''}\r\n".encode(
                     "latin-1"
@@ -587,6 +664,7 @@ class HttpGateway:
                 ]
                 if peek_body is not None:
                     out_headers.append(("Content-Length", str(len(peek_body))))
+                    state.response_started = True
                     writer.write(status_line + _format_response_headers(out_headers) + b"\r\n")
                     writer.write(peek_body)
                     await writer.drain()
@@ -597,6 +675,7 @@ class HttpGateway:
                     out_headers.append(("Content-Length", upstream_cl))
                     use_chunked = False
                 if peek_body is None:
+                    state.response_started = True
                     writer.write(status_line + _format_response_headers(out_headers) + b"\r\n")
                     await writer.drain()
                     async for chunk in response.content.iter_any():
@@ -611,7 +690,12 @@ class HttpGateway:
                         await writer.drain()
 
         latency_ms = max(1, int((loop.time() - started) * 1000))
-        await self.pool.mark_success(proxy.id, latency_ms)
+        if state.burn_reason is not None:
+            # The response went through, but this proxy is burned: learn from it
+            # without re-sending a request the origin may already have applied.
+            await self.pool.mark_fail(proxy.id, state.burn_reason)
+        else:
+            await self.pool.mark_success(proxy.id, latency_ms)
         return None
 
     # ── helpers ───────────────────────────────────────────────────────────
@@ -620,6 +704,29 @@ class HttpGateway:
         if self.rotator.strategy == "sticky":
             return self.rotator.pick(self.pool, client_ip="127.0.0.1", target_domain=target_domain)
         return self.rotator.pick(self.pool)
+
+    async def _reply_client_body_error(
+        self, writer: asyncio.StreamWriter, exc: BaseException
+    ) -> None:
+        """Answer 400 for a malformed client body instead of blaming the proxy."""
+        logger.info("gateway_http_bad_body err=%s", exc)
+        with contextlib.suppress(ConnectionError, OSError):
+            await self._reply_error(writer, 400, "Bad Request")
+
+    async def _note_interrupted_stream(self, proxy: Proxy, url: URL, exc: BaseException) -> None:
+        """Record an upstream failure that happened after the response committed.
+
+        A client abort raises ``OSError`` rather than an aiohttp error, so only
+        upstream failures are charged to the proxy.
+        """
+        logger.info(
+            "gateway_http_stream_interrupted proxy_id=%s target=%s err=%s",
+            proxy.id,
+            url.host,
+            exc,
+        )
+        if isinstance(exc, aiohttp.ClientError):
+            await self.pool.mark_fail(proxy.id, "stream_interrupted")
 
     async def _reply_error(self, writer: asyncio.StreamWriter, code: int, phrase: str) -> None:
         body = f"{code} {phrase}\n".encode("ascii")
@@ -649,6 +756,24 @@ def _format_reason(exc: BaseException) -> str:
     return message[:200]
 
 
+def _caused_by_client_framing(exc: BaseException) -> bool:
+    """True when a send failure originates from the client's own malformed body.
+
+    aiohttp wraps a body-generator failure in ``ClientConnectionError``, so the
+    cause chain is the only reliable way to distinguish a bad client body from
+    a bad proxy. Misclassifying this would burn a healthy proxy for a client
+    error and answer 502 instead of 400.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        if isinstance(current, HttpGatewayError):
+            return True
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
+
+
 def _is_inspectable(content_type: str) -> bool:
     media = content_type.partition(";")[0].strip().lower()
     return media.startswith("text/") or media == "application/json"
@@ -662,6 +787,53 @@ def _has_body(headers: list[tuple[str, str]]) -> bool:
         if lname == "content-length" and value.isdigit() and int(value) > 0:
             return True
     return False
+
+
+def _normalize_body_framing(headers: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Validate request framing and collapse Content-Length per RFC 9112.
+
+    Rules applied (RFC 9112 sections 6.1 and 6.3):
+
+    * both ``Transfer-Encoding`` and ``Content-Length`` present -> reject. The
+      RFC permits processing by ``Transfer-Encoding`` alone, but only if the
+      received ``Content-Length`` is removed first; rejecting is the safer
+      choice for a request, and the connection is closed either way.
+    * ``Transfer-Encoding`` whose final coding is not ``chunked`` -> reject:
+      the body length cannot be determined reliably.
+    * duplicate or list-valued ``Content-Length`` -> accepted only when every
+      value is a valid integer and all values are identical, then collapsed to
+      a single field; anything else is an unrecoverable framing error.
+    """
+    lengths: list[str] = []
+    encodings: list[str] = []
+    for name, value in headers:
+        lname = name.lower()
+        if lname == "content-length":
+            lengths.extend(part.strip() for part in value.split(","))
+        elif lname == "transfer-encoding":
+            encodings.extend(part.strip().lower() for part in value.split(","))
+
+    if encodings and lengths:
+        raise HttpGatewayError("Both Content-Length and Transfer-Encoding")
+    if encodings:
+        codings = [coding for coding in encodings if coding]
+        if not codings or codings[-1] != "chunked" or codings.count("chunked") != 1:
+            raise HttpGatewayError("Unsupported Transfer-Encoding sequence")
+        return headers
+    if not lengths:
+        return headers
+    if any(not value.isdigit() for value in lengths) or len(set(lengths)) != 1:
+        raise HttpGatewayError("Invalid Content-Length")
+
+    collapsed: list[tuple[str, str]] = []
+    written = False
+    for name, value in headers:
+        if name.lower() != "content-length":
+            collapsed.append((name, value))
+        elif not written:
+            collapsed.append((name, lengths[0]))
+            written = True
+    return collapsed
 
 
 async def _collect_body_if_small(
@@ -736,15 +908,20 @@ async def _fixed_body(reader: asyncio.StreamReader, length: int) -> AsyncIterato
 async def _chunked_body(reader: asyncio.StreamReader) -> AsyncIterator[bytes]:
     while True:
         size_line = await reader.readuntil(b"\r\n")
-        size_text = size_line.strip().split(b";", 1)[0]
-        try:
-            size = int(size_text, 16)
-        except ValueError as exc:
-            raise HttpGatewayError(f"Invalid chunk size: {size_text!r}") from exc
+        if len(size_line) > _MAX_CHUNK_LINE_BYTES:
+            raise HttpGatewayError("Chunk header too long")
+        # RFC 9112 section 7.1: ``chunk-size = 1*HEXDIG``. Rejecting anything
+        # else (a sign, junk, an over-long numeral) is required to prevent
+        # integer-conversion surprises and unbounded reads.
+        size_text = size_line.strip().split(b";", 1)[0].strip()
+        if not _CHUNK_SIZE.match(size_text):
+            raise HttpGatewayError("Invalid chunk size")
+        size = int(size_text, 16)
         if size == 0:
-            while (await reader.readuntil(b"\r\n")) != b"\r\n":
-                continue
-            return
+            for _ in range(_MAX_TRAILER_FIELDS):
+                if await reader.readuntil(b"\r\n") == b"\r\n":
+                    return
+            raise HttpGatewayError("Trailer section too large")
         remaining = size
         while remaining:
             chunk = await reader.read(min(remaining, _TUNNEL_CHUNK))

@@ -325,6 +325,7 @@ async def test_socks5_marks_success_on_tunnel_close(socks_harness):
     echo, echo_port = await _echo_server()
     try:
         before = socks_harness.pool.all()[0].success_count
+        latency_before = socks_harness.pool.all()[0].latency_ms
         reader, writer, rep = await _socks_connect(
             socks_harness.port, "127.0.0.1", echo_port, atyp="ipv4"
         )
@@ -337,8 +338,10 @@ async def test_socks5_marks_success_on_tunnel_close(socks_harness):
             await asyncio.sleep(0.02)
             if socks_harness.pool.all()[0].success_count > before:
                 break
-        after = socks_harness.pool.all()[0].success_count
-        assert after == before + 1
+        after = socks_harness.pool.all()[0]
+        assert after.success_count == before + 1
+        # A tunnel has no request latency and must not enter the checks median.
+        assert after.latency_ms == latency_before
     finally:
         echo.close()
         await echo.wait_closed()

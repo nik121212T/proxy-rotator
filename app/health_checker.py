@@ -268,7 +268,13 @@ class HealthChecker:
             if proxy.id not in self._jobs
             and proxy.id not in self._suppressed
             and (
-                (proxy.status == "unknown" and proxy.last_checked_at is None)
+                (
+                    proxy.status == "unknown"
+                    and (
+                        proxy.last_checked_at is None
+                        or (now - proxy.last_checked_at).total_seconds() >= self._interval_s
+                    )
+                )
                 or (
                     proxy.status == "alive"
                     and (

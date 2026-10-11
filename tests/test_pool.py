@@ -119,3 +119,22 @@ async def test_concurrent_bulk_imports_deduplicate_and_keep_first_credentials(db
     assert all(p.label == 'first' for p in stored)
     assert all(decrypt_password(p.password_enc.get_secret_value(), key).get_secret_value() == 'original'
                for p in stored)
+
+
+async def test_tunnel_success_does_not_pollute_latency(db: aiosqlite.Connection) -> None:
+    """A CONNECT tunnel is liveness, not a latency measurement."""
+    key = Fernet.generate_key()
+    pool = await Pool.load(db, key)
+    proxy = await pool.add(parse_line("user:pw@proxy.example:80"))
+    await pool.mark_success(proxy.id, 1200)
+    assert pool.all()[0].latency_ms == 1200
+
+    for _ in range(20):
+        await pool.mark_tunnel_success(proxy.id)
+
+    after = pool.all()[0]
+    # The health-check median must survive a burst of tunnels: recording zeros
+    # here would collapse latency_ms and inflate the score towards its maximum.
+    assert after.success_count == 21
+    assert after.latency_ms == 1200
+    assert after.score < 100

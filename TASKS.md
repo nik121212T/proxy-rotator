@@ -70,6 +70,7 @@ Work top to bottom. Check each box when done. One task = one commit.
   - Asyncio TCP listener with manual request-line + header parsing. CONNECT opens a raw tunnel through the chosen upstream (HTTP CONNECT or SOCKS5 via aiohttp_socks). Non-CONNECT requests forward through aiohttp with chunked / Content-Length framing preserved. Hop-by-hop headers stripped (RFC 7230) including `Connection: foo` extensions. `Via: 1.1 proxy-rotator` added. `pool.mark_success` / `mark_fail` reported per request. Wired into FastAPI lifespan; `GatewayStatus` now live (`bound`, `active_conns`, `requests_total`). Config port `0` opts into an ephemeral OS-assigned port for tests/CI. T5.2 adds burn-on-response + retry; T5.3 adds SOCKS5 inbound.
 - [x] T5.2  Burn-on-response hook + automatic retry on next proxy (≤ `MAX_RETRY_PER_REQUEST`).
   - `BurnDetector` wired into `HttpGateway`. Status-based signals (401, 403, 407, 429, 451, 503) trigger retry *before* any bytes are written to the client. Small inspectable bodies (`text/*` or `application/json`, Content-Length ≤ 128 KiB) are peeked for body markers and retried if burned. Transport errors (timeout, connection refused/reset) also retry. CONNECT retries on upstream-connect failures only (tunnel is non-replayable once bytes bridge). Idempotency: GET/HEAD/DELETE/OPTIONS and small POST/PUT (Content-Length ≤ 1 MiB) are buffered and retryable; larger bodies and chunked uploads make a single attempt. Settings add `max_retry_per_request` (default 2) and `burn_inspect_body` (default true). 4 new tests cover retry success/exhaustion/status-pass-through.
+  - Correction (post-audit): only 1 of those 4 tests (`test_retry_exhausted_returns_502`) actually exercised retry; `test_retry_on_upstream_connect_error_then_success` and `test_retry_on_burn_status_then_success` were vacuous (they asserted a plain 200 and would pass with retry deleted). Both were rewritten to force a real first-attempt failure, and `test_no_retry_on_2xx` now counts upstream attempts. See “Post-audit corrections” below.
 - [x] T5.3  `app/gateway_socks.py` : SOCKS5 no-auth CONNECT server with DNS passthrough.
   - RFC 1928 handshake (version 5, NO AUTH method). CONNECT only; BIND and UDP ASSOCIATE return REP=0x07. ATYP IPv4, IPv6 and domain all supported — the domain name is passed through to the upstream, so DNS resolves on the proxy side (no local DNS leak). Retry on upstream-connect errors up to max_retry_per_request. Wired into FastAPI lifespan beside the HTTP gateway. 7 new tests cover status, HTTP-upstream tunnel, domain pass-through, pool-empty, unsupported method, unsupported command, success counter.
 - [x] T5.4  `scripts/smoke_gateway.sh`: three proxied IP requests; at least two distinct exits (updated acceptance per user).
@@ -119,3 +120,56 @@ Work top to bottom. Check each box when done. One task = one commit.
 - [x] User-requested Finder restart: start.command stops this project's existing Python/Uvicorn app.main processes (command + working-directory verification), SIGTERM with bounded wait then SIGKILL, before bootstrap. Other projects remain untouched; help does not stop servers.
 - [x] User-requested compact proxy table: full available width, narrower cells and wrapping metadata, visible action column; stacked labeled rows on small screens without horizontal scrolling.
 - [x] User-requested long-page shortcuts: prominent top “Importer une liste”, fixed Import/Back-to-top links, native anchors and immediate scrolling.
+
+## Post-audit corrections (Palier 1)
+
+Findings and evidence are recorded in `AUDIT.md`. Each fix below has a regression
+test that was verified to fail against the previous code (mutation check).
+
+- [x] A1/A2 — no retry once a response has committed to the client. `_AttemptState`
+  records the first byte written; a transport failure after that point logs
+  `gateway_http_stream_interrupted` and returns instead of appending a second
+  HTTP response. The whole-transfer `wait_for` was replaced by
+  `ClientTimeout(sock_connect, sock_read)` so a slow but progressing transfer is
+  no longer cut at `GATEWAY_TIMEOUT_S` (RFC 9112 §9.2). Regression tests:
+  `test_partial_upstream_body_is_never_retried`,
+  `test_slow_but_progressing_response_is_not_cut_by_the_timeout`.
+- [x] A3 — request framing validated per RFC 9112: `Content-Length` together with
+  `Transfer-Encoding`, a non-final `chunked` coding, and non-integer or
+  conflicting `Content-Length` values are rejected with 400 and the connection
+  is closed. Duplicate *identical* lengths are accepted and collapsed to one
+  field, as §6.3(5) requires. Regression tests:
+  `test_rejects_content_length_with_transfer_encoding`,
+  `test_rejects_conflicting_content_length_headers`,
+  `test_rejects_transfer_encoding_without_final_chunked`,
+  `test_accepts_duplicate_identical_content_length`.
+- [x] A4 — `chunk-size` must match `1*HEXDIG` (RFC 9112 §7.1): signed or
+  over-long numerals are refused, and the trailer section is bounded. The
+  previous `int(size_text, 16)` accepted `-1`, which reached
+  `StreamReader.read(-1)` and blocked while buffering without limit. Regression
+  test: `test_rejects_negative_chunk_size` (uses a silent upstream so the only
+  possible 400 is the gateway's own).
+- [x] A8 — non-idempotent requests are never replayed (RFC 9110 §9.2.2,
+  RFC 9112 §9.3.1): POST/PATCH take a single attempt, and a burned response is
+  forwarded to the client unchanged (the client sees the origin's real status)
+  while the burn is still recorded against the proxy. Regression test:
+  `test_non_idempotent_request_is_not_retried_on_burn`.
+- [x] A9 — deleting a proxy during an open tunnel no longer raises `KeyError`
+  into the 500 handler, which previously injected `HTTP/1.1 500` into an
+  established TLS tunnel.
+- [x] B1 — an `unknown` proxy that failed its first check is no longer stranded:
+  `HealthChecker.due()` now reselects it every interval, so it reaches
+  quarantine automatically instead of waiting for a manual retest. Regression
+  test: `test_proxy_that_failed_its_first_check_is_still_scheduled`.
+- [x] B2 — CONNECT tunnels record liveness without touching the latency history,
+  so a burst of tunnels can no longer collapse `latency_ms` towards zero and
+  inflate the score. Regression tests:
+  `test_tunnel_success_does_not_pollute_latency`,
+  `test_socks5_marks_success_on_tunnel_close`.
+- [x] E1/E2 — the two vacuous retry tests were rewritten and
+  `test_no_retry_on_2xx` now asserts the upstream attempt count.
+
+Gate: `pytest -q` → 291 passed, 1 skipped, 1 failed; `ruff check app tests` and
+`mypy app` clean. The single failure is `test_start_command.py`, which needs
+`/bin/ps` and is blocked in the agent sandbox (see AUDIT.md §6 E7); it is
+unrelated to these changes and fails identically on the unmodified tree.

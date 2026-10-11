@@ -382,6 +382,43 @@ async def _wait_idle(gateway, timeout=1.0):
         await asyncio.sleep(0.005)
 
 
+async def _gateway_for_upstream(db, upstream_port, *, timeout_s=15.0, max_retry_per_request=2):
+    """Gateway with a single proxy aimed at a locally controlled upstream."""
+    key = Fernet.generate_key()
+    pool = await Pool.load(db, key)
+    proxy = await pool.add(parse_line(f"gatewayuser:secret-value@127.0.0.1:{upstream_port}"))
+    await pool.mark_success(proxy.id, 10)
+    gateway = HttpGateway(
+        pool,
+        Rotator(strategy="round_robin"),
+        key,
+        port=0,
+        timeout_s=timeout_s,
+        max_retry_per_request=max_retry_per_request,
+    )
+    await gateway.start()
+    bound = gateway.status("configured").bound or ""
+    return gateway, pool, int(bound.rsplit(":", 1)[1])
+
+
+async def _read_raw_response(port, request, timeout=5.0):
+    """Send raw bytes and collect everything the gateway writes back."""
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    writer.write(request)
+    await writer.drain()
+    data = b""
+    with contextlib.suppress(TimeoutError, ConnectionError, OSError, asyncio.IncompleteReadError):
+        while True:
+            chunk = await asyncio.wait_for(reader.read(65536), timeout)
+            if not chunk:
+                break
+            data += chunk
+    writer.close()
+    with contextlib.suppress(ConnectionError, OSError):
+        await writer.wait_closed()
+    return data
+
+
 @pytest.mark.filterwarnings("ignore::ResourceWarning")
 async def test_upstream_refuses_marks_failure_and_returns_502(harness, upstream_proxy, origin):
     # Force a transport-level failure by stopping the upstream before the request.
@@ -522,21 +559,13 @@ async def two_proxy_harness(db, upstream_proxy):
 
 
 @pytest.mark.filterwarnings("ignore::ResourceWarning")
-async def test_retry_on_upstream_connect_error_then_success(two_proxy_harness, origin):
-    harness, _, first_id, _ = two_proxy_harness
-    # Kill the first upstream so the retry picks the second one.
-    first_proxy = next(p for p in harness.pool.all() if p.id == first_id)
-    assert first_proxy  # exists
-    # Round-robin starts at the first proxy; stopping its upstream forces retry.
-    first_upstream_port = first_proxy.port
-    # Grab the fixture-owned upstream to stop it (its port matches first_proxy.port).
-    for sock in asyncio.all_tasks():  # noqa: B007 - just a dummy loop to appease linters
-        break
-    # Easier: use a fresh connection target that is unreachable.
-    # Instead, we re-use the running upstream_proxy fixture indirectly: the second
-    # harness fixture already includes a working alternate — just assert that if
-    # we send one request, both proxies may serve it successfully.
-    _ = first_upstream_port
+async def test_retry_on_upstream_connect_error_then_success(
+    two_proxy_harness, upstream_proxy, origin
+):
+    harness, _, _, _ = two_proxy_harness
+    # Round-robin picks the first proxy, whose upstream is now closed: only a
+    # real retry on the second proxy can produce a 200 for this request.
+    await upstream_proxy.stop()
     code, _, body = await _raw_request(
         harness.port,
         f"GET http://127.0.0.1:{origin.port}/retry HTTP/1.1",
@@ -547,28 +576,45 @@ async def test_retry_on_upstream_connect_error_then_success(two_proxy_harness, o
 
 
 @pytest.mark.filterwarnings("ignore::ResourceWarning")
-async def test_retry_on_burn_status_then_success(two_proxy_harness, origin):
-    harness, second_upstream, first_id, _ = two_proxy_harness
-    # First upstream (round-robin first pick) rejects with 429.
-    for p in harness.pool.all():
-        if p.id == first_id:
-            # Force reject via the fake upstream linked to this proxy.
-            pass
-    # Simpler: set the fixture's upstream_proxy to reject with 429; harness.gateway
-    # already attaches to it via round_robin.
-    # We mutate second_upstream here as the alternate reachable upstream.
-    _ = second_upstream
-    # The fixture's primary upstream_proxy comes from the inherited fixture.
-    # We can access it via one of the harness.pool proxies: the one with the
-    # harness's upstream_proxy host/port.
-    before = harness.gateway.status("x").requests_total
-    code, _, _ = await _raw_request(
+async def test_retry_on_burn_status_then_success(two_proxy_harness, upstream_proxy, origin):
+    harness, _, _, _ = two_proxy_harness
+    # The first proxy answers 429 (a burn signal) without reaching the origin:
+    # only a retry on the second proxy can return the real 200.
+    upstream_proxy.accept = False
+    upstream_proxy.reject_status = (429, "Too Many Requests")
+    code, _, body = await _raw_request(
         harness.port,
         f"GET http://127.0.0.1:{origin.port}/burn HTTP/1.1",
         [("Host", f"127.0.0.1:{origin.port}"), ("Connection", "close")],
     )
     assert code == 200
-    assert harness.gateway.status("x").requests_total == before + 1
+    assert body == b"origin ok"
+    assert len(upstream_proxy.received_headers) == 1
+
+
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
+async def test_non_idempotent_request_is_not_retried_on_burn(
+    two_proxy_harness, upstream_proxy, origin
+):
+    harness, _, _, _ = two_proxy_harness
+    upstream_proxy.accept = False
+    upstream_proxy.reject_status = (429, "Too Many Requests")
+    code, _, _ = await _raw_request(
+        harness.port,
+        f"POST http://127.0.0.1:{origin.port}/order HTTP/1.1",
+        [
+            ("Host", f"127.0.0.1:{origin.port}"),
+            ("Content-Length", "4"),
+            ("Connection", "close"),
+        ],
+        body=b"data",
+    )
+    # A POST must never be replayed once the origin may have applied it, but the
+    # origin's real status must still reach the client instead of a gateway 502.
+    assert code == 429
+    assert len(upstream_proxy.received_headers) == 1
+    await _wait_idle(harness.gateway)
+    assert harness.pool.all()[0].fail_count == 1
 
 
 @pytest.mark.filterwarnings("ignore::ResourceWarning")
@@ -598,6 +644,192 @@ async def test_no_retry_on_2xx(harness, upstream_proxy, origin):
     await _wait_idle(harness.gateway)
     after = harness.pool.all()[0]
     assert after.success_count == before_success + 1
+    # A 2xx must be served by exactly one upstream attempt.
+    assert len(upstream_proxy.received_headers) == 1
+
+
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
+async def test_partial_upstream_body_is_never_retried(db):
+    """A response already on the wire must not be followed by a second one."""
+
+    async def truncated(reader, writer):
+        with contextlib.suppress(Exception):
+            while (await reader.readuntil(b"\r\n")) != b"\r\n":
+                continue
+            writer.write(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 1000000\r\n"
+                b"Content-Type: application/octet-stream\r\n\r\n" + b"A" * 100
+            )
+            await writer.drain()
+        writer.close()
+        with contextlib.suppress(Exception):
+            await writer.wait_closed()
+
+    server = await asyncio.start_server(truncated, "127.0.0.1", 0)
+    upstream_port = server.sockets[0].getsockname()[1]
+    gateway, pool, port = await _gateway_for_upstream(db, upstream_port, max_retry_per_request=3)
+    try:
+        data = await _read_raw_response(
+            port, b"GET http://example.invalid/x HTTP/1.1\r\nHost: example.invalid\r\n\r\n"
+        )
+        # Exactly one status line, even though three retries were authorised.
+        assert data.count(b"HTTP/1.1 ") == 1
+        assert data.startswith(b"HTTP/1.1 200 OK")
+        # The interrupted stream is an upstream failure, so it is recorded once.
+        await _wait_idle(gateway)
+        assert pool.all()[0].fail_count == 1
+    finally:
+        await gateway.stop()
+        server.close()
+        await server.wait_closed()
+
+
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
+async def test_slow_but_progressing_response_is_not_cut_by_the_timeout(db):
+    """The per-read budget must not act as a cap on total transfer duration."""
+    body_chunks = (b"alpha", b"beta", b"gamma")
+
+    async def slow(reader, writer):
+        with contextlib.suppress(Exception):
+            while (await reader.readuntil(b"\r\n")) != b"\r\n":
+                continue
+            total = sum(len(chunk) for chunk in body_chunks)
+            writer.write(
+                f"HTTP/1.1 200 OK\r\nContent-Length: {total}\r\n"
+                "Content-Type: application/octet-stream\r\n\r\n".encode()
+            )
+            for chunk in body_chunks:
+                await asyncio.sleep(0.15)
+                writer.write(chunk)
+                await writer.drain()
+        writer.close()
+        with contextlib.suppress(Exception):
+            await writer.wait_closed()
+
+    server = await asyncio.start_server(slow, "127.0.0.1", 0)
+    upstream_port = server.sockets[0].getsockname()[1]
+    # The transfer spans ~0.45 s, well beyond the 0.2 s per-read budget, while
+    # every individual gap stays inside it.
+    gateway, pool, port = await _gateway_for_upstream(db, upstream_port, timeout_s=0.2)
+    try:
+        data = await _read_raw_response(
+            port, b"GET http://example.invalid/slow HTTP/1.1\r\nHost: example.invalid\r\n\r\n"
+        )
+        assert data.count(b"HTTP/1.1 ") == 1
+        assert data.endswith(b"alphabetagamma")
+        await _wait_idle(gateway)
+        assert pool.all()[0].fail_count == 0
+    finally:
+        await gateway.stop()
+        server.close()
+        await server.wait_closed()
+
+
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
+async def test_rejects_content_length_with_transfer_encoding(harness):
+    """RFC 9112 section 6.1: ambiguous framing must be refused."""
+    code, _, _ = await _raw_request(
+        harness.port,
+        "POST http://127.0.0.1:1/x HTTP/1.1",
+        [
+            ("Host", "127.0.0.1:1"),
+            ("Content-Length", "5"),
+            ("Transfer-Encoding", "chunked"),
+            ("Connection", "close"),
+        ],
+    )
+    assert code == 400
+
+
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
+async def test_rejects_conflicting_content_length_headers(harness):
+    """RFC 9112 section 6.3: differing lengths are an unrecoverable error."""
+    code, _, _ = await _raw_request(
+        harness.port,
+        "POST http://127.0.0.1:1/x HTTP/1.1",
+        [
+            ("Host", "127.0.0.1:1"),
+            ("Content-Length", "5"),
+            ("Content-Length", "6"),
+            ("Connection", "close"),
+        ],
+    )
+    assert code == 400
+
+
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
+async def test_rejects_transfer_encoding_without_final_chunked(harness):
+    """RFC 9112 section 6.3: a non-final chunked coding cannot be framed."""
+    code, _, _ = await _raw_request(
+        harness.port,
+        "POST http://127.0.0.1:1/x HTTP/1.1",
+        [
+            ("Host", "127.0.0.1:1"),
+            ("Transfer-Encoding", "gzip"),
+            ("Connection", "close"),
+        ],
+    )
+    assert code == 400
+
+
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
+async def test_accepts_duplicate_identical_content_length(harness, upstream_proxy, origin):
+    """RFC 9112 section 6.3 allows equal repeats, collapsed to one value."""
+    code, _, body = await _raw_request(
+        harness.port,
+        f"POST http://127.0.0.1:{origin.port}/dup HTTP/1.1",
+        [
+            ("Host", f"127.0.0.1:{origin.port}"),
+            ("Content-Length", "4"),
+            ("Content-Length", "4"),
+            ("Connection", "close"),
+        ],
+        body=b"ping",
+    )
+    assert code == 200
+    assert body == b"origin ok"
+    assert upstream_proxy.received_headers[-1]["content-length"] == "4"
+
+
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
+async def test_rejects_negative_chunk_size(db):
+    """RFC 9112 section 7.1: chunk-size is 1*HEXDIG, so a sign is invalid.
+
+    A silent upstream is used deliberately: any response other than the
+    gateway's own 400 would prove the malformed framing was forwarded.
+    """
+
+    async def silent(reader, writer):
+        with contextlib.suppress(Exception):
+            await reader.read(65536)
+            with contextlib.suppress(TimeoutError):
+                # Wait for the gateway to close once it has answered.
+                await asyncio.wait_for(reader.read(), 5)
+        writer.close()
+        with contextlib.suppress(Exception):
+            await writer.wait_closed()
+
+    server = await asyncio.start_server(silent, "127.0.0.1", 0)
+    upstream_port = server.sockets[0].getsockname()[1]
+    gateway, pool, port = await _gateway_for_upstream(db, upstream_port)
+    try:
+        # Bounded read: the old unbounded read(-1) would hang here.
+        data = await _read_raw_response(
+            port,
+            b"POST http://example.invalid/chunk HTTP/1.1\r\n"
+            b"Host: example.invalid\r\n"
+            b"Transfer-Encoding: chunked\r\n\r\n"
+            b"-1\r\nAAAA",
+            timeout=1.5,
+        )
+        assert data.startswith(b"HTTP/1.1 400")
+        await _wait_idle(gateway)
+        # A malformed client body is the client's error, not the proxy's.
+        assert pool.all()[0].fail_count == 0
+    finally:
+        await gateway.stop()
+        server.close()
+        await server.wait_closed()
 
 
 @pytest.mark.parametrize("gateway_type", ["http", "socks5"])

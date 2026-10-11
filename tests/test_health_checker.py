@@ -284,3 +284,40 @@ async def test_test_all_does_not_restart_finished_proxies_while_batch_runs(db, u
         assert all(p.success_count == 1 for p in pool.all())
     finally:
         await checker.stop()
+
+
+async def test_proxy_that_failed_its_first_check_is_still_scheduled(
+    db: aiosqlite.Connection,
+    upstream: FakeProxy,
+) -> None:
+    """An ``unknown`` proxy with a past check must not be stranded forever.
+
+    Before the fix, the failed check set ``last_checked_at`` while leaving the
+    status at ``unknown``, which matched no branch of ``due()``: the proxy was
+    never retested and never reached quarantine without manual action.
+    """
+    upstream.status = 403
+    now = datetime(2026, 10, 7, tzinfo=UTC)
+    key = Fernet.generate_key()
+    pool = await Pool.load(db, key, clock=lambda: now)
+    checker = HealthChecker(
+        pool, key, probe_url="http://probe.invalid", clock=lambda: now, interval_s=300
+    )
+    proxy = await pool.add(parse_line(f"user:pw@127.0.0.1:{upstream.port}"))
+
+    assert [p.id for p in checker.due()] == [proxy.id]
+    await checker.check_all(checker.due())
+    assert pool.all()[0].status == "unknown"
+    assert pool.all()[0].fail_count == 1
+
+    # The next sweep must still select it, every interval, until it quarantines.
+    for _ in range(2):
+        now += timedelta(seconds=301)
+        due = checker.due()
+        assert [p.id for p in due] == [proxy.id]
+        await checker.check_all(due)
+
+    final = pool.all()[0]
+    assert final.consec_fails == 3
+    assert final.status == "quarantine"
+    assert final.quarantine_until == now + timedelta(minutes=10)

@@ -309,6 +309,14 @@ class Pool:
         # Gateway reasons are classified by the caller; never persist raw exceptions.
         return await self._outcome(proxy_id, False, None)
 
+    async def mark_tunnel_success(self, proxy_id: int) -> Proxy:
+        """Record liveness for a tunnel without touching the latency history.
+
+        A CONNECT tunnel has no meaningful request latency; feeding a zero into
+        the checks median would collapse ``latency_ms`` and inflate the score.
+        """
+        return await self._outcome(proxy_id, True, None)
+
     async def quarantine(self, proxy_id: int, minutes: int = 10) -> Proxy:
         if minutes < 1:
             raise ValueError("Quarantine duration must be positive")
@@ -346,7 +354,9 @@ class Pool:
             until = None if ok else old.quarantine_until
             if not ok and failures >= 3:
                 until = now + timedelta(minutes=10)
-            history = (*self._latencies.get(proxy_id, ()), latency_ms)[-20:]
+            history = self._latencies.get(proxy_id, ())
+            if latency_ms is not None:
+                history = (*history, latency_ms)[-20:]
             measured = [value for value in history if value is not None]
             median_ms = round(median(measured)) if measured else old.latency_ms
             updated = Proxy.model_validate(
