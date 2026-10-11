@@ -32,6 +32,7 @@ from app.crypto import decrypt_password
 from app.models import ListenerStatus, Proxy
 from app.pool import Pool
 from app.rotator import Rotator
+from app.socks_upstream import open_socks_tunnel
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,7 @@ _IDEMPOTENT_METHODS: Final[frozenset[str]] = frozenset(
 )
 
 _VIA_TOKEN: Final[str] = "1.1 proxy-rotator"
+_CONTINUE: Final[bytes] = b"HTTP/1.1 100 Continue\r\n\r\n"
 _MAX_REQUEST_LINE: Final[int] = 8192
 _MAX_HEADERS_BYTES: Final[int] = 32 * 1024
 _TUNNEL_CHUNK: Final[int] = 64 * 1024
@@ -144,7 +146,7 @@ async def _read_headers(reader: asyncio.StreamReader) -> list[tuple[str, str]]:
     headers: list[tuple[str, str]] = []
     total = 0
     while True:
-        line = await reader.readuntil(b"\r\n")
+        line = await _read_line(reader)
         total += len(line)
         if total > _MAX_HEADERS_BYTES:
             raise HttpGatewayError("Header block too large")
@@ -369,19 +371,15 @@ class HttpGateway:
         self, proxy: Proxy, target_host: str, target_port: int
     ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         if proxy.scheme == "socks5":
-            # aiohttp_socks exposes a dedicated helper for raw TCP tunnels.
-            from aiohttp_socks import open_connection  # noqa: PLC0415
-
             password = decrypt_password(proxy.password_enc.get_secret_value(), self._key)
-            reader, writer = await open_connection(
-                proxy_url=(
-                    f"socks5://{proxy.username}:{password.get_secret_value()}"
-                    f"@{proxy.host}:{proxy.port}"
-                ),
-                host=target_host,
-                port=target_port,
+            return await open_socks_tunnel(
+                proxy_host=proxy.host,
+                proxy_port=proxy.port,
+                username=proxy.username,
+                password=password.get_secret_value(),
+                dest_host=target_host,
+                dest_port=target_port,
             )
-            return reader, writer
 
         # HTTP(S) upstream: send CONNECT and bridge once we see 2xx.
         reader_up, writer_up = await asyncio.open_connection(
@@ -449,13 +447,26 @@ class HttpGateway:
         headers = _normalize_body_framing(headers)
 
         clean_headers = _append_via(_strip_hop_by_hop(headers))
+        # The expectation is answered here, so it must not travel further.
+        clean_headers = [
+            (name, value) for name, value in clean_headers if name.lower() != "expect"
+        ]
         header_names = {name.lower() for name, _ in clean_headers}
         if "host" not in header_names:
             host_value = url.host if url.port is None else f"{url.host}:{url.port}"
             clean_headers.append(("Host", host_value))
 
+        if _expects_continue(headers):
+            # RFC 9110 section 10.1.1: a client may wait for the interim
+            # response before sending its body. Answering it here removes the
+            # deadlock, where a compliant client waits for 100 while the gateway
+            # waits for the body.
+            with contextlib.suppress(ConnectionError, OSError):
+                writer.write(_CONTINUE)
+                await writer.drain()
+
         # Buffer small bodies so we can retry on burn; otherwise stream once.
-        body_bytes = await _collect_body_if_small(reader, headers)
+        body_bytes = await _collect_body_if_small(reader, headers, self._timeout_s)
         has_body_stream = body_bytes is None and _has_body(headers)
         if has_body_stream or method not in _IDEMPOTENT_METHODS:
             # A streamed body cannot be rewound, and a non-idempotent method
@@ -463,7 +474,9 @@ class HttpGateway:
             # replayed once the origin may have applied it. Both take exactly
             # one attempt, whatever the outcome.
             if has_body_stream:
-                attempt_body: AsyncIterator[bytes] | None = _request_body_stream(reader, headers)
+                attempt_body: AsyncIterator[bytes] | None = _request_body_stream(
+                    reader, headers, self._timeout_s
+                )
             else:
                 attempt_body = _bytes_async_iter(body_bytes) if body_bytes is not None else None
             await self._single_forward(writer, method, url, clean_headers, attempt_body)
@@ -795,6 +808,13 @@ def _has_body(headers: list[tuple[str, str]]) -> bool:
     return False
 
 
+def _expects_continue(headers: list[tuple[str, str]]) -> bool:
+    """True when the client asked for a 100 Continue interim response."""
+    return any(
+        name.lower() == "expect" and "100-continue" in value.lower() for name, value in headers
+    )
+
+
 def _normalize_body_framing(headers: list[tuple[str, str]]) -> list[tuple[str, str]]:
     """Validate request framing and collapse Content-Length per RFC 9112.
 
@@ -842,8 +862,37 @@ def _normalize_body_framing(headers: list[tuple[str, str]]) -> list[tuple[str, s
     return collapsed
 
 
+async def _read_line(reader: asyncio.StreamReader) -> bytes:
+    """Read one CRLF-terminated line.
+
+    A line longer than the stream limit raises ``LimitOverrunError`` before any
+    length check can run; without this mapping it escaped as a generic 500.
+    """
+    try:
+        return await reader.readuntil(b"\r\n")
+    except asyncio.LimitOverrunError as exc:
+        raise HttpGatewayError("Line too long") from exc
+
+
+async def _read_client(
+    reader: asyncio.StreamReader, count: int, timeout_s: float, *, exact: bool
+) -> bytes:
+    """Read client bytes under an idle budget.
+
+    A client that announces a body and then goes silent would otherwise hold the
+    gateway open indefinitely (slow-loris after the headers). Raising
+    ``HttpGatewayError`` keeps that a client error: it answers 400 and never
+    charges the failure to the proxy.
+    """
+    try:
+        async with asyncio.timeout(timeout_s):
+            return await (reader.readexactly(count) if exact else reader.read(count))
+    except TimeoutError as exc:
+        raise HttpGatewayError("Client body timeout") from exc
+
+
 async def _collect_body_if_small(
-    reader: asyncio.StreamReader, headers: list[tuple[str, str]]
+    reader: asyncio.StreamReader, headers: list[tuple[str, str]], timeout_s: float
 ) -> bytes | None:
     """Return the request body as bytes when small enough to buffer for retry.
 
@@ -871,7 +920,7 @@ async def _collect_body_if_small(
         return None
     if length > _MAX_BUFFERED_BODY:
         return None  # too large to buffer
-    return await reader.readexactly(length)
+    return await _read_client(reader, length, timeout_s, exact=True)
 
 
 async def _bytes_async_iter(data: bytes) -> AsyncIterator[bytes]:
@@ -882,7 +931,7 @@ async def _bytes_async_iter(data: bytes) -> AsyncIterator[bytes]:
 
 
 def _request_body_stream(
-    reader: asyncio.StreamReader, headers: list[tuple[str, str]]
+    reader: asyncio.StreamReader, headers: list[tuple[str, str]], timeout_s: float
 ) -> AsyncIterator[bytes] | None:
     encoding = ""
     length_text = ""
@@ -892,28 +941,30 @@ def _request_body_stream(
         elif name.lower() == "content-length":
             length_text = value
     if "chunked" in encoding:
-        return _chunked_body(reader)
+        return _chunked_body(reader, timeout_s)
     if length_text and length_text.isdigit():
         length = int(length_text)
         if length <= 0:
             return None
-        return _fixed_body(reader, length)
+        return _fixed_body(reader, length, timeout_s)
     return None
 
 
-async def _fixed_body(reader: asyncio.StreamReader, length: int) -> AsyncIterator[bytes]:
+async def _fixed_body(
+    reader: asyncio.StreamReader, length: int, timeout_s: float
+) -> AsyncIterator[bytes]:
     remaining = length
     while remaining:
-        chunk = await reader.read(min(remaining, _TUNNEL_CHUNK))
+        chunk = await _read_client(reader, min(remaining, _TUNNEL_CHUNK), timeout_s, exact=False)
         if not chunk:
             raise HttpGatewayError("Client closed before body completion")
         remaining -= len(chunk)
         yield chunk
 
 
-async def _chunked_body(reader: asyncio.StreamReader) -> AsyncIterator[bytes]:
+async def _chunked_body(reader: asyncio.StreamReader, timeout_s: float) -> AsyncIterator[bytes]:
     while True:
-        size_line = await reader.readuntil(b"\r\n")
+        size_line = await _read_line(reader)
         if len(size_line) > _MAX_CHUNK_LINE_BYTES:
             raise HttpGatewayError("Chunk header too long")
         # RFC 9112 section 7.1: ``chunk-size = 1*HEXDIG``. Rejecting anything
@@ -925,15 +976,17 @@ async def _chunked_body(reader: asyncio.StreamReader) -> AsyncIterator[bytes]:
         size = int(size_text, 16)
         if size == 0:
             for _ in range(_MAX_TRAILER_FIELDS):
-                if await reader.readuntil(b"\r\n") == b"\r\n":
+                if await _read_line(reader) == b"\r\n":
                     return
             raise HttpGatewayError("Trailer section too large")
         remaining = size
         while remaining:
-            chunk = await reader.read(min(remaining, _TUNNEL_CHUNK))
+            chunk = await _read_client(
+                reader, min(remaining, _TUNNEL_CHUNK), timeout_s, exact=False
+            )
             if not chunk:
                 raise HttpGatewayError("Chunked body truncated")
             remaining -= len(chunk)
             yield chunk
-        if await reader.readexactly(2) != b"\r\n":
+        if await _read_client(reader, 2, timeout_s, exact=True) != b"\r\n":
             raise HttpGatewayError("Missing CRLF after chunk")

@@ -224,5 +224,46 @@ Gate: `pytest -q` → 311 passed, 1 skipped, 1 failed; `ruff check app tests` an
 `mypy app` clean; `pip-audit -r requirements.txt` → no known vulnerabilities.
 The single failure remains the sandbox-blocked `test_start_command.py`.
 
+### Complément d'entrée (même journée)
+
+- [x] A5 — `Expect: 100-continue` est désormais honoré par le gateway lui-même
+  avant de lire le corps (RFC 9110 §10.1.1) et l'en-tête n'est pas transmis :
+  un client conforme ne peut plus s'interbloquer face à un gateway qui attend le
+  corps. Test : `test_expect_continue_is_answered_locally`.
+- [x] A6 — la lecture du corps client est bornée par un budget d'inactivité. Un
+  client qui annonce un corps puis se tait reçoit un 400 au lieu de retenir la
+  connexion indéfiniment, et la panne est classée comme erreur *client* : elle
+  ne marque plus le proxy en échec. Tests :
+  `test_stalled_request_body_is_a_client_error`,
+  `test_stalled_chunked_upload_does_not_penalise_the_proxy`.
+- [x] A10 — les identifiants SOCKS5 amont sont passés à `python_socks` en
+  arguments nommés au lieu d'être interpolés dans une URL `socks5://`. Cette URL
+  était analysée avec `unquote` : `p%41ss` devenait silencieusement `pAss` et
+  `/ ? # [` levaient un `ValueError`. Passer les valeurs directement supprime
+  l'étape d'encodage au lieu de tenter de l'échapper, et retire au passage
+  l'usage de `aiohttp_socks.open_connection`, déprécié (il avertissait à chaque
+  tunnel et levait sous `filterwarnings=error`). `python-socks` est maintenant
+  déclaré explicitement. Nouveau module `app/socks_upstream.py`, test
+  `test_connect_through_socks5_upstream_sends_exact_credentials` (avec un vrai
+  faux serveur SOCKS5 qui refuse le tunnel si les identifiants diffèrent).
+- [x] A11 — `LimitOverrunError` sur une ligne d'en-tête trop longue répond 400
+  au lieu de s'échapper en 500. Test :
+  `test_overlong_header_line_is_a_client_error`.
+
+Les cinq tests ci-dessus ont été vérifiés en mutation : chacun échoue contre le
+code d'origine.
+
+Gate: `pytest -q` → 316 passed, 1 skipped, 1 failed; Ruff et mypy propres ;
+`pip-audit` sans vulnérabilité connue.
+
+### F1 — preuve de rotation, toujours bloquée
+
+`scripts/smoke_gateway.sh` n'a **pas** pu être exécuté : la base ne contient
+aucun proxy vivant (0 `alive`, 74 `unknown`, 18 `quarantine`, 8 `dead`) et la
+dernière réussite date du 2026-10-09T08:27. Aucune preuve de rotation n'existe
+donc toujours, et rien dans ces correctifs ne peut en produire une sans
+upstreams fonctionnels. La condition reste : deux proxies vivants avec deux IP
+de sortie distinctes.
+
 Still open from the audit: A5–A7, A10–A17 (input hardening and the SOCKS5
 credential URL), B3–B8, C2, C3, C5, C6, E3–E8, F1–F9, G1–G5, H3, H4.

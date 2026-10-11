@@ -16,12 +16,11 @@ import logging
 import struct
 from typing import Final
 
-from aiohttp_socks import open_connection as socks_open_connection  # type: ignore[import-untyped]
-
 from app.crypto import decrypt_password
 from app.models import ListenerStatus, Proxy
 from app.pool import Pool
 from app.rotator import Rotator
+from app.socks_upstream import open_socks_tunnel
 
 logger = logging.getLogger(__name__)
 
@@ -267,15 +266,14 @@ class SocksGateway:
     ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         if proxy.scheme == "socks5":
             password = decrypt_password(proxy.password_enc.get_secret_value(), self._key)
-            reader, writer = await socks_open_connection(
-                proxy_url=(
-                    f"socks5://{proxy.username}:{password.get_secret_value()}"
-                    f"@{proxy.host}:{proxy.port}"
-                ),
-                host=target_host,
-                port=target_port,
+            return await open_socks_tunnel(
+                proxy_host=proxy.host,
+                proxy_port=proxy.port,
+                username=proxy.username,
+                password=password.get_secret_value(),
+                dest_host=target_host,
+                dest_port=target_port,
             )
-            return reader, writer
 
         from app.gateway_http import _basic_auth, _read_headers  # noqa: PLC0415
 

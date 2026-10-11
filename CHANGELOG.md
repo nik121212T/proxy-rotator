@@ -1,5 +1,45 @@
 # Changelog
 
+## Post-audit fixes — input hardening (2026-10-12)
+
+### Fixed
+
+- **`Expect: 100-continue` was forwarded but never honoured** (A5). A compliant
+  client waited for the interim response while the gateway waited for the body.
+  The expectation is now answered locally per RFC 9110 §10.1.1 and the header is
+  not forwarded upstream.
+- **No timeout on the client body** (A6). A client that announced a body and then
+  went silent held a task and its buffer open indefinitely. Reads now carry an
+  idle budget, the failure is classified as a client error (400, never a proxy
+  penalty), and both the buffered and chunked paths are covered.
+- **SOCKS5 upstream credentials were mangled by URL parsing** (A10). They were
+  interpolated into a `socks5://` URL that `python_socks` parses with
+  `urlparse` + `unquote`: `p%41ss` silently became `pAss` — burning a working
+  proxy for nothing — while `pa/ss`, `pa?ss`, `pa#ss` and `pa[ss` raised
+  `ValueError`, which escaped the retry handler as a 500 per request.
+  Credentials are now passed as keyword arguments in `app/socks_upstream.py`, so
+  there is no encoding step to get wrong. This also drops the deprecated
+  `aiohttp_socks.open_connection`, which warned on every tunnel.
+  `python-socks==2.8.2` is now declared explicitly.
+- **An over-long header line answered 500 instead of 400** (A11):
+  `LimitOverrunError` from the stream limit is now mapped to a client error.
+
+### Tests
+
+- Added 5 regression tests, each verified to fail against the previous code. The
+  SOCKS5 test drives a real RFC 1928/1929 fake upstream that refuses the tunnel
+  unless the exact stored credentials arrive, closing a coverage gap: no test
+  previously reached an HTTP CONNECT through a SOCKS5 upstream.
+
+### Verification
+
+- `pytest -q` → 316 passed, 1 skipped, 1 failed; Ruff and mypy clean;
+  `pip-audit -r requirements.txt` → no known vulnerabilities. The single failure
+  is the sandbox-blocked `test_start_command.py`.
+- **The three-exit-IP proof is still missing**: the pool holds no live proxy
+  (0 `alive`) and the last successful check was 2026-10-09T08:27, so
+  `scripts/smoke_gateway.sh` cannot produce it. Recorded in `TASKS.md`.
+
 ## Post-audit fixes — Palier 2 (2026-10-11)
 
 Findings and evidence: `AUDIT.md`.

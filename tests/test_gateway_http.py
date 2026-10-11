@@ -398,11 +398,22 @@ async def _wait_idle(gateway, timeout=1.0):
         await asyncio.sleep(0.005)
 
 
-async def _gateway_for_upstream(db, upstream_port, *, timeout_s=15.0, max_retry_per_request=2):
+async def _gateway_for_upstream(
+    db,
+    upstream_port,
+    *,
+    timeout_s=15.0,
+    max_retry_per_request=2,
+    scheme="http",
+    username="gatewayuser",
+    password="secret-value",  # noqa: S107 - fixture credential, never a real secret
+):
     """Gateway with a single proxy aimed at a locally controlled upstream."""
     key = Fernet.generate_key()
     pool = await Pool.load(db, key)
-    proxy = await pool.add(parse_line(f"gatewayuser:secret-value@127.0.0.1:{upstream_port}"))
+    proxy = await pool.add(
+        parse_line(f"{scheme}://{username}:{password}@127.0.0.1:{upstream_port}")
+    )
     await pool.mark_success(proxy.id, 10)
     gateway = HttpGateway(
         pool,
@@ -417,11 +428,88 @@ async def _gateway_for_upstream(db, upstream_port, *, timeout_s=15.0, max_retry_
     return gateway, pool, int(bound.rsplit(":", 1)[1])
 
 
+@dataclass
+class FakeSocks5Upstream:
+    """Minimal RFC 1928/1929 SOCKS5 server that records the credentials it sees.
+
+    Refuses to hand back the tunnel unless username/password authentication
+    succeeds, so a mangled credential cannot pass unnoticed.
+    """
+
+    host: str = "127.0.0.1"
+    port: int = 0
+    username: str = ""
+    password: str = ""
+    version_seen: int = 0
+    server: asyncio.base_events.Server | None = None
+    handlers: set[asyncio.Task[None]] = field(default_factory=set)
+
+    async def start(self) -> None:
+        self.server = await asyncio.start_server(self._spawn, self.host, 0)
+        self.port = self.server.sockets[0].getsockname()[1]  # type: ignore[index]
+
+    async def stop(self) -> None:
+        if self.server is None:
+            return
+        self.server.close()
+        await self.server.wait_closed()
+        pending = list(self.handlers)
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        self.handlers.clear()
+        self.server = None
+
+    def _spawn(self, reader, writer) -> None:
+        task = asyncio.create_task(self._handle(reader, writer))
+        self.handlers.add(task)
+        task.add_done_callback(self.handlers.discard)
+
+    async def _handle(self, reader, writer) -> None:
+        try:
+            self.version_seen, nmethods = await reader.readexactly(2)
+            await reader.readexactly(nmethods)
+            writer.write(bytes([5, 2]))  # offer username/password authentication
+            await writer.drain()
+
+            await reader.readexactly(1)  # auth version
+            ulen = (await reader.readexactly(1))[0]
+            self.username = (await reader.readexactly(ulen)).decode()
+            plen = (await reader.readexactly(1))[0]
+            self.password = (await reader.readexactly(plen)).decode()
+            writer.write(bytes([1, 0]))  # authentication succeeded
+            await writer.drain()
+
+            header = await reader.readexactly(4)  # version, command, reserved, atyp
+            if header[3] == 1:
+                await reader.readexactly(4)
+            elif header[3] == 3:
+                await reader.readexactly((await reader.readexactly(1))[0])
+            elif header[3] == 4:
+                await reader.readexactly(16)
+            await reader.readexactly(2)  # port
+            writer.write(bytes([5, 0, 0, 1, 0, 0, 0, 0, 0, 0]))
+            await writer.drain()
+            writer.write(b"TUNNEL-OK")
+            await writer.drain()
+            await asyncio.sleep(0.5)
+        except (asyncio.IncompleteReadError, ConnectionError, OSError, IndexError):
+            pass
+        finally:
+            writer.close()
+            with contextlib.suppress(ConnectionError, OSError, TimeoutError):
+                await asyncio.wait_for(writer.wait_closed(), 1)
+
+
 async def _read_raw_response(port, request, timeout=5.0):
     """Send raw bytes and collect everything the gateway writes back."""
     reader, writer = await asyncio.open_connection("127.0.0.1", port)
-    writer.write(request)
-    await writer.drain()
+    with contextlib.suppress(ConnectionError, OSError):
+        # A rejected oversized request can close the socket while it is still
+        # being written; the response is what the assertions care about.
+        writer.write(request)
+        await writer.drain()
     data = b""
     with contextlib.suppress(TimeoutError, ConnectionError, OSError, asyncio.IncompleteReadError):
         while True:
@@ -896,3 +984,144 @@ async def test_https_upstream_starts_tls_before_sending_credentials(db, gateway_
         await gateway.stop()
         server.close()
         await server.wait_closed()
+
+
+# ── Expect: 100-continue (RFC 9110 section 10.1.1) ──────────────────────────
+
+
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
+async def test_expect_continue_is_answered_locally(db, upstream_proxy, origin):
+    """A complying client must not deadlock waiting for the interim response."""
+    gateway, _, port = await _gateway_for_upstream(db, upstream_proxy.port)
+    try:
+        data = await _read_raw_response(
+            port,
+            (
+                f"POST http://127.0.0.1:{origin.port}/expect HTTP/1.1\r\n"
+                f"Host: 127.0.0.1:{origin.port}\r\n"
+                "Content-Length: 4\r\n"
+                "Expect: 100-continue\r\n"
+                "Connection: close\r\n\r\n"
+                "ping"
+            ).encode(),
+            timeout=3.0,
+        )
+        interim, _, rest = data.partition(b"\r\n\r\n")
+        assert interim == b"HTTP/1.1 100 Continue"
+        assert rest.startswith(b"HTTP/1.1 200")
+        # We answered the expectation, so it must not travel upstream.
+        assert "expect" not in upstream_proxy.received_headers[-1]
+    finally:
+        await gateway.stop()
+
+
+# ── Client body timeouts (slow-loris after the headers) ─────────────────────
+
+
+async def _silent_upstream() -> tuple[asyncio.base_events.Server, int]:
+    """A server that accepts the connection and never answers."""
+
+    async def handler(reader, writer):
+        with contextlib.suppress(Exception):
+            await reader.read(65536)
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(reader.read(), 5)
+        writer.close()
+        with contextlib.suppress(Exception):
+            await writer.wait_closed()
+
+    server = await asyncio.start_server(handler, "127.0.0.1", 0)
+    return server, server.sockets[0].getsockname()[1]  # type: ignore[index]
+
+
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
+async def test_stalled_request_body_is_a_client_error(db):
+    server, upstream_port = await _silent_upstream()
+    gateway, pool, port = await _gateway_for_upstream(db, upstream_port, timeout_s=0.3)
+    try:
+        data = await _read_raw_response(
+            port,
+            b"POST http://example.invalid/slow HTTP/1.1\r\n"
+            b"Host: example.invalid\r\n"
+            b"Content-Length: 10\r\n\r\n"
+            b"X",
+            timeout=2.0,
+        )
+        assert data.startswith(b"HTTP/1.1 400")
+        await _wait_idle(gateway)
+        assert pool.all()[0].fail_count == 0
+    finally:
+        await gateway.stop()
+        server.close()
+        await server.wait_closed()
+
+
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
+async def test_stalled_chunked_upload_does_not_penalise_the_proxy(db):
+    """A client that stops mid-chunk is its own error, not the proxy's."""
+    server, upstream_port = await _silent_upstream()
+    gateway, pool, port = await _gateway_for_upstream(db, upstream_port, timeout_s=0.3)
+    try:
+        data = await _read_raw_response(
+            port,
+            b"POST http://example.invalid/chunked HTTP/1.1\r\n"
+            b"Host: example.invalid\r\n"
+            b"Transfer-Encoding: chunked\r\n\r\n"
+            b"5\r\nAB",
+            timeout=2.0,
+        )
+        assert data.startswith(b"HTTP/1.1 400")
+        await _wait_idle(gateway)
+        assert pool.all()[0].fail_count == 0
+    finally:
+        await gateway.stop()
+        server.close()
+        await server.wait_closed()
+
+
+# ── Transport limits ───────────────────────────────────────────────────────
+
+
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
+async def test_overlong_header_line_is_a_client_error(harness):
+    """An over-long line hits the stream limit before any length check runs."""
+    data = await _read_raw_response(
+        harness.port,
+        b"GET http://127.0.0.1:1/ HTTP/1.1\r\n"
+        b"Host: 127.0.0.1:1\r\n"
+        b"X-Oversized: " + b"a" * 70000 + b"\r\n\r\n",
+        timeout=2.0,
+    )
+    assert data.startswith(b"HTTP/1.1 400")
+
+
+# ── SOCKS5 upstream credentials (app/proxy_url.py) ─────────────────────────
+
+
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
+async def test_connect_through_socks5_upstream_sends_exact_credentials(db):
+    """Credentials the parser accepts must survive the URL handed to python_socks.
+
+    ``p%41/ss`` is legal input; interpolated raw it arrives as ``pA/ss`` (or
+    raises), so the upstream refuses the tunnel and a working proxy is burned.
+    """
+    upstream = FakeSocks5Upstream()
+    await upstream.start()
+    password = "p%41/ss"
+    gateway, _, port = await _gateway_for_upstream(
+        db, upstream.port, scheme="socks5", password=password
+    )
+    try:
+        data = await _read_raw_response(
+            port,
+            b"CONNECT 127.0.0.1:9 HTTP/1.1\r\nHost: 127.0.0.1:9\r\n\r\n",
+            timeout=3.0,
+        )
+        assert data.startswith(b"HTTP/1.1 200")
+        assert b"TUNNEL-OK" in data
+        assert upstream.version_seen == 5
+        assert upstream.username == "gatewayuser"
+        assert upstream.password == password
+    finally:
+        await gateway.stop()
+        await upstream.stop()

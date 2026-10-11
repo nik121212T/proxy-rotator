@@ -12,6 +12,9 @@ jinja2==3.1.6
 aiosqlite==0.20.0
 aiohttp==3.14.5
 aiohttp-socks==0.9.1
+# Imported directly by app/socks_upstream.py: credentials are passed as keyword
+# arguments, because a socks5:// URL would be unquoted by the parser.
+python-socks==2.8.2
 cryptography==50.0.2
 cachetools==5.5.0
 click==8.1.7

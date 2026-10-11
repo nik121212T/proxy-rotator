@@ -48,7 +48,26 @@ documentaire de **C4**.
   inexistants (lint rule, `app.log.mask()`, `tests/security/`, `pip-audit` CI) et
   liste les risques résiduels.
 
-**Restent ouverts** : A5–A7, A10–A17, B3–B8, C2, C3, C5, C6, E3–E8, F1–F9,
+**Complément d'entrée** (même journée) : **A5, A6, A10 et A11** sont corrigés,
+chacun avec un test vérifié en mutation.
+
+- **A5** — `Expect: 100-continue` est traité par le gateway (RFC 9110 §10.1.1) et
+  l'en-tête n'est plus transmis ; plus d'interblocage client/serveur.
+- **A6** — budget d'inactivité sur la lecture du corps client, classé en erreur
+  *client* (400) et non en échec du proxy.
+- **A10** — les identifiants SOCKS5 amont ne passent plus par une URL `socks5://`
+  (dont le `unquote` transformait `p%41ss` en `pAss` et faisait lever un
+  `ValueError` sur `/ ? # [`) : ils sont passés en arguments nommés à
+  `python_socks` depuis `app/socks_upstream.py`. L'usage déprécié de
+  `aiohttp_socks.open_connection` disparaît au passage.
+- **A11** — `LimitOverrunError` sur une ligne d'en-tête trop longue → 400 au lieu
+  de 500.
+
+**F1 reste ouvert et hors de portée** : aucun proxy vivant dans la base
+(0 `alive`, dernière réussite le 2026-10-09T08:27), donc aucune preuve de rotation
+ne peut être produite.
+
+**Restent ouverts** : A7, A12–A17, B3–B8, C2, C3, C5, C6, E3–E8, F1–F9,
 G1–G5, H3, H4.
 
 ## Résultat des vérifications globales
