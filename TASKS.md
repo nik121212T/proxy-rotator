@@ -173,3 +173,56 @@ Gate: `pytest -q` → 291 passed, 1 skipped, 1 failed; `ruff check app tests` an
 `mypy app` clean. The single failure is `test_start_command.py`, which needs
 `/bin/ps` and is blocked in the agent sandbox (see AUDIT.md §6 E7); it is
 unrelated to these changes and fails identically on the unmodified tree.
+
+## Post-audit corrections (Palier 2)
+
+- [x] H1 — dependency advisories cleared and kept cleared. `fastapi` 0.115.0 →
+  0.143.0, explicit `starlette==1.7.0` (seven advisories; the minimum fixing
+  version was 1.3.1), `aiohttp` 3.10.11 → 3.14.5, `cryptography` 43.0.1 →
+  50.0.2, `anyio` 4.11.0 → 4.15.1, `pytest` 8.3.3 → 9.1.1 with
+  `pytest-asyncio` 1.4.0 and `hypothesis` 6.169.0, `pip-audit` 2.10.1.
+  `pip-audit -r requirements.txt` went from **49 advisories in 5 packages** to
+  **no known vulnerabilities**. The dev dependency `httpx` is replaced by
+  `httpx2`, which the Starlette 1.x TestClient requires. A new blocking `audit`
+  job in `.github/workflows/ci.yml` keeps it that way — `docs/SECURITY.md`
+  promised that step while the workflow never ran it, which is how the
+  advisories accumulated.
+  - Code changes the bump required: `aiohttp.BasicAuth` and `proxy_auth` are
+    deprecated in 3.14, so proxy credentials now travel in the proxy URL
+    userinfo (yarl encodes them correctly, aiohttp derives the header);
+    `app/routes/events.py` wraps its teardown `gather` in
+    `suppress(asyncio.CancelledError)`, because a client disconnect cancels the
+    handler mid-cleanup and Starlette 1.x surfaces that as an escaped
+    `CancelledError`; the fake upstreams in the gateway tests now own their
+    accepted handler tasks so none survive the loop.
+- [x] C1 — exposure guards. `app/security.py` adds three ASGI middlewares:
+  `HostGuard` (unknown `Host` → 400, defeats DNS rebinding), `CrossSiteGuard`
+  (state-changing request a browser marks cross-site, a foreign `Origin` or
+  `Origin: null` → 403, defeats CSRF against the loopback API), and
+  `TokenGuard` (no-op unless `ADMIN_TOKEN` is set; then every route except
+  `/healthz`, `/login` and `/static/*` needs the token as a Bearer header or
+  through the cookie set by the new `/login` page).
+  A non-loopback `BIND_HOST` is now **refused** (EX_CONFIG 78) unless
+  `ALLOW_REMOTE_BIND=true`, a non-empty `ADMIN_TOKEN` and a non-empty
+  `ADMIN_ALLOWED_HOSTS` are all present; the startup warning states that the
+  gateways stay unauthenticated. This deliberately supersedes CLAUDE.md rule 3
+  ("flip `BIND_HOST=0.0.0.0`" as the only step), which the audit found would
+  publish an unauthenticated admin UI *and* two open proxies.
+  - Verified on a real uvicorn instance, not only through ASGI tests:
+    `/healthz` 200 without a token, `/api/pool/stats` 401 without and 200 with
+    a Bearer token, foreign `Host` 400, cross-site POST 403, same-origin POST
+    200, dashboard 200 with the login cookie. The default loopback setup without
+    `ADMIN_TOKEN` is unchanged (dashboard, API and export all 200).
+- [x] C4 (partial) — `docs/SECURITY.md` no longer claims controls that do not
+  exist: the "enforced by lint rule" masking claim, `app.log.mask()` and
+  `pytest tests/security/` are replaced with what is actually true, the
+  `pip-audit` claim is now backed by a real CI job, and the residual risks
+  (plaintext credential export on loopback, unauthenticated gateways, token in
+  clear over remote HTTP, 0644 database files) are written down.
+
+Gate: `pytest -q` → 311 passed, 1 skipped, 1 failed; `ruff check app tests` and
+`mypy app` clean; `pip-audit -r requirements.txt` → no known vulnerabilities.
+The single failure remains the sandbox-blocked `test_start_command.py`.
+
+Still open from the audit: A5–A7, A10–A17 (input hardening and the SOCKS5
+credential URL), B3–B8, C2, C3, C5, C6, E3–E8, F1–F9, G1–G5, H3, H4.

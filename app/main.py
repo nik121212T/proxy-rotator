@@ -2,13 +2,15 @@
 
 import asyncio
 import logging
+import secrets
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
+from urllib.parse import parse_qs
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
@@ -27,7 +29,15 @@ from app.routes import events, gateway, geo, providers, proxies, ui
 from app.routes import pool as pool_routes
 from app.runtime import Runtime
 from app.salt import load_or_create_salt
-from app.ui.rendering import UI_DIR
+from app.security import (
+    ADMIN_COOKIE,
+    CrossSiteGuard,
+    HostGuard,
+    TokenGuard,
+    configured_hosts,
+    is_loopback,
+)
+from app.ui.rendering import UI_DIR, templates
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +45,14 @@ logger = logging.getLogger(__name__)
 def load_settings() -> Settings:
     try:
         return Settings()
-    except ValidationError:
-        raise CryptoConfigError("Invalid application configuration; check .env") from None
+    except ValidationError as error:
+        # Field names and our own messages only: ``hide_input_in_errors`` keeps
+        # submitted values out of the report.
+        details = "; ".join(
+            f"{'.'.join(str(part) for part in item['loc']) or 'config'}: {item['msg']}"
+            for item in error.errors()
+        )
+        raise CryptoConfigError(f"Invalid application configuration: {details}") from None
 
 
 @asynccontextmanager
@@ -124,12 +140,36 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
+    if settings is None:
+        # Resolve now so the request guards can be built. A broken configuration
+        # is not fatal here: the lifespan below reports it and exits with
+        # EX_CONFIG exactly as before.
+        try:
+            settings = load_settings()
+        except CryptoConfigError:
+            settings = None
+    allowed_hosts = configured_hosts(
+        settings.bind_host if settings is not None else "127.0.0.1",
+        settings.admin_allowed_hosts if settings is not None else [],
+    )
+    admin_token = (
+        settings.admin_token.get_secret_value().strip()
+        if settings is not None and settings.admin_token is not None
+        else ""
+    )
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         try:
             config = settings if settings is not None else load_settings()
-            if config.bind_host not in {"127.0.0.1", "localhost", "::1"}:
-                logger.warning("event=lan_binding admin_interface_exposed=true")
+            if not is_loopback(config.bind_host):
+                # Reachable only after ALLOW_REMOTE_BIND, ADMIN_TOKEN and
+                # ADMIN_ALLOWED_HOSTS have all been set deliberately.
+                logger.warning(
+                    "event=lan_binding bind_host=%s admin_token=set "
+                    "proxy_gateways_unauthenticated=true",
+                    config.bind_host,
+                )
             async with services(config) as runtime:
                 app.state.runtime = runtime
                 app.state.pool = runtime.pool
@@ -142,11 +182,47 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.pool = None
 
     app = FastAPI(title="proxy-rotator", version="0.1.0", lifespan=lifespan)
+    # Added innermost first: the last one added runs first.
+    app.add_middleware(TokenGuard, token=admin_token)
+    app.add_middleware(CrossSiteGuard, allowed=allowed_hosts)
+    app.add_middleware(HostGuard, allowed=allowed_hosts)
     app.mount("/static", StaticFiles(directory=UI_DIR / "static"), name="static")
     app.state.runtime = None
     app.state.config_failed = False
+    app.state.admin_token_required = bool(admin_token)
     for router in (proxies.router, pool_routes.router, gateway.router, events.router, geo.router, providers.router, ui.router):
         app.include_router(router)
+
+    @app.get("/login", response_class=HTMLResponse, include_in_schema=False)
+    async def login_form(request: Request) -> Response:
+        if not admin_token:
+            return RedirectResponse("/", status_code=303)
+        return templates.TemplateResponse(request=request, name="login.html", context={})
+
+    @app.post("/login", include_in_schema=False)
+    async def login(request: Request) -> Response:
+        if not admin_token:
+            return RedirectResponse("/", status_code=303)
+        # Parsed by hand: urlencoded form data needs no extra dependency.
+        body = (await request.body()).decode("utf-8", "replace")
+        supplied = (parse_qs(body).get("token") or [""])[0]
+        if not secrets.compare_digest(supplied.strip(), admin_token):
+            logger.warning("admin_login_rejected")
+            return templates.TemplateResponse(
+                request=request,
+                name="login.html",
+                context={"error": "Jeton invalide."},
+                status_code=401,
+            )
+        response = RedirectResponse("/", status_code=303)
+        response.set_cookie(
+            ADMIN_COOKIE,
+            admin_token,
+            httponly=True,
+            samesite="strict",
+            path="/",
+        )
+        return response
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request: Request, error: RequestValidationError) -> JSONResponse:
@@ -165,8 +241,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 def run() -> int:
     try:
         settings = load_settings()
-    except CryptoConfigError:
-        logger.error("event=config_error check_env=true")
+    except CryptoConfigError as error:
+        # The message names the offending setting and never contains a value, so
+        # a refused startup says what to fix instead of just failing.
+        logger.error("event=config_error check_env=true detail=%s", error)
         return 78
     application = create_app(settings)
     server = uvicorn.Server(

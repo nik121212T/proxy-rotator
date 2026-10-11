@@ -1,4 +1,4 @@
-import httpx
+import httpx2 as httpx
 
 
 async def test_stats_and_strategy(api: tuple[httpx.AsyncClient, int]) -> None:

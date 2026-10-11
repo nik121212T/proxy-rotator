@@ -587,7 +587,6 @@ class HttpGateway:
         started = loop.time()
         connector: aiohttp.BaseConnector | None = None
         proxy_url: URL | None = None
-        proxy_auth: aiohttp.BasicAuth | None = None
         password = decrypt_password(proxy.password_enc.get_secret_value(), self._key)
         if proxy.scheme == "socks5":
             connector = ProxyConnector(
@@ -598,8 +597,16 @@ class HttpGateway:
                 rdns=True,
             )
         else:
-            proxy_url = URL.build(scheme=proxy.scheme, host=proxy.host, port=proxy.port)
-            proxy_auth = aiohttp.BasicAuth(proxy.username, password.get_secret_value())
+            # Credentials travel inside the proxy URL: aiohttp 3.14 deprecates
+            # both ``proxy_auth`` and ``aiohttp.BasicAuth``, and yarl encodes the
+            # userinfo correctly (aiohttp derives Proxy-Authorization from it).
+            proxy_url = URL.build(
+                scheme=proxy.scheme,
+                host=proxy.host,
+                port=proxy.port,
+                user=proxy.username,
+                password=password.get_secret_value(),
+            )
 
         async with (
             aiohttp.ClientSession(
@@ -617,7 +624,6 @@ class HttpGateway:
                 headers=headers,
                 data=body,
                 proxy=proxy_url,
-                proxy_auth=proxy_auth,
                 allow_redirects=False,
                 ssl=self._tls_context if self._tls_context is not None else True,
             ) as response,

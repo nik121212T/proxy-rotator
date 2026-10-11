@@ -58,7 +58,6 @@ class HealthChecker:
     ) -> tuple[int, str | None, str | None]:
         connector: aiohttp.BaseConnector | None = None
         proxy_url: URL | None = None
-        auth: aiohttp.BasicAuth | None = None
         if proxy.scheme == "socks5":
             connector = ProxyConnector(
                 host=proxy.host,
@@ -68,8 +67,16 @@ class HealthChecker:
                 rdns=True,
             )
         else:
-            proxy_url = URL.build(scheme=proxy.scheme, host=proxy.host, port=proxy.port)
-            auth = aiohttp.BasicAuth(proxy.username, password.get_secret_value())
+            # Credentials travel inside the proxy URL: aiohttp 3.14 deprecates
+            # both ``proxy_auth`` and ``aiohttp.BasicAuth``, and yarl encodes the
+            # userinfo correctly (aiohttp derives Proxy-Authorization from it).
+            proxy_url = URL.build(
+                scheme=proxy.scheme,
+                host=proxy.host,
+                port=proxy.port,
+                user=proxy.username,
+                password=password.get_secret_value(),
+            )
         async with (
             aiohttp.ClientSession(
                 connector=connector,
@@ -79,7 +86,6 @@ class HealthChecker:
             session.get(
                 self.probe_url,
                 proxy=proxy_url,
-                proxy_auth=auth,
                 allow_redirects=False,
                 ssl=self._tls_context if self._tls_context is not None else True,
             ) as response,

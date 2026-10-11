@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 import aiosqlite
-import httpx
+import httpx2 as httpx
 import pytest
 import pytest_asyncio
 from aiohttp import web

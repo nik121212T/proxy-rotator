@@ -25,8 +25,31 @@ code pour une mauvaise raison (un artefact du faux upstream) : il a été rééc
 avec un upstream muet.
 
 Les constats ci-dessous sont conservés avec leur statut d'origine, pour garder la
-trace de l'audit. **Restent ouverts** : A5, A6, A7, A10–A17, B3–B8, C1–C6,
-E3–E8, F1–F9, G1–G5, H1–H4.
+trace de l'audit.
+
+**Palier 2** (même journée) : **H1 et C1** sont corrigés, plus la partie
+documentaire de **C4**.
+
+- **H1** — `pip-audit -r requirements.txt` passe de **49 avis dans 5 paquets** à
+  **aucune vulnérabilité connue** (fastapi 0.143.0, starlette 1.7.0 explicite,
+  aiohttp 3.14.5, cryptography 50.0.2, anyio 4.15.1, pytest 9.1.1 +
+  pytest-asyncio 1.4.0 + hypothesis 6.169.0, `httpx` de test remplacé par
+  `httpx2`). La montée de version a révélé et fait corriger trois vrais
+  problèmes : `aiohttp.BasicAuth`/`proxy_auth` dépréciés en 3.14 (les
+  identifiants passent désormais par le userinfo de l'URL du proxy), la route
+  WebSocket qui laissait échapper un `CancelledError` pendant son nettoyage, et
+  les faux upstreams de test qui ne possédaient pas leurs tâches. Un job CI
+  bloquant `audit` exécute maintenant réellement `pip-audit`.
+- **C1** — trois garde-fous ASGI (`HostGuard`, `CrossSiteGuard`, `TokenGuard`)
+  plus un refus de démarrage pour tout bind hors boucle locale sans
+  `ALLOW_REMOTE_BIND` + `ADMIN_TOKEN` + `ADMIN_ALLOWED_HOSTS`. Vérifié sur une
+  vraie instance uvicorn en plus des tests ASGI.
+- **C4** (partiel) — `docs/SECURITY.md` ne revendique plus de contrôles
+  inexistants (lint rule, `app.log.mask()`, `tests/security/`, `pip-audit` CI) et
+  liste les risques résiduels.
+
+**Restent ouverts** : A5–A7, A10–A17, B3–B8, C2, C3, C5, C6, E3–E8, F1–F9,
+G1–G5, H3, H4.
 
 ## Résultat des vérifications globales
 
@@ -72,11 +95,11 @@ Le produit n'est **pas** cassé dans son concept : le chiffrement, le fail-close
 | A1 | **Élevée** | Retry après écriture partielle : une 2ᵉ réponse HTTP est concaténée dans le même socket client | V (reproduit) · ✅ corrigé | `app/gateway_http.py:441-464` |
 | A2 | **Élevée** | Timeout de 15 s appliqué au transfert complet : gros téléchargements corrompus, proxy sain pénalisé | V · ✅ corrigé | `app/gateway_http.py:441` |
 | B1 | **Élevée** | Un proxy qui rate son 1ᵉʳ check reste `unknown` **à vie** : jamais retesté, jamais actif | V (code + 74/100 en base) · ✅ corrigé | `app/pool.py:344`, `app/health_checker.py:271` |
-| H1 | **Élevée** | 49 vulnérabilités connues dans 5 dépendances figées ; `pip-audit` absent de la CI | V · ❌ ouvert | `requirements.txt` |
+| H1 | **Élevée** | 49 vulnérabilités connues dans 5 dépendances figées ; `pip-audit` absent de la CI | V · ✅ corrigé | `requirements.txt` |
 | A3 | **Élevée** | Désynchronisation CL.TE : `Content-Length` client transmis alors que le corps est décodé en chunked | V · ✅ corrigé | `app/gateway_http.py:37-49`, `:687`, `:541` |
 | A8 | **Élevée** | POST/PUT ≤ 1 Mo rejoués après un 429/503 de l'origine → double effet de bord | V · ✅ corrigé | `app/gateway_http.py:430-459` |
 | E1 | **Élevée** | Les 2 tests cités comme preuve du retry ne testent rien (passent sans la fonctionnalité) | V · ✅ corrigé | `tests/test_gateway_http.py:525,549` |
-| C1 | **Élevée si LAN** | Aucune authentification ; `/api/proxies/export` renvoie tous les mots de passe en clair | V · ❌ ouvert | `app/routes/proxies.py:88` |
+| C1 | **Élevée si LAN** | Aucune authentification ; `/api/proxies/export` renvoie tous les mots de passe en clair | V · ✅ corrigé (export toujours en clair sur loopback, documenté) | `app/routes/proxies.py:88` |
 | A4 | Moyenne-élevée | Taille de chunk hexadécimale signée acceptée → `read(-1)` → mémoire non bornée + blocage | V · ✅ corrigé | `app/gateway_http.py:741` |
 | B2 | Moyenne | Les tunnels CONNECT enregistrent une latence de 0 → médiane écrasée, score gonflé à 100 | V · ✅ corrigé | `app/gateway_http.py:335` |
 

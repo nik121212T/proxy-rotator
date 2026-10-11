@@ -3,11 +3,12 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from yarl import URL
 
 from app.models import RotationStrategy
+from app.security import is_loopback
 
 
 class Settings(BaseSettings):
@@ -25,6 +26,12 @@ class Settings(BaseSettings):
 
     bind_host: str = "127.0.0.1"
     admin_port: int = Field(default=8080, ge=1, le=65535)
+    # ── Exposure guards (see docs/SECURITY.md) ────────────────────────────
+    # Binding beyond loopback publishes an unauthenticated admin UI and two
+    # unauthenticated proxy gateways, so it takes three explicit settings.
+    allow_remote_bind: bool = False
+    admin_token: SecretStr | None = None
+    admin_allowed_hosts: list[str] = Field(default_factory=list)
     # ``0`` means "let the OS pick an ephemeral port" (useful in tests + CI).
     gateway_http_port: int = Field(default=8888, ge=0, le=65535)
     gateway_socks_port: int = Field(default=1080, ge=0, le=65535)
@@ -53,6 +60,38 @@ class Settings(BaseSettings):
         if not value.get_secret_value().strip() or value.get_secret_value() == "CHANGE_ME_NOW":
             raise ValueError("MASTER_SECRET must be configured")
         return value
+
+    @field_validator("admin_allowed_hosts", mode="before")
+    @classmethod
+    def split_allowed_hosts(cls, value: object) -> object:
+        """Accept a comma-separated ``ADMIN_ALLOWED_HOSTS`` value."""
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @model_validator(mode="after")
+    def guarded_remote_bind(self) -> "Settings":
+        """Refuse to publish the service beyond loopback without explicit consent.
+
+        A non-loopback bind exposes both the unauthenticated admin UI and the
+        two proxy gateways to the network, so it requires three deliberate
+        settings rather than one flag.
+        """
+        if is_loopback(self.bind_host):
+            return self
+        if not self.allow_remote_bind:
+            raise ValueError(
+                "BIND_HOST is not a loopback address; set ALLOW_REMOTE_BIND=true to "
+                "publish the admin UI and the proxy gateways on the network"
+            )
+        if self.admin_token is None or not self.admin_token.get_secret_value().strip():
+            raise ValueError("ADMIN_TOKEN is required when BIND_HOST is not a loopback address")
+        if not self.admin_allowed_hosts:
+            raise ValueError(
+                "ADMIN_ALLOWED_HOSTS must list the host names or addresses you will use "
+                "(for example 192.168.1.50,proxy.lan) when BIND_HOST is not loopback"
+            )
+        return self
 
     @field_validator("health_probe_url")
     @classmethod

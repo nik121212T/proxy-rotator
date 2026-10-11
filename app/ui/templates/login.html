@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Accès protégé · Proxy Rotator</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<div id="page-top" tabindex="-1"></div>
+<main id="workspace">
+  <div class="page-heading"><div><h1>Accès protégé</h1><p>Cette instance écoute au-delà de la boucle locale : un jeton d’administration est requis.</p></div></div>
+  {% if error %}<div class="feedback" role="alert">{{ error }}</div>{% endif %}
+  <section class="control-section" aria-labelledby="login-title">
+    <h2 id="login-title">Connexion</h2>
+    <form method="post" action="/login" class="controls">
+      <label for="token">Jeton d’administration</label>
+      <input id="token" class="wide" name="token" type="password" autocomplete="current-password" required autofocus>
+      <button type="submit" class="button">Se connecter</button>
+      <p class="helper">Le jeton est défini par <code>ADMIN_TOKEN</code> dans <code>.env</code>. Il est transmis en clair sur le réseau : n’exposez cette instance qu’au sein d’un réseau de confiance.</p>
+    </form>
+  </section>
+</main>
+<footer>Proxy Rotator <span>Administration locale · aucune télémétrie</span></footer>
+</body>
+</html>

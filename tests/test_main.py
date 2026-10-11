@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import httpx
+import httpx2 as httpx
 import pytest
 from pydantic import SecretStr
 
@@ -192,7 +192,43 @@ async def test_launcher_reports_crypto_startup_failure_as_78(tmp_path: Path) -> 
     assert "wrong-master" not in result.stderr
 
 
-async def test_lifespan_warns_when_binding_to_lan(
+def test_binding_beyond_loopback_is_refused_without_explicit_opt_in(tmp_path: Path) -> None:
+    """One flag is not enough to publish an unauthenticated admin + gateways."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError) as refused:
+        Settings(
+            _env_file=None,
+            master_secret=SecretStr("test-master"),
+            db_path=tmp_path / "proxies.db",
+            bind_host="0.0.0.0",  # noqa: S104 — verifies the guard, no listener is opened
+        )
+    assert "ALLOW_REMOTE_BIND" in str(refused.value)
+
+    with pytest.raises(ValidationError) as no_token:
+        Settings(
+            _env_file=None,
+            master_secret=SecretStr("test-master"),
+            db_path=tmp_path / "proxies.db",
+            bind_host="0.0.0.0",  # noqa: S104
+            allow_remote_bind=True,
+            admin_allowed_hosts=["proxy.lan"],
+        )
+    assert "ADMIN_TOKEN" in str(no_token.value)
+
+    with pytest.raises(ValidationError) as no_hosts:
+        Settings(
+            _env_file=None,
+            master_secret=SecretStr("test-master"),
+            db_path=tmp_path / "proxies.db",
+            bind_host="0.0.0.0",  # noqa: S104
+            allow_remote_bind=True,
+            admin_token=SecretStr("token"),
+        )
+    assert "ADMIN_ALLOWED_HOSTS" in str(no_hosts.value)
+
+
+async def test_lifespan_warns_when_fully_opted_into_lan_binding(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     settings = Settings(
@@ -202,10 +238,14 @@ async def test_lifespan_warns_when_binding_to_lan(
         gateway_socks_port=0,
         db_path=tmp_path / "proxies.db",
         bind_host="0.0.0.0",  # noqa: S104 — verify warning only; no listener is opened
+        allow_remote_bind=True,
+        admin_token=SecretStr("token"),
+        admin_allowed_hosts=["proxy.lan"],
     )
     app = create_app(settings)
     async with app.router.lifespan_context(app):
         assert "event=lan_binding" in caplog.text
+        assert "proxy_gateways_unauthenticated=true" in caplog.text
 
 
 async def test_gateway_start_failure_cleans_started_services(tmp_path):

@@ -71,9 +71,10 @@ class FakeUpstream:
     accept: bool = True
     reject_status: tuple[int, str] = (502, "Bad Gateway")
     server: asyncio.base_events.Server | None = None
+    handlers: set[asyncio.Task[None]] = field(default_factory=set)
 
     async def start(self) -> None:
-        self.server = await asyncio.start_server(self._handle, self.host, 0)
+        self.server = await asyncio.start_server(self._spawn, self.host, 0)
         self.port = self.server.sockets[0].getsockname()[1]  # type: ignore[index]
 
     async def stop(self) -> None:
@@ -81,7 +82,20 @@ class FakeUpstream:
             return
         self.server.close()
         await self.server.wait_closed()
+        # Own the accepted handlers: a client that keeps its socket open would
+        # otherwise leave them pending when the event loop shuts down.
+        pending = list(self.handlers)
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        self.handlers.clear()
         self.server = None
+
+    def _spawn(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        task = asyncio.create_task(self._handle(reader, writer))
+        self.handlers.add(task)
+        task.add_done_callback(self.handlers.discard)
 
     async def _read_headers(self, reader: asyncio.StreamReader) -> tuple[str, str, dict[str, str]]:
         line = await reader.readuntil(b"\r\n")
@@ -100,8 +114,10 @@ class FakeUpstream:
             await self._serve(reader, writer)
         finally:
             writer.close()
-            with contextlib.suppress(ConnectionError, OSError):
-                await writer.wait_closed()
+            with contextlib.suppress(ConnectionError, OSError, TimeoutError):
+                # A peer that never completes the close would otherwise leave
+                # this handler pending when the loop shuts down.
+                await asyncio.wait_for(writer.wait_closed(), 1)
 
     async def _serve(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:

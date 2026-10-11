@@ -1,5 +1,60 @@
 # Changelog
 
+## Post-audit fixes — Palier 2 (2026-10-11)
+
+Findings and evidence: `AUDIT.md`.
+
+### Security
+
+- **Closed the exposure gap behind `BIND_HOST`.** The admin UI, the REST API and
+  both proxy gateways have no authentication, so a single `BIND_HOST=0.0.0.0`
+  published an open proxy *and* an unauthenticated API that hands out every
+  proxy password in clear text through `GET /api/proxies/export`. A non-loopback
+  bind is now refused at startup (EX_CONFIG 78) unless `ALLOW_REMOTE_BIND=true`,
+  a non-empty `ADMIN_TOKEN` and a non-empty `ADMIN_ALLOWED_HOSTS` are all set.
+- **Three request guards** (`app/security.py`, plain ASGI middlewares so
+  streaming and WebSockets are untouched):
+  - `HostGuard` answers only configured host names, so a DNS-rebinding page that
+    reaches `127.0.0.1` is refused with 400.
+  - `CrossSiteGuard` refuses `POST`/`PUT`/`PATCH`/`DELETE` carrying
+    `Sec-Fetch-Site: cross-site`, a foreign `Origin`, or `Origin: null` (403).
+    Previously any visited page could POST to the loopback API and clear the
+    pool or spend provider credits.
+  - `TokenGuard` enforces `ADMIN_TOKEN` when configured, as a Bearer header or
+    through the cookie set by the new `/login` form; it is a no-op otherwise, so
+    the default loopback setup needs no configuration.
+- `docs/SECURITY.md` corrected: it claimed a masking lint rule, an
+  `app.log.mask()` helper, a `tests/security/` suite and a CI `pip-audit` step,
+  none of which existed. It now documents what is actually enforced, plus the
+  residual risks (plaintext export on loopback, unauthenticated gateways, token
+  in clear over remote HTTP, 0644 database files).
+
+### Dependencies
+
+- **49 known advisories in 5 packages → none.** `fastapi` 0.115.0 → 0.143.0,
+  `starlette==1.7.0` (explicit; seven advisories, minimum fix 1.3.1),
+  `aiohttp` 3.10.11 → 3.14.5, `cryptography` 43.0.1 → 50.0.2, `anyio` 4.11.0 →
+  4.15.1, `pytest` 8.3.3 → 9.1.1 with `pytest-asyncio` 1.4.0 and `hypothesis`
+  6.169.0, `pip-audit` 2.10.1. The dev dependency `httpx` is replaced by
+  `httpx2`, required by the Starlette 1.x TestClient.
+- A new blocking `audit` job in `.github/workflows/ci.yml` runs
+  `pip-audit -r requirements.txt`, so the documented control now exists.
+- The bump required three code changes: proxy credentials now travel in the
+  proxy URL userinfo (`aiohttp.BasicAuth` and `proxy_auth` are deprecated in
+  3.14); the WebSocket route shields its teardown from the cancellation a client
+  disconnect raises mid-cleanup; and the fake upstreams in the gateway tests own
+  their accepted handler tasks so none outlive the event loop.
+
+### Verification
+
+- `pytest -q` → 311 passed, 1 skipped, 1 failed; `ruff check app tests` and
+  `mypy app` clean; `pip-audit -r requirements.txt` → no known vulnerabilities.
+  The single failure is `test_start_command.py`, which needs `/bin/ps` and is
+  blocked by the agent sandbox; it fails identically on the unmodified tree.
+- The guards were also exercised against a real uvicorn instance (401/400/403
+  paths, token cookie, login page) and the default loopback setup was confirmed
+  unchanged.
+
 ## Post-audit fixes — Palier 1 (2026-10-11)
 
 Full findings and evidence: `AUDIT.md`. Every fix ships with a regression test

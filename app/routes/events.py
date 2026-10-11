@@ -1,6 +1,7 @@
 """Bounded live events with explicit task/subscription ownership."""
 
 import asyncio
+import contextlib
 from typing import cast
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -90,5 +91,11 @@ async def events(ws: WebSocket) -> None:
     finally:
         for task in tasks:
             task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        # The client may vanish while this teardown runs, cancelling the handler
+        # mid-cleanup. These tasks are ours to reap, so the bounded cleanup must
+        # not itself be cancelled (same pattern as HealthChecker.stop);
+        # otherwise CancelledError escapes the handler instead of the route
+        # finishing its teardown.
+        with contextlib.suppress(asyncio.CancelledError):
+            await asyncio.gather(*tasks, return_exceptions=True)
         await stream.aclose()
