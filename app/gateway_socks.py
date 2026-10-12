@@ -350,6 +350,9 @@ async def _pipe(src: asyncio.StreamReader, dst: asyncio.StreamWriter) -> None:
         return
     finally:
         with contextlib.suppress(ConnectionError, OSError):
+            # Flush buffered bytes before the FIN so the peer sees them (A15).
+            await dst.drain()
+        with contextlib.suppress(ConnectionError, OSError):
             if dst.can_write_eof():
                 dst.write_eof()
 

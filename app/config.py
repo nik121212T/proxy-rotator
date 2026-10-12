@@ -50,7 +50,11 @@ class Settings(BaseSettings):
 
     # ── Geolocation (opt-in; sends ONLY exit IPs to a third-party service) ─
     geolocation_enabled: bool = False
-    geolocation_provider_url: str = "http://ip-api.com/json/{ip}?fields=status,country,countryCode"
+    # Default now HTTPS so exit IPs are not disclosed in cleartext to the
+    # intermediate network (audit C2). ipapi.co's free tier accepts anonymous
+    # HTTPS calls; the parser also understands ip-api.com's response schema if
+    # you prefer that provider with a paid HTTPS key.
+    geolocation_provider_url: str = "https://ipapi.co/{ip}/json/"
     geolocation_cache_ttl_s: int = Field(default=30 * 24 * 3600, ge=60)
     geolocation_timeout_s: float = Field(default=4.0, gt=0)
 

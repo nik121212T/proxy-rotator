@@ -44,6 +44,20 @@ def test_round_robin_cycles_and_handles_removed_proxies() -> None:
     assert rotator.pick(pool).id in {1, 3}
 
 
+def test_round_robin_cursor_survives_removed_proxy_bias() -> None:
+    """When the last-picked proxy leaves the active set, the cursor advances
+    instead of collapsing back to index 0 (audit B4)."""
+    pool = ActivePool((proxy(1), proxy(2), proxy(3)))
+    rotator = Rotator("round_robin")
+    assert rotator.pick(pool).id == 1
+    assert rotator.pick(pool).id == 2
+    # Drop the proxy we just picked. Before the fix the cursor restarted
+    # from index 0 and 1 would be re-picked repeatedly.
+    pool.proxies = (proxy(1), proxy(3))
+    seen = {rotator.pick(pool).id for _ in range(6)}
+    assert seen == {1, 3}
+
+
 def test_random_and_weighted_follow_injected_rng() -> None:
     pool = ActivePool((proxy(1, 90), proxy(2, 10)))
     rotator = Rotator("random", rng=random.Random(7))  # noqa: S311 - deterministic test oracle

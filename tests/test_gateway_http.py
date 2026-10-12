@@ -322,7 +322,8 @@ async def test_forward_get_through_upstream_with_via(harness, origin, upstream_p
     assert code == 200
     assert body == b"origin ok"
     assert "via" in headers and "proxy-rotator" in headers["via"]
-    assert "connection" not in headers
+    # Gateway closes after one request/response and advertises it (audit A12).
+    assert headers.get("connection", "").lower() == "close"
     assert upstream_proxy.auth_seen[-1].startswith("Basic ")
     assert origin.requests[-1]["headers"].get("connection") != "close"
     assert "via" in origin.requests[-1]["headers"]

@@ -105,8 +105,28 @@ tests passent.
   `test_migrations_match_spec_and_are_idempotent` reconnaît maintenant les
   deux tables et vérifie `user_version == 2`.
 
-**Restent ouverts** : A12–A17, B4–B5, B8, C2, C3, C6, E3–E8, F2 (doc), F3–F9,
-G1–G4, H3 (script smoke), H4.
+**Palier 3 (suite 2, 2026-10-12)** : **C2, A12, A15 et B4** sont corrigés
+(326 tests passent).
+
+- **C2** — URL géo par défaut passée en HTTPS (`https://ipapi.co/{ip}/json/`).
+  Le parseur accepte désormais les deux schémas (ip-api.com `country`/
+  `countryCode` ET ipapi.co `country_name`/`country_code`), donc l'utilisateur
+  peut repasser à ip-api.com avec une clé HTTPS payante sans toucher au code.
+  `.env.example` et `app/config.py` documentent le choix.
+- **A12** — chaque réponse forwardée porte maintenant `Connection: close`
+  (en-tête `connection` entrant retiré avant), cohérent avec la fermeture
+  systématique du socket après une requête. Le test existant
+  `test_forward_get_through_upstream_with_via` vérifie la présence du header.
+- **A15** — `_pipe` draine le buffer avant `write_eof()` dans les deux
+  passerelles (HTTP et SOCKS5), pour que les derniers octets atteignent le pair
+  avant le FIN.
+- **B4** — le round-robin maintient un curseur monotone : quand le proxy
+  précédemment sélectionné sort du pool, la rotation continue depuis le
+  curseur au lieu de retomber à l'index 0. Nouveau test
+  `test_round_robin_cursor_survives_removed_proxy_bias`.
+
+**Restent ouverts** : A13, A14, A16, A17, B5, B8, C3, C6, E3–E8, F2 (doc),
+F3–F9, G1–G4, H3 (script smoke), H4.
 
 ## Résultat des vérifications globales
 

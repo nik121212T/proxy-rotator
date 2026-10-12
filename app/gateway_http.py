@@ -179,6 +179,9 @@ async def _pipe(src: asyncio.StreamReader, dst: asyncio.StreamWriter) -> None:
         return
     finally:
         with contextlib.suppress(ConnectionError, OSError):
+            # Flush buffered bytes before the FIN so the peer sees them (A15).
+            await dst.drain()
+        with contextlib.suppress(ConnectionError, OSError):
             if dst.can_write_eof():
                 dst.write_eof()
 
@@ -696,8 +699,11 @@ class HttpGateway:
                 out_headers = [
                     (name, value)
                     for name, value in out_headers
-                    if name.lower() not in {"content-length", "transfer-encoding"}
+                    if name.lower() not in {"content-length", "transfer-encoding", "connection"}
                 ]
+                # The gateway closes the connection after one request/response
+                # pair, so tell the client not to try pipelining (audit A12).
+                out_headers.append(("Connection", "close"))
                 if peek_body is not None:
                     out_headers.append(("Content-Length", str(len(peek_body))))
                     state.response_started = True

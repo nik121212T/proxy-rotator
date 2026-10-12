@@ -36,6 +36,7 @@ class Rotator:
         self.selection = RotationSelection()
         self.strategy = strategy
         self._last_id: int | None = None
+        self._rr_cursor = 0
         self._rng = rng or random.SystemRandom()
         self._sticky: TTLCache[tuple[str, str], int] = TTLCache(4096, sticky_ttl_s, timer=clock)
 
@@ -99,7 +100,16 @@ class Rotator:
             selected = active[int.from_bytes(digest, "big") % len(active)]
             self._sticky[key] = selected.id
             return selected
-        previous = next((i for i, proxy in enumerate(active) if proxy.id == self._last_id), -1)
-        selected = active[(previous + 1) % len(active)]
+        # Monotonic cursor so a proxy leaving the active set does not collapse
+        # the rotation to index 0 on the next tick (audit B4). We still prefer
+        # resuming right after the previously-picked proxy when it is still
+        # present, which keeps the natural ordering intact.
+        previous = next((i for i, proxy in enumerate(active) if proxy.id == self._last_id), None)
+        if previous is not None:
+            index = (previous + 1) % len(active)
+        else:
+            index = self._rr_cursor % len(active)
+        selected = active[index]
+        self._rr_cursor = (index + 1) % max(len(active), 1)
         self._last_id = selected.id
         return selected

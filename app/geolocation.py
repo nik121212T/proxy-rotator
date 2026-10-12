@@ -211,8 +211,14 @@ def _parse_provider_payload(payload: bytes) -> tuple[str | None, str | None]:
         return None, None
     if data.get("status") not in ("success", None):
         return None, None
-    country = data.get("country") if isinstance(data.get("country"), str) else None
-    code_raw = data.get("countryCode")
+    # Accept both schemas: ip-api.com (country / countryCode) and ipapi.co
+    # (country_name / country_code), so swapping providers only needs an env
+    # var change.
+    country_raw = (
+        data.get("country") if isinstance(data.get("country"), str) else data.get("country_name")
+    )
+    country = country_raw if isinstance(country_raw, str) else None
+    code_raw = data.get("countryCode") or data.get("country_code")
     country_code = (
         code_raw.upper()
         if isinstance(code_raw, str)
