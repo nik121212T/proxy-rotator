@@ -47,8 +47,8 @@ async def open_socks_tunnel(
     try:
         return await asyncio.open_connection(host=None, port=None, sock=sock)
     except BaseException:
-        try:
+        import contextlib
+
+        with contextlib.suppress(OSError):
             sock.close()
-        except OSError:
-            pass
         raise
