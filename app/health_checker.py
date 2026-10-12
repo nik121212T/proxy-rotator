@@ -14,6 +14,7 @@ from aiohttp_socks import ProxyConnector, ProxyError  # type: ignore[import-unty
 from pydantic import SecretStr
 from yarl import URL
 
+from app.burn_detector import BurnDetector
 from app.crypto import decrypt_password
 from app.events import Subscription
 from app.models import CheckBatchStatus, CheckResult, Proxy
@@ -48,6 +49,10 @@ class HealthChecker:
         self._poll_interval_s = poll_interval_s
         self._clock = clock
         self._tls_context = tls_context
+        # Single source of truth for SPEC section 6; only the latency-spike rule
+        # is used here, because a probe is the same kind of measurement as the
+        # median it is compared against.
+        self._burn = BurnDetector(timeout_s=timeout_s)
         self._jobs: dict[int, asyncio.Task[CheckResult]] = {}
         self._batch_jobs: dict[int, asyncio.Task[CheckResult]] = {}
         self._runner: asyncio.Task[None] | None = None
@@ -134,11 +139,22 @@ class HealthChecker:
                 error = "TLS certificate verification failed"
             except (aiohttp.ClientError, ProxyError, OSError):
                 error = "Proxy connection failed"
+            latency_ms = round((time.perf_counter() - started) * 1000)
+            if error is None:
+                # SPEC section 6 latency spike, measured against this proxy's own
+                # running median. Only that rule is taken: a timeout would have
+                # raised above, and comparing a forwarded download to a probe
+                # median would be meaningless.
+                verdict = self._burn.classify(
+                    elapsed_ms=latency_ms, median_latency_ms=proxy.latency_ms
+                )
+                if verdict.burned and verdict.reason == "Latency spike":
+                    error = verdict.reason
             return CheckResult(
                 proxy_id=proxy.id,
                 ok=error is None,
                 status_code=status,
-                latency_ms=round((time.perf_counter() - started) * 1000),
+                latency_ms=latency_ms,
                 exit_ip=address,
                 error=error,
                 checked_at=self._clock(),

@@ -87,6 +87,7 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
                 timeout_s=config.gateway_timeout_s,
                 inspect_body=config.burn_inspect_body,
             ),
+            max_connections=config.gateway_max_connections,
         )
         socks5_gateway = SocksGateway(
             pool,
@@ -96,6 +97,7 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
             port=config.gateway_socks_port,
             timeout_s=config.gateway_timeout_s,
             max_retry_per_request=config.max_retry_per_request,
+            max_connections=config.gateway_max_connections,
         )
         async with AsyncExitStack() as cleanup:
             cleanup.push_async_callback(checker.stop)

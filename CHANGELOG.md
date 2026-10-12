@@ -1,5 +1,42 @@
 # Changelog
 
+## Post-audit fixes — robustness and observability (2026-10-12)
+
+### Fixed
+
+- **Neither gateway had admission control** (A7). Each connection holds a task,
+  two sockets and up to 1 MiB of buffered body, with no ceiling. A new
+  `GATEWAY_MAX_CONNECTIONS` (default 256, counted separately per listener) makes
+  the HTTP gateway answer `503 Gateway Busy` and the SOCKS5 listener close the
+  connection instead of accumulating work.
+- **`Pool.mark_fail` discarded its reason** (B3). Burn causes were therefore
+  invisible: the label is now logged (`pool_mark_fail proxy_id=… reason=…`).
+  Persisting it would need a schema change and is deliberately deferred.
+- **Three of the five SPEC §6 burn signals never fired in production** (B7):
+  - transport failures are now classified by the detector, so an unreachable
+    proxy is recorded as `Connection failure` and a stalled one as `Timeout`,
+    instead of both collapsing into `upstream_error`;
+  - the latency spike is applied where the measurement is comparable to the
+    median it is compared against — the health checker — which now fails a probe
+    with the reason `Latency spike`;
+  - `BurnDetector.classify` no longer reports a slow *completed* response as a
+    timeout: the elapsed-time rule only applies when nothing came back, the
+    counterpart of the idle-budget change made in A2/A6.
+
+### Tests
+
+- Added 7 tests. Six were verified to fail against the previous code. The
+  seventh, `test_a_steady_proxy_is_never_a_latency_spike`, is a false-positive
+  guard: it necessarily passes against the old code, which had no spike
+  detection at all, and is labelled as such rather than counted as evidence.
+
+### Verification
+
+- `pytest -q` → 323 passed, 1 skipped, 1 failed; Ruff and mypy clean;
+  `pip-audit -r requirements.txt` → no known vulnerabilities. The single failure
+  is the sandbox-blocked `test_start_command.py`.
+- `scripts/smoke_gateway.sh` still cannot run: the pool has no live proxy.
+
 ## Post-audit fixes — input hardening (2026-10-12)
 
 ### Fixed

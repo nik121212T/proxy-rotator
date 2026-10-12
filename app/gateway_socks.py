@@ -60,11 +60,14 @@ class SocksGateway:
         port: int = 1080,
         timeout_s: float = 15.0,
         max_retry_per_request: int = 2,
+        max_connections: int = 256,
     ) -> None:
         if timeout_s <= 0:
             raise ValueError("timeout_s must be positive")
         if max_retry_per_request < 0:
             raise ValueError("max_retry_per_request must be non-negative")
+        if max_connections < 1:
+            raise ValueError("max_connections must be positive")
         self.pool = pool
         self.rotator = rotator
         self._key = key
@@ -72,6 +75,7 @@ class SocksGateway:
         self._port = port
         self._timeout_s = timeout_s
         self._max_retry = max_retry_per_request
+        self._max_connections = max_connections
         self._server: asyncio.base_events.Server | None = None
         self._bound: tuple[str, int] | None = None
         self._active_conns = 0
@@ -116,6 +120,17 @@ class SocksGateway:
     async def _handle_connection(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
+        # Admission control: refuse rather than accumulate tasks and buffers.
+        # The connection is closed without a SOCKS5 frame: the method-selection
+        # exchange has not started, so the client sees a refused connection.
+        if self._active_conns >= self._max_connections:
+            logger.warning(
+                "gateway_socks_busy active=%s limit=%s", self._active_conns, self._max_connections
+            )
+            with contextlib.suppress(ConnectionError, OSError):
+                writer.close()
+                await writer.wait_closed()
+            return
         task = asyncio.current_task()
         if task is not None:
             self._active_tasks.add(task)

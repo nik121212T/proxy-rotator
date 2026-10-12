@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     gateway_socks_port: int = Field(default=1080, ge=0, le=65535)
     gateway_timeout_s: float = Field(default=15, gt=0)
     max_retry_per_request: int = Field(default=2, ge=0, le=10)
+    # Admission control: each connection holds a task, two sockets and up to
+    # 1 MiB of buffered body, so the gateways refuse rather than accumulate.
+    gateway_max_connections: int = Field(default=256, ge=1)
     burn_inspect_body: bool = True
     rotation_strategy: RotationStrategy = "weighted"
     sticky_ttl_s: float = Field(default=900, gt=0)

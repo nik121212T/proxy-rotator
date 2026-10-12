@@ -306,7 +306,10 @@ class Pool:
         return await self._outcome(proxy_id, True, latency_ms)
 
     async def mark_fail(self, proxy_id: int, reason: str) -> Proxy:
-        # Gateway reasons are classified by the caller; never persist raw exceptions.
+        # Callers pass a short SPEC section 6 label, never a raw exception text.
+        # Logging it makes gateway-driven burns diagnosable; persisting it would
+        # need a schema change and is deliberately deferred.
+        logger.info("pool_mark_fail proxy_id=%s reason=%s", proxy_id, reason)
         return await self._outcome(proxy_id, False, None)
 
     async def mark_tunnel_success(self, proxy_id: int) -> Proxy:

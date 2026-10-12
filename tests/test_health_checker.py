@@ -321,3 +321,45 @@ async def test_proxy_that_failed_its_first_check_is_still_scheduled(
     assert final.consec_fails == 3
     assert final.status == "quarantine"
     assert final.quarantine_until == now + timedelta(minutes=10)
+
+
+async def test_latency_spike_fails_the_probe(
+    db: aiosqlite.Connection,
+    upstream: FakeProxy,
+) -> None:
+    """SPEC section 6 latency spike: measured against the proxy's own median."""
+    key = Fernet.generate_key()
+    pool = await Pool.load(db, key)
+    proxy = await pool.add(parse_line(f"user:pw@127.0.0.1:{upstream.port}"))
+    checker = HealthChecker(pool, key, probe_url="http://probe.invalid")
+
+    first = await checker.check_one(proxy.id)
+    assert first.ok
+    median = pool.all()[0].latency_ms
+    assert median is not None
+
+    # A response far slower than this proxy's own median is a burn signal.
+    upstream.delay = max(0.3, (median * 4) / 1000)
+    slow = await checker.check_one(proxy.id)
+
+    assert not slow.ok
+    assert slow.error == "Latency spike"
+    assert pool.all()[0].fail_count == 1
+
+
+async def test_a_steady_proxy_is_never_a_latency_spike(
+    db: aiosqlite.Connection,
+    upstream: FakeProxy,
+) -> None:
+    """The rule needs a ratio, not a fixed budget: a steady proxy stays alive."""
+    key = Fernet.generate_key()
+    pool = await Pool.load(db, key)
+    proxy = await pool.add(parse_line(f"user:pw@127.0.0.1:{upstream.port}"))
+    checker = HealthChecker(pool, key, probe_url="http://probe.invalid")
+    upstream.delay = 0.05
+
+    for _ in range(3):
+        result = await checker.check_one(proxy.id)
+        assert result.ok, result.error
+
+    assert pool.all()[0].fail_count == 0

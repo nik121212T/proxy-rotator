@@ -363,4 +363,37 @@ async def test_socks5_marks_success_on_tunnel_close(socks_harness):
         await echo.wait_closed()
 
 
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
+async def test_socks5_gateway_refuses_beyond_max_connections(db, upstream_http):
+    """A saturated SOCKS5 listener closes instead of accumulating tasks."""
+    key = Fernet.generate_key()
+    pool = await Pool.load(db, key)
+    proxy = await pool.add(
+        parse_line(f"socksuser:secret-value@{upstream_http.host}:{upstream_http.port}")
+    )
+    await pool.mark_success(proxy.id, 10)
+    gateway = SocksGateway(pool, Rotator("round_robin"), key, port=0, max_connections=1)
+    await gateway.start()
+    bound = gateway.status("configured").bound or ""
+    port = int(bound.rsplit(":", 1)[1])
+    occupying = None
+    try:
+        # The first connection holds the only slot during its handshake.
+        occupying = await asyncio.open_connection("127.0.0.1", port)
+        await asyncio.sleep(0.05)
+        assert gateway.status("x").active_conns == 1
+
+        reader, writer = await asyncio.open_connection("127.0.0.1", port)
+        try:
+            # No SOCKS5 frame is due: the connection is simply refused, so the
+            # client sees EOF on its first read.
+            assert await asyncio.wait_for(reader.read(10), 2) == b""
+        finally:
+            writer.close()
+    finally:
+        if occupying is not None:
+            occupying[1].close()
+        await gateway.stop()
+
+
 pytestmark = pytest.mark.asyncio

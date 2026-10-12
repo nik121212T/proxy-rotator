@@ -63,11 +63,29 @@ chacun avec un test vérifié en mutation.
 - **A11** — `LimitOverrunError` sur une ligne d'en-tête trop longue → 400 au lieu
   de 500.
 
+**Palier 3 (partiel)** : **A7, B3 et B7** sont corrigés.
+
+- **A7** — plafond de connexions par passerelle (`GATEWAY_MAX_CONNECTIONS`,
+  défaut 256) : `503 Gateway Busy` côté HTTP, fermeture côté SOCKS5, au lieu
+  d'accumuler tâches, sockets et tampons.
+- **B3** — le motif passé à `mark_fail` est journalisé au lieu d'être jeté. La
+  persistance reste différée (elle demanderait un changement de schéma).
+- **B7** — les échecs de transport sont classés par le détecteur
+  (`Connection failure`, `Timeout` au lieu du générique `upstream_error`), le pic
+  de latence est branché dans le health checker (seul endroit où la mesure est
+  comparable à la médiane), et la règle de timeout sur la durée ne s'applique
+  plus à une réponse complète — ce qui était indispensable depuis le passage au
+  budget d'inactivité (A2/A6).
+
+Six des sept nouveaux tests échouent contre le code d'origine ;
+`test_a_steady_proxy_is_never_a_latency_spike` est un garde anti-faux-positif et
+est étiqueté comme tel.
+
 **F1 reste ouvert et hors de portée** : aucun proxy vivant dans la base
 (0 `alive`, dernière réussite le 2026-10-09T08:27), donc aucune preuve de rotation
 ne peut être produite.
 
-**Restent ouverts** : A7, A12–A17, B3–B8, C2, C3, C5, C6, E3–E8, F1–F9,
+**Restent ouverts** : A12–A17, B4–B6, B8, C2, C3, C5, C6, E3–E8, F1–F9,
 G1–G5, H3, H4.
 
 ## Résultat des vérifications globales

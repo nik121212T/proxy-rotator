@@ -28,9 +28,20 @@ class BurnDetector:
         median_latency_ms: int | None = None,
         error: BaseException | None = None,
     ) -> BurnResult:
+        """Apply every SPEC section 6 signal, in priority order.
+
+        ``median_latency_ms`` is the proxy's own running median, so the latency
+        spike is only meaningful against measurements of the same kind (health
+        probes), never against a forwarded download.
+        """
         if status_code in {401, 403, 407, 429, 451, 503}:
             return BurnResult(burned=True, reason=f"HTTP {status_code}")
-        if isinstance(error, TimeoutError) or elapsed_ms > self.timeout_s * 1000:
+        # The elapsed-time rule only applies when no response arrived. The
+        # gateway bounds a request by idle time rather than total duration, so a
+        # slow but completed transfer must not be reported as a timeout.
+        if isinstance(error, TimeoutError) or (
+            status_code is None and elapsed_ms > self.timeout_s * 1000
+        ):
             return BurnResult(burned=True, reason="Timeout")
         if isinstance(error, OSError) and error.errno in {
             errno.ECONNREFUSED,

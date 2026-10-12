@@ -256,6 +256,41 @@ code d'origine.
 Gate: `pytest -q` → 316 passed, 1 skipped, 1 failed; Ruff et mypy propres ;
 `pip-audit` sans vulnérabilité connue.
 
+### Palier 3 (partiel) — robustesse et observabilité
+
+- [x] A7 — plafond de connexions par passerelle (`GATEWAY_MAX_CONNECTIONS`,
+  défaut 256, HTTP et SOCKS5 comptés séparément). Au-delà, le gateway HTTP
+  répond `503 Gateway Busy` et le gateway SOCKS5 ferme la connexion : refuser
+  plutôt qu'accumuler des tâches, deux sockets et jusqu'à 1 Mio de corps
+  bufferisé par connexion. Tests :
+  `test_http_gateway_refuses_beyond_max_connections`,
+  `test_socks5_gateway_refuses_beyond_max_connections`.
+- [x] B3 — `Pool.mark_fail` ne jette plus le motif : il est journalisé
+  (`pool_mark_fail proxy_id=… reason=…`), ce qui rend les brûlures pilotées par
+  la passerelle diagnostiquables. La persistance du motif demanderait un
+  changement de schéma et reste volontairement différée. Test :
+  `test_mark_fail_records_the_reason`.
+- [x] B7 — les signaux de brûlure SPEC §6 sont désormais réellement branchés :
+  - les échecs de transport sont classés par le détecteur, donc un proxy
+    injoignable est enregistré comme `Connection failure` et non plus comme le
+    générique `upstream_error` ; un délai d'attente devient `Timeout` ;
+  - le pic de latence est appliqué là où la mesure est comparable à la médiane,
+    c'est-à-dire dans le health checker, qui marque alors la sonde en échec avec
+    le motif `Latency spike` ;
+  - `classify` ne confond plus une réponse complète et lente avec un timeout :
+    la règle fondée sur la durée ne s'applique que si aucune réponse n'est
+    arrivée, ce qui est la contrepartie du passage au budget d'inactivité (A2/A6).
+  Tests : `test_connection_failure_reason_reaches_the_pool`,
+  `test_latency_spike_fails_the_probe`,
+  `test_a_completed_response_is_never_reported_as_a_timeout`.
+- Contrôle de mutation : six des sept nouveaux tests **échouent** contre le code
+  d'origine. Le septième, `test_a_steady_proxy_is_never_a_latency_spike`, est un
+  **garde anti-faux-positif** : il passe forcément contre l'ancien code, qui ne
+  détectait aucun pic. Il est listé comme tel et ne sert pas de preuve.
+
+Gate: `pytest -q` → 323 passed, 1 skipped, 1 failed; Ruff et mypy propres ;
+`pip-audit` sans vulnérabilité connue.
+
 ### F1 — preuve de rotation, toujours bloquée
 
 `scripts/smoke_gateway.sh` n'a **pas** pu être exécuté : la base ne contient

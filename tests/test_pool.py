@@ -138,3 +138,16 @@ async def test_tunnel_success_does_not_pollute_latency(db: aiosqlite.Connection)
     assert after.success_count == 21
     assert after.latency_ms == 1200
     assert after.score < 100
+
+
+async def test_mark_fail_records_the_reason(
+    db: aiosqlite.Connection, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The SPEC section 6 label must be observable, not silently dropped."""
+    pool = await Pool.load(db, Fernet.generate_key())
+    proxy = await pool.add(parse_line("user:pw@proxy.example:80"))
+    with caplog.at_level("INFO", logger="app.pool"):
+        await pool.mark_fail(proxy.id, "HTTP 429")
+    assert "reason=HTTP 429" in caplog.text
+    assert pool.all()[0].fail_count == 1
+    assert pool.all()[0].consec_fails == 1

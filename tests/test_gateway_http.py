@@ -407,6 +407,7 @@ async def _gateway_for_upstream(
     scheme="http",
     username="gatewayuser",
     password="secret-value",  # noqa: S107 - fixture credential, never a real secret
+    max_connections=256,
 ):
     """Gateway with a single proxy aimed at a locally controlled upstream."""
     key = Fernet.generate_key()
@@ -422,6 +423,7 @@ async def _gateway_for_upstream(
         port=0,
         timeout_s=timeout_s,
         max_retry_per_request=max_retry_per_request,
+        max_connections=max_connections,
     )
     await gateway.start()
     bound = gateway.status("configured").bound or ""
@@ -1095,7 +1097,7 @@ async def test_overlong_header_line_is_a_client_error(harness):
     assert data.startswith(b"HTTP/1.1 400")
 
 
-# ── SOCKS5 upstream credentials (app/proxy_url.py) ─────────────────────────
+# ── SOCKS5 upstream credentials (app/socks_upstream.py) ─────────────────────────
 
 
 @pytest.mark.filterwarnings("ignore::ResourceWarning")
@@ -1125,3 +1127,62 @@ async def test_connect_through_socks5_upstream_sends_exact_credentials(db):
     finally:
         await gateway.stop()
         await upstream.stop()
+
+
+# ── Admission control ──────────────────────────────────────────────────────
+
+
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
+async def test_http_gateway_refuses_beyond_max_connections(db):
+    """A saturated gateway answers 503 instead of accumulating tasks."""
+    server, upstream_port = await _silent_upstream()
+    gateway, _, port = await _gateway_for_upstream(
+        db, upstream_port, timeout_s=5.0, max_connections=1
+    )
+    occupying = None
+    try:
+        # The first connection holds the only slot while it waits for a request.
+        occupying = await asyncio.open_connection("127.0.0.1", port)
+        await asyncio.sleep(0.05)
+        assert gateway.status("x").active_conns == 1
+
+        data = await _read_raw_response(
+            port,
+            b"GET http://example.invalid/x HTTP/1.1\r\nHost: example.invalid\r\n\r\n",
+            timeout=2.0,
+        )
+        assert data.startswith(b"HTTP/1.1 503")
+        assert b"Gateway Busy" in data
+    finally:
+        if occupying is not None:
+            occupying[1].close()
+            with contextlib.suppress(ConnectionError, OSError):
+                await occupying[1].wait_closed()
+        await gateway.stop()
+        server.close()
+        await server.wait_closed()
+
+
+# ── SPEC section 6 failure reasons ─────────────────────────────────────────
+
+
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
+async def test_connection_failure_reason_reaches_the_pool(db, caplog):
+    """A refused upstream is reported as a connection failure, not 'upstream_error'."""
+    probe = await asyncio.start_server(lambda r, w: w.close(), "127.0.0.1", 0)
+    dead_port = probe.sockets[0].getsockname()[1]  # type: ignore[index]
+    probe.close()
+    await probe.wait_closed()
+
+    gateway, _, port = await _gateway_for_upstream(db, dead_port, max_retry_per_request=0)
+    try:
+        with caplog.at_level("INFO", logger="app.pool"):
+            data = await _read_raw_response(
+                port,
+                b"GET http://example.invalid/x HTTP/1.1\r\nHost: example.invalid\r\n\r\n",
+                timeout=3.0,
+            )
+        assert data.startswith(b"HTTP/1.1 502")
+        assert "reason=Connection failure" in caplog.text
+    finally:
+        await gateway.stop()

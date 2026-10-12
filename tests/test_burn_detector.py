@@ -54,3 +54,15 @@ def test_connection_errors_never_expose_exception_text(code: int) -> None:
     assert result.burned
     assert "synthetic-secret" not in result.model_dump_json()
     assert not BurnDetector().classify(error=OSError(errno.ENOENT, "unrelated")).burned
+
+
+def test_a_completed_response_is_never_reported_as_a_timeout() -> None:
+    """The gateway bounds idle time, not total duration (see A2/A6)."""
+    detector = BurnDetector()
+    # A slow but complete response arrived: not a timeout.
+    assert not detector.classify(status_code=200, elapsed_ms=60_000).burned
+    # The elapsed rule still applies when nothing came back at all.
+    assert detector.classify(elapsed_ms=60_000).reason == "Timeout"
+    # A completed response can still be a latency spike.
+    spike = detector.classify(status_code=200, elapsed_ms=400, median_latency_ms=100)
+    assert spike.reason == "Latency spike"

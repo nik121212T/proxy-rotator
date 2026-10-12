@@ -198,11 +198,14 @@ class HttpGateway:
         tls_context: ssl.SSLContext | None = None,
         max_retry_per_request: int = 2,
         burn_detector: BurnDetector | None = None,
+        max_connections: int = 256,
     ) -> None:
         if timeout_s <= 0:
             raise ValueError("timeout_s must be positive")
         if max_retry_per_request < 0:
             raise ValueError("max_retry_per_request must be non-negative")
+        if max_connections < 1:
+            raise ValueError("max_connections must be positive")
         self.pool = pool
         self.rotator = rotator
         self._key = key
@@ -212,6 +215,7 @@ class HttpGateway:
         self._tls_context = tls_context
         self._max_retry = max_retry_per_request
         self._burn = burn_detector or BurnDetector(timeout_s=timeout_s)
+        self._max_connections = max_connections
         self._server: asyncio.base_events.Server | None = None
         self._bound: tuple[str, int] | None = None
         self._active_conns = 0
@@ -262,6 +266,19 @@ class HttpGateway:
     async def _handle_connection(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
+        # Admission control: refuse rather than accumulate tasks and buffers.
+        # No await sits between the check and the increment, so it is atomic on
+        # the single event loop.
+        if self._active_conns >= self._max_connections:
+            logger.warning(
+                "gateway_http_busy active=%s limit=%s", self._active_conns, self._max_connections
+            )
+            with contextlib.suppress(ConnectionError, OSError):
+                await self._reply_error(writer, 503, "Gateway Busy")
+            with contextlib.suppress(ConnectionError, OSError):
+                writer.close()
+                await writer.wait_closed()
+            return
         task = asyncio.current_task()
         if task is not None:
             self._active_tasks.add(task)
@@ -519,7 +536,7 @@ class HttpGateway:
                     url.host,
                     exc,
                 )
-                await self.pool.mark_fail(proxy.id, "upstream_error")
+                await self.pool.mark_fail(proxy.id, self._failure_reason(exc, "upstream_error"))
                 continue
             if burn is None:
                 return  # success — already streamed to client
@@ -565,7 +582,7 @@ class HttpGateway:
                 url.host,
                 exc,
             )
-            await self.pool.mark_fail(proxy.id, "upstream_error")
+            await self.pool.mark_fail(proxy.id, self._failure_reason(exc, "upstream_error"))
             with contextlib.suppress(ConnectionError, OSError):
                 await self._reply_error(writer, 502, "Bad Gateway")
             return
@@ -732,6 +749,15 @@ class HttpGateway:
         with contextlib.suppress(ConnectionError, OSError):
             await self._reply_error(writer, 400, "Bad Request")
 
+    def _failure_reason(self, exc: BaseException, fallback: str) -> str:
+        """Name a transport failure the way SPEC section 6 does.
+
+        Without this the timeouts and connection errors the detector knows how
+        to classify were all reported as the generic ``upstream_error``.
+        """
+        verdict = self._burn.classify(error=exc)
+        return verdict.reason or fallback
+
     async def _note_interrupted_stream(self, proxy: Proxy, url: URL, exc: BaseException) -> None:
         """Record an upstream failure that happened after the response committed.
 
@@ -745,7 +771,9 @@ class HttpGateway:
             exc,
         )
         if isinstance(exc, aiohttp.ClientError):
-            await self.pool.mark_fail(proxy.id, "stream_interrupted")
+            await self.pool.mark_fail(
+                proxy.id, self._failure_reason(exc, "stream_interrupted")
+            )
 
     async def _reply_error(self, writer: asyncio.StreamWriter, code: int, phrase: str) -> None:
         body = f"{code} {phrase}\n".encode("ascii")
