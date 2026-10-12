@@ -1,6 +1,7 @@
 """Async SQLite connections and explicit transaction boundaries."""
 
 import asyncio
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -8,6 +9,21 @@ from pathlib import Path
 import aiosqlite
 
 from app.migrations import MIGRATIONS
+
+
+def _restrict_db_perms(path: Path) -> None:
+    """Clamp the SQLite database and its sidecar files to owner-only on POSIX."""
+    if os.name != "posix":
+        return
+    for suffix in ("", "-wal", "-shm", "-journal"):
+        target = path.with_name(path.name + suffix)
+        try:
+            os.chmod(target, 0o600)
+        except FileNotFoundError:
+            continue
+        except OSError:
+            # Best-effort hardening; the encryption at rest still protects secrets.
+            continue
 
 
 class DatabaseVersionError(ValueError):
@@ -71,4 +87,5 @@ async def get_db(path: Path = Path("data") / "proxies.db") -> AsyncIterator[aios
         async with conn.execute("PRAGMA journal_mode = WAL"):
             pass
         await migrate(conn)
+        await asyncio.to_thread(_restrict_db_perms, path)
         yield conn

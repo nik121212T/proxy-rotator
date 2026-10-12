@@ -37,6 +37,20 @@ async def test_pool_loads_snapshot_and_publishes_success(db: aiosqlite.Connectio
         await subscriber.aclose()
 
 
+async def test_pool_quarantine_duration_follows_configuration(db: aiosqlite.Connection) -> None:
+    now = datetime(2026, 10, 7, tzinfo=UTC)
+    pool = await Pool.load(
+        db, Fernet.generate_key(), clock=lambda: now, quarantine_minutes=30
+    )
+    proxy = await pool.add(parse_line("user:pw@proxy.example:80"))
+    for _ in range(3):
+        await pool.mark_fail(proxy.id, "Timeout")
+    assert pool.all()[0].status == "quarantine"
+    assert pool.all()[0].quarantine_until == now + timedelta(minutes=30)
+    quarantined = await pool.quarantine(proxy.id)
+    assert quarantined.quarantine_until == now + timedelta(minutes=30)
+
+
 async def test_pool_parallel_mutations_and_lifecycle(db: aiosqlite.Connection) -> None:
     now = datetime(2026, 10, 7, tzinfo=UTC)
     pool = await Pool.load(db, Fernet.generate_key(), clock=lambda: now)

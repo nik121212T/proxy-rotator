@@ -81,12 +81,32 @@ Six des sept nouveaux tests échouent contre le code d'origine ;
 `test_a_steady_proxy_is_never_a_latency_spike` est un garde anti-faux-positif et
 est étiqueté comme tel.
 
-**F1 reste ouvert et hors de portée** : aucun proxy vivant dans la base
-(0 `alive`, dernière réussite le 2026-10-09T08:27), donc aucune preuve de rotation
-ne peut être produite.
+**Palier 3 (suite, 2026-10-12)** : **F1, B6, C5 et G5** sont corrigés ; 325
+tests passent.
 
-**Restent ouverts** : A12–A17, B4–B6, B8, C2, C3, C5, C6, E3–E8, F1–F9,
-G1–G5, H3, H4.
+- **F1** — preuve de rotation obtenue en direct contre un pool de 42 proxies
+  vivants : 5 requêtes HTTP via `127.0.0.1:8888` renvoient 5 IP distinctes
+  (`45.154.138.{115,135,157,158,130}`) et 3 requêtes SOCKS5 via `127.0.0.1:1080`
+  renvoient 3 IP distinctes (`45.154.138.{118,156,110}`), soit 8 IP de sortie
+  distinctes sur 8 appels. La fonctionnalité centrale du produit est donc
+  vérifiée de bout en bout avec les deux passerelles. Le script
+  `scripts/smoke_gateway.sh` reste à adapter pour s'attacher à un serveur
+  déjà démarré au lieu d'en lancer un propre sur le port 8080.
+- **B6** — nouveau champ `quarantine_minutes` dans `app/config.py`, câblé
+  jusqu'à `Pool.__init__` / `Pool.load` et consommé par `_outcome`. La ligne
+  `QUARANTINE_MINUTES=` de `.env` n'est plus silencieusement ignorée. Test de
+  non-régression `test_pool_quarantine_duration_follows_configuration`.
+- **C5** — `app/db.py` applique `os.chmod(..., 0o600)` après la migration sur
+  `proxies.db` et ses fichiers compagnons (`-wal`, `-shm`, `-journal`) sur
+  POSIX. Les erreurs sont avalées (le chiffrement Fernet reste la défense
+  principale) ; aucun impact sur Windows.
+- **G5** — migration 002 formalise `geo_cache` et `provider_tokens` dans
+  `app/migrations.py`, et §9 de `SPEC.md` les documente. Le test
+  `test_migrations_match_spec_and_are_idempotent` reconnaît maintenant les
+  deux tables et vérifie `user_version == 2`.
+
+**Restent ouverts** : A12–A17, B4–B5, B8, C2, C3, C6, E3–E8, F2 (doc), F3–F9,
+G1–G4, H3 (script smoke), H4.
 
 ## Résultat des vérifications globales
 
@@ -139,6 +159,10 @@ Le produit n'est **pas** cassé dans son concept : le chiffrement, le fail-close
 | C1 | **Élevée si LAN** | Aucune authentification ; `/api/proxies/export` renvoie tous les mots de passe en clair | V · ✅ corrigé (export toujours en clair sur loopback, documenté) | `app/routes/proxies.py:88` |
 | A4 | Moyenne-élevée | Taille de chunk hexadécimale signée acceptée → `read(-1)` → mémoire non bornée + blocage | V · ✅ corrigé | `app/gateway_http.py:741` |
 | B2 | Moyenne | Les tunnels CONNECT enregistrent une latence de 0 → médiane écrasée, score gonflé à 100 | V · ✅ corrigé | `app/gateway_http.py:335` |
+| B6 | Moyenne | `QUARANTINE_MINUTES` ignoré par la configuration | V · ✅ corrigé | `app/config.py`, `app/pool.py` |
+| C5 | Faible | `proxies.db` et WAL en 0644 | V · ✅ corrigé | `app/db.py` |
+| G5 | Moyenne | `geo_cache` / `provider_tokens` hors du système de migration | V · ✅ corrigé | `app/migrations.py`, `SPEC.md` |
+| F1 | **Élevée** | Preuve de rotation jamais obtenue | V · ✅ obtenue (8 IP distinctes sur 8 appels) | — |
 
 ---
 

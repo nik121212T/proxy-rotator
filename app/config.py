@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     health_concurrency: int = Field(default=20, ge=1)
     health_probe_url: str = "https://api.ipify.org?format=json"
     pool_min_score: float = Field(default=40, ge=0, le=100)
+    # ── Quarantine policy (SPEC §4) ────────────────────────────────────────
+    # Minutes a proxy stays in quarantine after three consecutive failures.
+    quarantine_minutes: int = Field(default=10, ge=1, le=1440)
 
     bind_host: str = "127.0.0.1"
     admin_port: int = Field(default=8080, ge=1, le=65535)

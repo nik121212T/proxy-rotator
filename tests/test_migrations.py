@@ -1,4 +1,4 @@
-"""Migration 001 must match SPEC section 9 exactly."""
+"""Migrations 001 and 002 must match SPEC section 9 exactly."""
 
 from pathlib import Path
 
@@ -16,7 +16,7 @@ async def schema(conn: aiosqlite.Connection) -> list[tuple[str, str, str]]:
         return [tuple(row) for row in await cursor.fetchall()]
 
 
-async def test_migration_001_matches_spec_and_is_idempotent(
+async def test_migrations_match_spec_and_are_idempotent(
     db: aiosqlite.Connection, tmp_path: Path
 ) -> None:
     spec = (Path(__file__).parents[1] / "SPEC.md").read_text(encoding="utf-8")
@@ -26,7 +26,7 @@ async def test_migration_001_matches_spec_and_is_idempotent(
         assert await schema(db) == await schema(reference)
 
     async with db.execute("PRAGMA user_version") as cursor:
-        assert (await cursor.fetchone())[0] == 1
+        assert (await cursor.fetchone())[0] == 2
     async with db.execute("PRAGMA schema_version") as cursor:
         before = (await cursor.fetchone())[0]
     await migrate(db)

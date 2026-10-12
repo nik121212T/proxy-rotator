@@ -53,11 +53,13 @@ class Pool:
         *,
         clock: Callable[[], datetime] = utc_now,
         min_score: float = 40,
+        quarantine_minutes: int = 10,
     ) -> None:
         self._conn = conn
         self._key = key
         self._clock = clock
         self._min_score = min_score
+        self._quarantine_minutes = quarantine_minutes
         self._snapshot: tuple[Proxy, ...] = ()
         self._latencies: dict[int, tuple[int | None, ...]] = {}
         self._pinned: set[int] = set()
@@ -75,8 +77,11 @@ class Pool:
         *,
         clock: Callable[[], datetime] = utc_now,
         min_score: float = 40,
+        quarantine_minutes: int = 10,
     ) -> "Pool":
-        pool = cls(conn, key, clock=clock, min_score=min_score)
+        pool = cls(
+            conn, key, clock=clock, min_score=min_score, quarantine_minutes=quarantine_minutes
+        )
         pool._snapshot = tuple(await repository.list_proxies(conn))
         for proxy in pool._snapshot:
             history = await repository.list_checks(conn, proxy.id, limit=50)
@@ -320,7 +325,8 @@ class Pool:
         """
         return await self._outcome(proxy_id, True, None)
 
-    async def quarantine(self, proxy_id: int, minutes: int = 10) -> Proxy:
+    async def quarantine(self, proxy_id: int, minutes: int | None = None) -> Proxy:
+        minutes = self._quarantine_minutes if minutes is None else minutes
         if minutes < 1:
             raise ValueError("Quarantine duration must be positive")
 
@@ -356,7 +362,7 @@ class Pool:
             status = "alive" if ok else ("quarantine" if failures >= 3 else old.status)
             until = None if ok else old.quarantine_until
             if not ok and failures >= 3:
-                until = now + timedelta(minutes=10)
+                until = now + timedelta(minutes=self._quarantine_minutes)
             history = self._latencies.get(proxy_id, ())
             if latency_ms is not None:
                 history = (*history, latency_ms)[-20:]

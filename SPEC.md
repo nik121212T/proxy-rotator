@@ -250,9 +250,25 @@ CREATE TABLE IF NOT EXISTS proxy_checks (
   checked_at        TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_checks_proxy_time ON proxy_checks(proxy_id, checked_at DESC);
+
+CREATE TABLE IF NOT EXISTS geo_cache (
+  ip            TEXT PRIMARY KEY,
+  country       TEXT,
+  country_code  TEXT,
+  cached_at     TEXT NOT NULL,
+  source        TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS provider_tokens (
+  provider    TEXT PRIMARY KEY,
+  token_enc   BLOB NOT NULL,
+  updated_at  TEXT NOT NULL
+);
 ```
 
 Date format everywhere: **ISO 8601 UTC** (`datetime('now')` in SQLite = UTC).
+
+`geo_cache` and `provider_tokens` are formalised by migration 002; both back
+opt-in surface (geolocation lookups and the Dichvusocks provider token).
 
 ---
 

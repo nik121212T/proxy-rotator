@@ -34,8 +34,26 @@ CREATE TABLE IF NOT EXISTS proxy_checks (
 CREATE INDEX IF NOT EXISTS idx_checks_proxy_time ON proxy_checks(proxy_id, checked_at DESC);
 """
 
+# Formalises the two sidecar tables previously created outside the migration
+# system (audit G5). IF NOT EXISTS keeps it idempotent on databases that
+# already have those tables from the ad-hoc ensure_schema() paths.
+MIGRATION_002 = """CREATE TABLE IF NOT EXISTS geo_cache (
+  ip            TEXT PRIMARY KEY,
+  country       TEXT,
+  country_code  TEXT,
+  cached_at     TEXT NOT NULL,
+  source        TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS provider_tokens (
+  provider    TEXT PRIMARY KEY,
+  token_enc   BLOB NOT NULL,
+  updated_at  TEXT NOT NULL
+);
+"""
+
 # This migration contains four simple statements, with no semicolons in literals.
 # Each version marker is static SQL: PRAGMA assignment does not accept '?' parameters.
 MIGRATIONS: tuple[tuple[str, ...], ...] = (
     (*tuple(sql.strip() for sql in MIGRATION_001.split(";") if sql.strip()), "PRAGMA user_version = 1"),
+    (*tuple(sql.strip() for sql in MIGRATION_002.split(";") if sql.strip()), "PRAGMA user_version = 2"),
 )

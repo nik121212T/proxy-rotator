@@ -60,7 +60,12 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
     salt = await asyncio.to_thread(load_or_create_salt, config.db_path.parent / ".salt")
     key = await asyncio.to_thread(derive_key, config.master_secret, salt)
     async with get_db(config.db_path) as conn:
-        pool = await Pool.load(conn, key, min_score=config.pool_min_score)
+        pool = await Pool.load(
+            conn,
+            key,
+            min_score=config.pool_min_score,
+            quarantine_minutes=config.quarantine_minutes,
+        )
         for proxy in pool.all():
             await asyncio.to_thread(decrypt_password, proxy.password_enc.get_secret_value(), key)
         checker = HealthChecker(
