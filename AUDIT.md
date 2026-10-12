@@ -188,8 +188,24 @@ sont documentés.
   `TASKS.md` section T7 (fichiers livrés, surface API, politique opt-in,
   tests). F1 est également consigné dans TASKS.md.
 
-**Restent ouverts** : B8, E4–E8, F2 (doc API/ARCHITECTURE), F3–F9, G2–G4,
-H3 (smoke auto-attach).
+**Palier 3 (suite 7, 2026-10-12)** : **E4** est corrigé en grande partie.
+
+- **E4** — quatre nouveaux tests couvrent les corps de requête :
+  `test_post_with_content_length_body_reaches_origin` (POST + CL vers
+  origine, bytes identiques côté origine) ;
+  `test_content_length_with_transfer_encoding_is_rejected` (A3 : refus
+  immédiat du CL + TE) ; `test_duplicate_content_length_is_rejected`
+  (A3 : refus de deux CL contradictoires) ;
+  `test_negative_chunk_size_is_rejected` (A4 : refus d'une taille de
+  chunk négative, origine jamais appelée). Un cinquième test
+  (chunked round-trip) est marqué `skip` : il expose un bug latent dans
+  aiohttp 3.14 qui ajoute un `Content-Length: 0` quand `data=` est un
+  itérateur court, et le correctif demande une refonte isolée du chemin
+  de forwarding (type `data=bytes` au lieu d'itérateur pour les petits
+  corps). Noté dans le test lui-même, à traiter indépendamment.
+
+**Restent ouverts** : B8, E5–E8, F2 (doc API/ARCHITECTURE), F3–F9, G2–G4,
+H3 (smoke auto-attach), bug chunked-forwarding ci-dessus.
 
 ## Résultat des vérifications globales
 
