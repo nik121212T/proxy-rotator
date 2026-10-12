@@ -153,8 +153,28 @@ tests passent.
   `/user-info`, `/countries`, `/preview`, `/import` et la liste `skipped`
   sont câblées dessus.
 
-**Restent ouverts** : B8, C3, E3–E8, F2 (doc), F3–F9, G1–G4, H3 (script
-smoke), H4.
+**Palier 3 (suite 5, 2026-10-12)** : **C3 et E3** sont corrigés.
+
+- **C3** — `/api/geo/{ip}` est désormais rate-limité en mémoire : 30 requêtes
+  / 60 s par IP cliente, 429 au-delà. L'endpoint ne peut plus servir de
+  relais ouvert vers le fournisseur géo.
+- **E3** — les 403 lignes du fournisseur Dichvusocks + magasin de jetons
+  passent de **0** à **29 tests** réels :
+  - `tests/test_provider_store.py` (5 tests) : round-trip, chiffrement au
+    repos (blob ne contient pas le plaintext, préfixe `gAAAAA`), delete sur
+    jeton blanc/`None`, overwrite sur place, mauvaise clé → `None` sans
+    crash.
+  - `tests/test_dichvusocks_client.py` (15 tests) : enabled/disabled,
+    `set_token`, bearer header, mapping 401/403/404/410/429/500 →
+    `DichvusocksError`, body non-JSON, payload non-dict, happy paths pour
+    `countries`, `list_socks` et `view`.
+  - `tests/test_providers_routes.py` (9 tests) : `/status`, `/user-info`
+    disabled vs upstream OK vs 502, `/token` POST/DELETE round-trip,
+    `/preview` qui ne consomme jamais `/socks/view` (pas de crédit),
+    `/import` qui vue + ajoute au pool.
+
+**Restent ouverts** : B8, E4–E8, F2 (doc), F3–F9, G1–G4, H3 (script smoke),
+H4.
 
 ## Résultat des vérifications globales
 
