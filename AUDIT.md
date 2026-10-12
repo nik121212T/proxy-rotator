@@ -141,8 +141,20 @@ tests passent.
   `asyncio.open_connection` est annulé entre `proxy.connect()` et le wrap
   streams, supprimant la fenêtre de fuite de FD.
 
-**Restent ouverts** : B5, B8, C3, C6, E3–E8, F2 (doc), F3–F9, G1–G4,
-H3 (script smoke), H4.
+**Palier 3 (suite 4, 2026-10-12)** : **B5 et C6** sont corrigés.
+
+- **B5** — les deux passerelles lisent maintenant l'IP du pair via
+  `writer.get_extra_info("peername")` et la passent au mode sticky, au lieu
+  du littéral `"127.0.0.1"`. La clé sticky `(client_ip, domaine)` est donc
+  vraie dès que plusieurs clients locaux attaquent le proxy.
+- **C6** — `app/routes/providers.py` ne renvoie plus `str(exc)` au client :
+  un filtre `_safe_provider_message` ne garde que les messages courts, ASCII
+  et imprimables, sinon renvoie « Provider request failed ». Les routes
+  `/user-info`, `/countries`, `/preview`, `/import` et la liste `skipped`
+  sont câblées dessus.
+
+**Restent ouverts** : B8, C3, E3–E8, F2 (doc), F3–F9, G1–G4, H3 (script
+smoke), H4.
 
 ## Résultat des vérifications globales
 

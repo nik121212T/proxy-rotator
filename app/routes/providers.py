@@ -18,6 +18,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/providers/dichvusocks", tags=["providers"])
 
 
+def _safe_provider_message(exc: Exception) -> str:
+    """Return a short, printable, ASCII-only provider-error message.
+
+    The provider client only raises DichvusocksError with vetted static
+    strings today, but a plain str(exc) pass-through could leak content if
+    an upstream library ever stringified raw server payloads (audit C6).
+    """
+    message = str(exc)
+    if not message or len(message) > 160 or not message.isascii():
+        return "Provider request failed"
+    return "".join(ch for ch in message if ch.isprintable()) or "Provider request failed"
+
+
 @router.get("/status")
 async def status(runtime: Services) -> dict[str, Any]:
     client = runtime.dichvusocks
@@ -30,7 +43,7 @@ async def user_info(runtime: Services) -> dict[str, Any]:
     try:
         return await client.user_info()
     except DichvusocksError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail=_safe_provider_message(exc)) from exc
 
 
 @router.get("/countries")
@@ -39,7 +52,7 @@ async def countries(runtime: Services) -> list[str]:
     try:
         return await client.countries()
     except DichvusocksError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail=_safe_provider_message(exc)) from exc
 
 
 @router.get("/preview")
@@ -58,7 +71,7 @@ async def preview(
             country=country, region=region, city=city, limit=limit, page=page
         )
     except DichvusocksError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail=_safe_provider_message(exc)) from exc
 
 
 @router.post("/import")
@@ -76,7 +89,7 @@ async def import_from_provider(
             country=country, region=region, city=city, limit=limit, page=1
         )
     except DichvusocksError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail=_safe_provider_message(exc)) from exc
 
     lines: list[str] = []
     skipped: list[dict[str, Any]] = []
@@ -89,7 +102,7 @@ async def import_from_provider(
         try:
             sock = await client.view(int(sock_id))
         except DichvusocksError as exc:
-            skipped.append({"id": sock_id, "reason": str(exc)})
+            skipped.append({"id": sock_id, "reason": _safe_provider_message(exc)})
             continue
         if sock is None or not sock.username or not sock.password:
             skipped.append({"id": sock_id, "reason": "no credentials returned"})

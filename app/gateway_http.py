@@ -168,6 +168,16 @@ async def _read_headers(reader: asyncio.StreamReader) -> list[tuple[str, str]]:
         )
 
 
+def _peer_ip(writer: asyncio.StreamWriter | None) -> str:
+    """Best-effort peer IP for sticky rotation (audit B5)."""
+    if writer is None:
+        return "127.0.0.1"
+    peer = writer.get_extra_info("peername")
+    if peer and isinstance(peer, tuple) and len(peer) >= 1 and isinstance(peer[0], str):
+        return peer[0]
+    return "127.0.0.1"
+
+
 def _basic_auth(proxy: Proxy, key: bytes) -> str:
     secret = decrypt_password(proxy.password_enc.get_secret_value(), key)
     token = f"{proxy.username}:{secret.get_secret_value()}".encode()
@@ -348,7 +358,7 @@ class HttpGateway:
         pool_was_empty = True
         while attempts_left > 0:
             attempts_left -= 1
-            chosen = self._pick(target_domain=host.strip("[]"))
+            chosen = self._pick(target_domain=host.strip("[]"), writer=writer)
             if chosen is None:
                 # On the very first attempt the pool is simply empty; after
                 # that the only candidates left are proxies we already tried,
@@ -527,7 +537,7 @@ class HttpGateway:
         tried: set[int] = set()
         while attempts_left > 0:
             attempts_left -= 1
-            proxy = self._pick(target_domain=url.host or "")
+            proxy = self._pick(target_domain=url.host or "", writer=writer)
             if proxy is None or proxy.id in tried:
                 break
             tried.add(proxy.id)
@@ -580,7 +590,7 @@ class HttpGateway:
         clean_headers: list[tuple[str, str]],
         body: AsyncIterator[bytes] | None,
     ) -> None:
-        proxy = self._pick(target_domain=url.host or "")
+        proxy = self._pick(target_domain=url.host or "", writer=writer)
         if proxy is None:
             await self._reply_error(writer, 503, "Pool Empty")
             return
@@ -762,9 +772,18 @@ class HttpGateway:
 
     # ── helpers ───────────────────────────────────────────────────────────
 
-    def _pick(self, *, target_domain: str) -> Proxy | None:
+    def _pick(
+        self,
+        *,
+        target_domain: str,
+        writer: asyncio.StreamWriter | None = None,
+    ) -> Proxy | None:
         if self.rotator.strategy == "sticky":
-            return self.rotator.pick(self.pool, client_ip="127.0.0.1", target_domain=target_domain)
+            return self.rotator.pick(
+                self.pool,
+                client_ip=_peer_ip(writer),
+                target_domain=target_domain,
+            )
         return self.rotator.pick(self.pool)
 
     async def _reply_client_body_error(

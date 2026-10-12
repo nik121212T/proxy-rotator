@@ -144,7 +144,7 @@ class SocksGateway:
             self._requests_total += 1
 
             chosen, up_reader, up_writer, failure_rep = await self._open_tunnel_with_retry(
-                target_host, target_port
+                target_host, target_port, writer=writer
             )
             if chosen is None or up_reader is None or up_writer is None:
                 await self._reply(writer, failure_rep)
@@ -236,7 +236,11 @@ class SocksGateway:
             await writer.drain()
 
     async def _open_tunnel_with_retry(
-        self, target_host: str, target_port: int
+        self,
+        target_host: str,
+        target_port: int,
+        *,
+        writer: asyncio.StreamWriter | None = None,
     ) -> tuple[
         Proxy | None,
         asyncio.StreamReader | None,
@@ -248,7 +252,7 @@ class SocksGateway:
         last_rep = _REP_GENERAL_FAILURE
         while attempts_left > 0:
             attempts_left -= 1
-            proxy = self._pick(target_domain=target_host.strip("[]"))
+            proxy = self._pick(target_domain=target_host.strip("[]"), writer=writer)
             if proxy is None:
                 return None, None, None, last_rep
             if proxy.id in tried:
@@ -330,10 +334,19 @@ class SocksGateway:
                 await writer_up.wait_closed()
             raise
 
-    def _pick(self, *, target_domain: str) -> Proxy | None:
+    def _pick(
+        self,
+        *,
+        target_domain: str,
+        writer: asyncio.StreamWriter | None = None,
+    ) -> Proxy | None:
         if self.rotator.strategy == "sticky":
+            # Reuse the HTTP gateway helper to extract the real peer IP so
+            # sticky partitions are per-client, not per-proxy-rotator (audit B5).
+            from app.gateway_http import _peer_ip
+
             return self.rotator.pick(
-                self.pool, client_ip="127.0.0.1", target_domain=target_domain
+                self.pool, client_ip=_peer_ip(writer), target_domain=target_domain
             )
         return self.rotator.pick(self.pool)
 
