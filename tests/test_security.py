@@ -190,3 +190,15 @@ async def test_export_still_works_on_loopback(plain_client: httpx.AsyncClient) -
     response = await plain_client.get("/api/proxies/export")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/plain")
+
+
+async def test_export_filename_carries_a_utc_timestamp(
+    plain_client: httpx.AsyncClient,
+) -> None:
+    """Successive exports must not collide in the user's downloads folder."""
+    import re
+
+    response = await plain_client.get("/api/proxies/export")
+    disposition = response.headers["content-disposition"]
+    match = re.search(r'filename="proxies-(alive|all)-(\d{8}-\d{6})\.txt"', disposition)
+    assert match is not None, disposition

@@ -91,9 +91,12 @@ async def export_proxies(
     status: Annotated[ProxyStatus | None, Query()] = "alive",
 ) -> Response:
     """Plain-text download of proxies (default: alive only)."""
+    from datetime import UTC, datetime  # noqa: PLC0415 - keep import local
+
     lines = runtime.pool.export_lines(status=status)
     body = "\n".join(lines) + ("\n" if lines else "")
-    filename = f"proxies-{status or 'all'}.txt"
+    stamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
+    filename = f"proxies-{status or 'all'}-{stamp}.txt"
     return Response(
         content=body,
         media_type="text/plain; charset=utf-8",
