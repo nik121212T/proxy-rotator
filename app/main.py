@@ -37,7 +37,7 @@ from app.security import (
     configured_hosts,
     is_loopback,
 )
-from app.ui.rendering import UI_DIR, templates
+from app.views import UI_DIR, templates
 
 logger = logging.getLogger(__name__)
 

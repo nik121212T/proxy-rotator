@@ -300,5 +300,32 @@ donc toujours, et rien dans ces correctifs ne peut en produire une sans
 upstreams fonctionnels. La condition reste : deux proxies vivants avec deux IP
 de sortie distinctes.
 
-Still open from the audit: A5–A7, A10–A17 (input hardening and the SOCKS5
-credential URL), B3–B8, C2, C3, C5, C6, E3–E8, F1–F9, G1–G5, H3, H4.
+## T7 — Dichvusocks provider integration (addendum, 2026-10-12)
+
+Previously undocumented (audit H4.4). The provider ships three units:
+
+- `app/providers/dichvusocks.py` — thin async client over
+  `https://dichvusocks.net/api/v1` (`user_info`, `countries`, `list_socks`,
+  `view`). Only `view()` debits credit, and only when the operator
+  explicitly imports.
+- `app/provider_store.py` — Fernet-encrypted token in a `provider_tokens`
+  SQLite row (migration 002).
+- `app/routes/providers.py` — `/api/providers/dichvusocks/{status,user-info,
+  countries,preview,import,token}`.
+
+The feature is opt-in: no HTTP call is made without a token, and
+`DichvusocksClient.enabled` gates each API method. Covered by
+`tests/test_provider_store.py`, `tests/test_dichvusocks_client.py` and
+`tests/test_providers_routes.py` (29 tests driven by a local aiohttp
+upstream — no real credit is spent).
+
+## F1 — Rotation proof (2026-10-12)
+
+Captured against a running pool of 42 alive proxies: 5 HTTP requests
+through `127.0.0.1:8888` returned 5 distinct exit IPs
+(`45.154.138.{115,135,157,158,130}`); 3 SOCKS5 requests through
+`127.0.0.1:1080` returned 3 more (`45.154.138.{118,156,110}`). Eight
+distinct exit IPs across eight requests on both gateways.
+
+Still open from the audit: B8, E4–E8, F2 (doc), F3–F9, G1–G4, H3 (smoke
+script auto-attach).

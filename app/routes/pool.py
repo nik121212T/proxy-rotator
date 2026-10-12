@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 from app.models import PoolStats, RotationSelection, RotationStrategy
 from app.routes.proxies import Services
-from app.ui.rendering import feedback
+from app.views import feedback
 
 router = APIRouter(prefix="/api/pool", tags=["pool"])
 

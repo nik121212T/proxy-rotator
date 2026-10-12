@@ -104,9 +104,11 @@ class Rotator:
         # the rotation to index 0 on the next tick (audit B4). We still prefer
         # resuming right after the previously-picked proxy when it is still
         # present, which keeps the natural ordering intact.
-        previous = next((i for i, proxy in enumerate(active) if proxy.id == self._last_id), None)
-        if previous is not None:
-            index = (previous + 1) % len(active)
+        last_index: int | None = next(
+            (i for i, proxy in enumerate(active) if proxy.id == self._last_id), None
+        )
+        if last_index is not None:
+            index = (last_index + 1) % len(active)
         else:
             index = self._rr_cursor % len(active)
         selected = active[index]

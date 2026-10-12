@@ -173,8 +173,23 @@ tests passent.
     `/preview` qui ne consomme jamais `/socks/view` (pas de crédit),
     `/import` qui vue + ajoute au pool.
 
-**Restent ouverts** : B8, E4–E8, F2 (doc), F3–F9, G1–G4, H3 (script smoke),
-H4.
+**Palier 3 (suite 6, 2026-10-12)** : **G1** est corrigé, **H4.1** et **H4.4**
+sont documentés.
+
+- **G1** — le rendu de templates vit maintenant dans `app/views.py` (hors
+  `app/ui/`). Les routes (`app/main.py`, `app/routes/{ui,pool,proxies}.py`)
+  importent `from app.views import render, feedback, templates`. Un shim
+  `app/ui/rendering.py` ré-exporte les mêmes symboles pour les tests qui
+  continueraient à y pointer, mais la couche routes ne dépend plus de
+  `app.ui`. Pas de changement d'API ni de comportement.
+- **H4.1** — déjà corrigé : la ligne qui pointait vers `requirements-dev.txt`
+  a été remplacée par un commentaire. Pas de nouveau fichier à créer.
+- **H4.4** — le provider Dichvusocks est désormais documenté dans
+  `TASKS.md` section T7 (fichiers livrés, surface API, politique opt-in,
+  tests). F1 est également consigné dans TASKS.md.
+
+**Restent ouverts** : B8, E4–E8, F2 (doc API/ARCHITECTURE), F3–F9, G2–G4,
+H3 (smoke auto-attach).
 
 ## Résultat des vérifications globales
 

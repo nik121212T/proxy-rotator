@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, SecretStr
 from app.models import CheckResult, Proxy, ProxyStatus
 from app.parser import ImportReport
 from app.runtime import Runtime, get_runtime
-from app.ui.rendering import feedback, render
+from app.views import feedback, render
 
 router = APIRouter(prefix="/api/proxies", tags=["proxies"])
 Services = Annotated[Runtime, Depends(get_runtime)]
@@ -132,7 +132,7 @@ async def test_proxy(
     try:
         result = await runtime.checker.check_one(proxy_id)
         if request.headers.get("HX-Request") == "true":
-            from app.ui.rendering import templates
+            from app.views import templates
 
             text = (
                 f"OK · {result.latency_ms} ms"

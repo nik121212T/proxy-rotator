@@ -4,7 +4,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from app.routes.proxies import Services
-from app.ui.rendering import render
+from app.views import render
 
 router = APIRouter()
 
