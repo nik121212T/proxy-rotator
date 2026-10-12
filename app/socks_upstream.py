@@ -40,4 +40,15 @@ async def open_socks_tunnel(
         rdns=True,
     )
     sock = await proxy.connect(dest_host=dest_host, dest_port=dest_port)
-    return await asyncio.open_connection(host=None, port=None, sock=sock)
+    # If the outer caller cancels (asyncio.wait_for timeout, task cancellation)
+    # between proxy.connect() and open_connection(), the raw socket would leak
+    # — the proxy returned a live FD that nothing else holds a reference to
+    # (audit A17). Guard it with a close-on-failure fallback.
+    try:
+        return await asyncio.open_connection(host=None, port=None, sock=sock)
+    except BaseException:
+        try:
+            sock.close()
+        except OSError:
+            pass
+        raise

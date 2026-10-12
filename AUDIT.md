@@ -125,8 +125,24 @@ tests passent.
   curseur au lieu de retomber à l'index 0. Nouveau test
   `test_round_robin_cursor_survives_removed_proxy_bias`.
 
-**Restent ouverts** : A13, A14, A16, A17, B5, B8, C3, C6, E3–E8, F2 (doc),
-F3–F9, G1–G4, H3 (script smoke), H4.
+**Palier 3 (suite 3, 2026-10-12)** : **A13, A14, A16, A17** sont corrigés.
+
+- **A13** — `_handle_forward` écrase désormais tout `Host` client par
+  l'autorité de l'URI absolue, interdisant un détournement vers un vhost
+  différent de la cible annoncée.
+- **A14** — `_handle_connect` tient un `set` `tried` : si tous les candidats
+  retentés sont déjà brûlés, retour `502 Bad Gateway` (502 avec
+  `last_reason`) ; sinon seule la première passe peut renvoyer `503 Pool
+  Empty`. Plus de re-sélection du même proxy.
+- **A16** — `_format_response_headers` et la ligne de statut encodent en
+  `latin-1` avec `errors="replace"` au lieu de lever `UnicodeEncodeError`
+  (500 sans retry).
+- **A17** — `open_socks_tunnel` ferme la socket brute si
+  `asyncio.open_connection` est annulé entre `proxy.connect()` et le wrap
+  streams, supprimant la fenêtre de fuite de FD.
+
+**Restent ouverts** : B5, B8, C3, C6, E3–E8, F2 (doc), F3–F9, G1–G4,
+H3 (script smoke), H4.
 
 ## Résultat des vérifications globales
 

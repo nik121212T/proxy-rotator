@@ -114,11 +114,18 @@ def _append_via(headers: list[tuple[str, str]]) -> list[tuple[str, str]]:
 
 
 def _format_response_headers(headers: Iterable[tuple[str, str]]) -> bytes:
+    """Serialize headers to latin-1 bytes without raising on non-latin bytes.
+
+    RFC 7230 §3.2.4 recommends ISO-8859-1 but modern origins occasionally
+    emit UTF-8 (e.g. a stray non-ASCII character in a server-generated
+    reason or a header value). Replacing instead of raising keeps the
+    gateway from crashing out of the response path (audit A16).
+    """
     buffer = bytearray()
     for name, value in headers:
-        buffer.extend(name.encode("latin-1"))
+        buffer.extend(name.encode("latin-1", errors="replace"))
         buffer.extend(b": ")
-        buffer.extend(value.encode("latin-1"))
+        buffer.extend(value.encode("latin-1", errors="replace"))
         buffer.extend(b"\r\n")
     return bytes(buffer)
 
@@ -337,12 +344,23 @@ class HttpGateway:
         up_reader: asyncio.StreamReader | None = None
         up_writer: asyncio.StreamWriter | None = None
         last_reason = "no attempt"
+        tried: set[int] = set()
+        pool_was_empty = True
         while attempts_left > 0:
             attempts_left -= 1
             chosen = self._pick(target_domain=host.strip("[]"))
             if chosen is None:
-                await self._reply_error(writer, 503, "Pool Empty")
-                return
+                # On the very first attempt the pool is simply empty; after
+                # that the only candidates left are proxies we already tried,
+                # so a retry would just re-burn them (audit A14).
+                if pool_was_empty:
+                    await self._reply_error(writer, 503, "Pool Empty")
+                    return
+                break
+            pool_was_empty = False
+            if chosen.id in tried:
+                break
+            tried.add(chosen.id)
             try:
                 up_reader, up_writer = await asyncio.wait_for(
                     self._open_upstream_tunnel(chosen, host, port),
@@ -471,10 +489,12 @@ class HttpGateway:
         clean_headers = [
             (name, value) for name, value in clean_headers if name.lower() != "expect"
         ]
-        header_names = {name.lower() for name, _ in clean_headers}
-        if "host" not in header_names:
-            host_value = url.host if url.port is None else f"{url.host}:{url.port}"
-            clean_headers.append(("Host", host_value))
+        # Overwrite any client-sent Host so it matches the absolute URI's
+        # authority (audit A13): otherwise a client could proxy to origin A
+        # while pretending to address virtual host B at that origin.
+        host_value = url.host if url.port is None else f"{url.host}:{url.port}"
+        clean_headers = [(name, value) for name, value in clean_headers if name.lower() != "host"]
+        clean_headers.append(("Host", host_value))
 
         if _expects_continue(headers):
             # RFC 9110 section 10.1.1: a client may wait for the interim
@@ -693,7 +713,7 @@ class HttpGateway:
                         state.burn_reason = body_burn.reason or "body marker"
 
                 status_line = f"HTTP/1.1 {response.status} {response.reason or ''}\r\n".encode(
-                    "latin-1"
+                    "latin-1", errors="replace"
                 )
                 out_headers = _append_via(_strip_hop_by_hop(list(response.headers.items())))
                 out_headers = [
