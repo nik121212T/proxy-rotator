@@ -415,7 +415,6 @@
   (async function initDichvusocks() {
     const section = document.getElementById('dichvusocks-section');
     if (!section) return;
-    const tokenCard   = document.getElementById('dichvusocks-token-card');
     const tokenInput  = document.getElementById('dichvusocks-token');
     const tokenHint   = document.getElementById('dichvusocks-token-hint');
     const saveTokenBtn= document.getElementById('dichvusocks-save-token');
@@ -423,13 +422,18 @@
     const balanceCard = document.getElementById('dichvusocks-balance');
     const importForm  = document.getElementById('dichvusocks-form');
 
+    let accountVersion = 0;
     function reveal(enabled) {
+      accountVersion += 1;
       balanceCard.hidden = !enabled;
       importForm.hidden  = !enabled;
       clearTokenBtn.hidden = !enabled;
       section.dataset.enabled = enabled ? 'true' : 'false';
     }
     reveal(section.dataset.enabled === 'true');
+    if (section.dataset.enabled !== 'true') {
+      tokenHint.textContent = 'Aucun token enregistré. Cette connexion est facultative si vous importez vos proxies manuellement.';
+    }
 
     saveTokenBtn && saveTokenBtn.addEventListener('click', async () => {
       const token = (tokenInput.value || '').trim();
@@ -481,36 +485,86 @@
       hint.className = 'helper' + (kind ? ' ' + kind : '');
     }
 
-    async function loadBalance() {
+    async function readProvider(path) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12000);
       try {
-        const r = await fetch('/api/providers/dichvusocks/user-info');
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const body = await r.json();
-        const u = body.user || body;
+        const response = await fetch('/api/providers/dichvusocks/' + path, {signal: controller.signal});
+        const body = await response.json();
+        if (!response.ok) {
+          const detail = typeof body.detail === 'string' ? body.detail : '';
+          if (response.status === 401 || detail.includes('(401)')) {
+            throw new Error('Token refusé. Vérifiez votre token Dichvusocks et enregistrez-le à nouveau.');
+          }
+          if (response.status === 403 || detail.includes('(403)')) {
+            throw new Error('Accès refusé. Vérifiez l’état et le crédit de votre compte Dichvusocks.');
+          }
+          if (response.status === 429 || detail.includes('(429)')) {
+            throw new Error('Trop de demandes. Patientez puis actualisez le compte.');
+          }
+          throw new Error('Service indisponible. Actualisez le compte pour réessayer.');
+        }
+        return body;
+      } catch (error) {
+        if (controller.signal.aborted) throw new Error('Délai dépassé. Actualisez le compte pour réessayer.');
+        if (error instanceof SyntaxError || error instanceof TypeError) {
+          throw new Error('Réponse indisponible. Vérifiez votre connexion puis actualisez le compte.');
+        }
+        throw error;
+      } finally { clearTimeout(timer); }
+    }
+
+    async function loadBalance() {
+      const version = accountVersion;
+      balanceEl.textContent = 'Chargement du compte…';
+      try {
+        const body = await readProvider('user-info');
+        const u = body && (body.user || body.data || body);
+        if (!u || typeof u !== 'object' || Array.isArray(u)) {
+          throw new Error('Réponse du compte invalide. Actualisez pour réessayer.');
+        }
         const pts = u.point ?? '—';
-        const views = u.totalView ?? 0;
+        const views = u.totalView ?? '—';
         const plan = u.plan ?? '—';
+        if (version !== accountVersion) return;
         balanceEl.textContent = `${u.username || 'compte'} · ${pts} pts · plan ${plan} · ${views} vues`;
       } catch (err) {
-        balanceEl.textContent = 'Indisponible : ' + err.message;
+        if (version === accountVersion) balanceEl.textContent = err.message;
       }
     }
 
     async function loadCountries() {
+      const version = accountVersion;
       try {
-        const r = await fetch('/api/providers/dichvusocks/countries');
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const list = await r.json();
-        for (const c of list) {
+        const list = await readProvider('countries');
+        if (!Array.isArray(list) || list.some(c => typeof c !== 'string')) {
+          throw new Error('Liste des pays invalide. Actualisez pour réessayer.');
+        }
+        if (version !== accountVersion) return;
+        const selected = countrySel.value;
+        const all = document.createElement('option');
+        all.value = '';
+        all.textContent = 'Tous';
+        countrySel.replaceChildren(all);
+        for (const c of new Set(list)) {
           const opt = document.createElement('option');
           opt.value = c;
           opt.textContent = c;
           countrySel.appendChild(opt);
         }
+        countrySel.value = list.includes(selected) ? selected : '';
       } catch (err) {
-        setHint('Pays indisponibles : ' + err.message, 'error');
+        if (version === accountVersion) setHint('Pays indisponibles : ' + err.message, 'error');
       }
     }
+
+    const refreshBtn = document.getElementById('dichvusocks-refresh');
+    refreshBtn?.addEventListener('click', async () => {
+      refreshBtn.disabled = true;
+      setHint('');
+      try { await Promise.all([loadBalance(), loadCountries()]); }
+      finally { refreshBtn.disabled = false; }
+    });
 
     previewBtn.addEventListener('click', async () => {
       setHint('Aperçu en cours…');
@@ -536,9 +590,9 @@
     });
 
     importBtn.addEventListener('click', async () => {
-      const n = parseInt(limitInput.value || '0', 10);
-      if (!n || n < 1) { setHint('Choisissez un nombre entre 1 et 50.', 'error'); return; }
-      if (!window.confirm(`Importer ${n} proxy(s) ? Cela débitera ${n} crédit(s).`)) return;
+      const n = Number(limitInput.value);
+      if (!Number.isInteger(n) || n < 1 || n > 50) { setHint('Choisissez un nombre entre 1 et 50.', 'error'); return; }
+      if (!window.confirm(`Importer ${n} proxy(s) ? Cette opération peut consommer des crédits sur votre compte Dichvusocks.`)) return;
       setHint('Import en cours…');
       importBtn.disabled = true;
       const params = new URLSearchParams({ limit: String(n) });
@@ -551,9 +605,9 @@
         const r = await fetch('/api/providers/dichvusocks/import?' + params, { method: 'POST' });
         const body = await r.json();
         if (!r.ok) throw new Error(body.detail || 'HTTP ' + r.status);
-        setHint(`Importés : ${body.imported} · dédupliqués : ${body.deduped} · ignorés : ${(body.skipped || []).length}`, 'good');
-        schedule(true);
-        loadBalance();
+        setHint(`Importés : ${body.imported} · dédupliqués : ${body.deduped ?? 0} · ignorés : ${(body.skipped || []).length}`, 'good');
+        document.body.dispatchEvent(new Event("pool-refresh"));
+        await loadBalance();
       } catch (err) {
         setHint('Import KO : ' + err.message, 'error');
       } finally {

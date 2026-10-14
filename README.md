@@ -248,3 +248,12 @@ s’affichent avec l’état « Hors pool » ou « Tous les états ».
 Ces filtres concernent seulement l’affichage. Les filtres de rotation restent
 dans Paramètres. **Utiliser en priorité** donne la priorité à un proxy disponible
 qui correspond aux filtres de rotation ; ce bouton ne répare pas ses identifiants.
+
+Le panneau Dichvusocks affiche « Aucun token enregistré » lorsqu’il n’est pas
+configuré, sans requête réseau ni faux chargement. Une fois connecté,
+**Actualiser le compte et les pays** relance uniquement les lectures gratuites.
+Le chargement abandonne après 12 secondes avec un message permettant de réessayer.
+L’import reste une action distincte et confirmée ; il peut consommer des crédits.
+
+Tests des interactions JavaScript :
+`node --test tests/rotation_controls.test.cjs tests/provider_widget.test.cjs`.

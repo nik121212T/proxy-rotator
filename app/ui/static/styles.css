@@ -907,6 +907,7 @@ tr.is-pinned:hover td {
 footer { padding-bottom: 88px; }
 
 /* ── Dichvusocks provider widget ─────────────────────────────────────── */
+#dichvusocks-section [hidden] { display: none; }
 .dichvusocks-balance {
   display: flex; flex-direction: column; gap: 2px;
   margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3);

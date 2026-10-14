@@ -394,3 +394,18 @@ script auto-attach).
 - [x] Envoyer explicitement le mode même lorsque le select est désactivé ;
   imposer aussi la cohérence côté API. Tests JS de verrouillage et soumission,
   régression API et 37 tests Python ciblés passent ; Ruff/mypy verts.
+
+## T10 — Diagnostic du panneau Dichvusocks (2026-10-14)
+
+- [x] Cause de la capture : aucun token configuré, mais `display:flex` du bloc
+  compte écrasait le comportement HTML `hidden`. Masquage explicite de tous les
+  éléments hidden du panneau et état « Aucun token enregistré ».
+- [x] Corriger `schedule is not defined` après import (fonction dans une autre
+  closure), qui transformait un succès en erreur ; publier `pool-refresh`.
+- [x] Remplacer la liste des pays au rechargement sans doublons ; borne entière
+  1–50 avant import ; ne pas afficher `undefined` pour un import vide.
+- [x] Chargement compte/pays limité à 12 s, messages exploitables, bouton de
+  relance, protection contre les réponses d’une ancienne configuration.
+- [x] Tests : 8 JS (7 panneau + 1 rotation) et 32 Python passent ; cycle token
+  réel sur SQLite/ASGI sans socket. Ruff/mypy verts, détecteur UI sans anomalie.
+  Aucun appel réel payant ; validation contre le fournisseur distant non faite.
