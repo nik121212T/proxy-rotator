@@ -30,7 +30,7 @@ async def snapshot(request: Request, runtime: Services) -> HTMLResponse:
 async def row(
     proxy_id: int, request: Request, runtime: Services, append: bool = False, empty: bool = False
 ) -> HTMLResponse:
-    proxy = next((p for p in runtime.pool.all() if p.id == proxy_id and p.status != "dead"), None)
+    proxy = next((p for p in runtime.pool.all() if p.id == proxy_id), None)
     response = render(
         request,
         "_row_oob.html",

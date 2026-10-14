@@ -62,6 +62,7 @@ class Pool:
         self._quarantine_minutes = quarantine_minutes
         self._snapshot: tuple[Proxy, ...] = ()
         self._latencies: dict[int, tuple[int | None, ...]] = {}
+        self._latest_checks: dict[int, CheckResult] = {}
         self._pinned: set[int] = set()
         self._exits: dict[int, ExitObservation] = {}
         self._countries: dict[str, tuple[str, str]] = {}
@@ -86,6 +87,8 @@ class Pool:
         pool._snapshot = tuple(await repository.list_proxies(conn))
         for proxy in pool._snapshot:
             history = await repository.list_checks(conn, proxy.id, limit=50)
+            if history:
+                pool._latest_checks[proxy.id] = history[0]
             pool._latencies[proxy.id] = tuple(check.latency_ms for check in reversed(history[:20]))
             for check in reversed(history):
                 pool._observe_exit(check)
@@ -101,6 +104,9 @@ class Pool:
             previous_ip=old.ip if changed and old is not None else (old.previous_ip if old else None),
             changed_at=check.checked_at if changed else (old.changed_at if old else None),
         )
+
+    def latest_check(self, proxy_id: int) -> CheckResult | None:
+        return self._latest_checks.get(proxy_id)
 
     def exit_observations(self) -> dict[int, ExitObservation]:
         return dict(self._exits)
@@ -214,6 +220,7 @@ class Pool:
             self._snapshot = tuple(p for p in self._snapshot if p.id not in removed)
             for proxy_id in removed:
                 self._latencies.pop(proxy_id, None)
+                self._latest_checks.pop(proxy_id, None)
                 self._exits.pop(proxy_id, None)
                 self._pinned.discard(proxy_id)
                 self._events.publish(ProxyEvent(type="removed", proxy_id=proxy_id))
@@ -239,6 +246,7 @@ class Pool:
                     await repository.delete_proxy(self._conn, proxy_id)
             self._snapshot = ()
             self._latencies.clear()
+            self._latest_checks.clear()
             self._exits.clear()
             self._pinned.clear()
             for proxy_id in ids:
@@ -341,6 +349,7 @@ class Pool:
             if removed is not None:
                 self._snapshot = tuple(p for p in self._snapshot if p.id != proxy_id)
                 self._latencies.pop(proxy_id, None)
+                self._latest_checks.pop(proxy_id, None)
                 self._exits.pop(proxy_id, None)
                 self._pinned.discard(proxy_id)
                 self._events.publish(ProxyEvent(type="removed", proxy_id=proxy_id))
@@ -431,6 +440,7 @@ class Pool:
                 saved = await repository.update_proxy_health(self._conn, updated)
             self._latencies[proxy_id] = history
             if check:
+                self._latest_checks[proxy_id] = check
                 self._observe_exit(check)
             self._publish_proxy(saved)
             if check:

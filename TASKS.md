@@ -354,3 +354,18 @@ script auto-attach).
   placer les villes inconnues en dernier et départager par ID.
 - [x] Vérifier page initiale, snapshot après changement de ville et fragment
   individuel via ASGI sans listeners : 34 tests ciblés passent ; Ruff/mypy verts.
+
+## T9 — Diagnostic visible et filtres du tableau (2026-10-14)
+
+- [x] Afficher le motif du dernier test en échec sous l’état, en français,
+  avec une action utile et sans exposer les messages bruts. Restaurer le dernier
+  test depuis SQLite au démarrage ; retirer l’erreur après une sonde réussie.
+- [x] Filtres d’affichage ville (recherche sans casse/accents), pays (code) et
+  état, combinables avec le tri. Inclure explicitement les hors pool sur demande.
+- [x] Conserver les filtres dans l’URL et les snapshots live ; compteur visible,
+  suggestions actualisées et réinitialisation. Aucun effet sur la rotation.
+- [x] Harmoniser les libellés « Utiliser en priorité » et « Retirer la priorité ».
+- [x] Tests ASGI sans sockets, persistance, erreurs connues/inconnues, filtrage,
+  fragments et échappement HTML ; vérifications Ruff/mypy/JavaScript.
+- [ ] Contrôle visuel en navigateur : Chromium interdit par le sandbox
+  (`bootstrap_check_in: Permission denied`). Revue source et détecteur sans anomalie.

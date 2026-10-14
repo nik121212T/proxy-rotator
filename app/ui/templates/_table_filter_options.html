@@ -1,0 +1,2 @@
+<datalist id="table-city-options"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>{% for code, region, city in cities %}<option value="{{ city }}">{{ region }} · {{ code }}</option>{% endfor %}</datalist>
+<datalist id="table-country-options"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>{% for code, name in countries %}<option value="{{ code }}">{{ name }}</option>{% endfor %}</datalist>

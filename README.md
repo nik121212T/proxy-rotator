@@ -230,3 +230,21 @@ indépendants des filtres d'import et sont réinitialisés au redémarrage.
 La migration 003 ajoute ville/région au cache et efface les anciennes entrées de
 localisation pour permettre leur enrichissement. Proxies et identifiants sont
 conservés. Redémarrez l'application pour charger cette version.
+
+### Comprendre et filtrer le tableau
+
+Le dernier test en échec apparaît sous l’état du proxy : identifiants refusés
+(HTTP 407), délai dépassé, connexion impossible, problème TLS, réponse invalide
+ou hausse de latence. Le message reste disponible après redémarrage et disparaît
+après un test réussi. Il décrit la dernière sonde, pas les erreurs des tunnels.
+
+Au-dessus du tableau, filtrez par **Ville**, **Pays (code)** et **État**, puis
+cliquez sur **Filtrer** (ou Entrée). Les listes État et Trier par s’appliquent dès
+le choix. La recherche de ville accepte un nom partiel et ignore casse/accents.
+Les filtres sont combinés, conservés dans l’URL et appliqués aux mises à jour en
+direct. **Réinitialiser les filtres** conserve le tri. Les proxies hors pool
+s’affichent avec l’état « Hors pool » ou « Tous les états ».
+
+Ces filtres concernent seulement l’affichage. Les filtres de rotation restent
+dans Paramètres. **Utiliser en priorité** donne la priorité à un proxy disponible
+qui correspond aux filtres de rotation ; ce bouton ne répare pas ses identifiants.

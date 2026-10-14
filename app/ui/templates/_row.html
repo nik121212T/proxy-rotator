@@ -1,16 +1,16 @@
 {% set is_pinned = pinned_ids and proxy.id in pinned_ids %}
 <tr id="proxy-{{ proxy.id }}"{% if is_pinned %} class="is-pinned"{% endif %} {% if row_oob %}hx-swap-oob="outerHTML"{% endif %}>
-  <td><strong class="endpoint">{% if is_pinned %}<span class="pin-flag" title="Épinglé en priorité">★</span> {% endif %}{{ '[' ~ proxy.host ~ ']' if ':' in proxy.host else proxy.host }}:{{ proxy.port }}</strong>{% set observed = exits.get(proxy.id) %}<span class="row-meta">Sortie : {{ observed.ip if observed else 'non vérifiée' }} · {{ city_names.get(proxy.id) or 'ville inconnue' }} · {{ country_names.get(proxy.id) or 'pays inconnu' }}</span><span class="row-meta">{{ proxy.scheme|upper }} · {{ proxy.username }}{% if proxy.label %} · {{ proxy.label }}{% endif %}</span></td>
-  <td data-label="État"><span class="status status-{{ proxy.status }}">{{ {'alive':'Disponible','unknown':'À vérifier','quarantine':'Quarantaine','dead':'Hors pool'}[proxy.status] }}</span></td>
+  <td><strong class="endpoint">{% if is_pinned %}<span class="pin-flag" title="Proxy prioritaire">★</span> {% endif %}{{ '[' ~ proxy.host ~ ']' if ':' in proxy.host else proxy.host }}:{{ proxy.port }}</strong>{% set observed = exits.get(proxy.id) %}<span class="row-meta">Sortie : {{ observed.ip if observed else 'non vérifiée' }} · {{ city_names.get(proxy.id) or 'ville inconnue' }} · {{ country_names.get(proxy.id) or 'pays inconnu' }}</span><span class="row-meta">{{ proxy.scheme|upper }} · {{ proxy.username }}{% if proxy.label %} · {{ proxy.label }}{% endif %}</span></td>
+  <td data-label="État"><span class="status status-{{ proxy.status }}">{{ {'alive':'Disponible','unknown':'À vérifier','quarantine':'Quarantaine','dead':'Hors pool'}[proxy.status] }}</span>{% if check_failures.get(proxy.id) %}<p class="check-failure">Dernier test : {{ check_failures[proxy.id] }}</p>{% endif %}</td>
   <td class="numeric" data-label="Latence">{{ proxy.latency_ms if proxy.latency_ms is not none else '—' }}{% if proxy.latency_ms is not none %}<span class="unit"> ms</span>{% endif %}</td>
   <td class="numeric" data-label="Score">{{ '%.0f'|format(proxy.score) }}<span class="unit"> /100</span></td>
   <td class="numeric" data-label="Réussite">{% if proxy.success_count + proxy.fail_count %}{{ '%.0f'|format(100 * proxy.success_count / (proxy.success_count + proxy.fail_count)) }} %{% else %}—{% endif %}</td>
   <td data-label="Dernier test">{% if proxy.last_checked_at %}<time datetime="{{ proxy.last_checked_at.isoformat() }}" title="{{ proxy.last_checked_at.isoformat() }}">{{ proxy.last_checked_at.strftime('%H:%M:%S') }} UTC</time>{% else %}Jamais{% endif %}</td>
   <td class="row-actions">
     {% if is_pinned %}
-      <button type="button" class="quiet" hx-post="/api/proxies/{{ proxy.id }}/unpin" hx-target="#feedback" hx-disabled-elt="this" aria-label="Désépingler {{ proxy.host }}:{{ proxy.port }}">Désépingler</button>
+      <button type="button" class="quiet" hx-post="/api/proxies/{{ proxy.id }}/unpin" hx-target="#feedback" hx-disabled-elt="this" aria-label="Retirer la priorité {{ proxy.host }}:{{ proxy.port }}">Retirer la priorité</button>
     {% else %}
-      <button type="button" class="quiet" hx-post="/api/proxies/{{ proxy.id }}/pin" hx-target="#feedback" hx-disabled-elt="this" aria-label="Épingler {{ proxy.host }}:{{ proxy.port }}">Épingler</button>
+      <button type="button" class="quiet" hx-post="/api/proxies/{{ proxy.id }}/pin" hx-target="#feedback" hx-disabled-elt="this" aria-label="Utiliser en priorité {{ proxy.host }}:{{ proxy.port }}">Utiliser en priorité</button>
     {% endif %}
     <button type="button" id="test-{{ proxy.id }}" class="quiet" data-test-proxy="{{ proxy.id }}" aria-label="Tester {{ proxy.host }}:{{ proxy.port }}">Tester</button>
     <span id="test-result-{{ proxy.id }}" class="test-result" aria-live="polite"></span>

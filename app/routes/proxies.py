@@ -71,7 +71,7 @@ async def pin_proxy(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Proxy not found") from exc
     if request.headers.get("HX-Request") == "true":
-        return feedback(request, f"Proxy #{proxy_id} épinglé.")
+        return feedback(request, f"Proxy #{proxy_id} utilisé en priorité pour les prochaines connexions, s’il est disponible et correspond aux filtres.")
     return {"pinned": True, "changed": added}
 
 
@@ -81,7 +81,7 @@ async def unpin_proxy(
 ) -> dict[str, bool] | HTMLResponse:
     removed = runtime.pool.unpin(proxy_id)
     if request.headers.get("HX-Request") == "true":
-        return feedback(request, f"Proxy #{proxy_id} désépinglé.")
+        return feedback(request, f"Priorité retirée du proxy #{proxy_id}.")
     return {"pinned": False, "changed": removed}
 
 

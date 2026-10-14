@@ -82,8 +82,8 @@
     const focusId = focusedElement?.closest("#proxy-rows") ? focusedElement.id : null;
     try {
       needsSnapshot = false;
-      const order = document.getElementById("proxy-sort").value;
-      await htmx.ajax("GET", `/ui/snapshot?sort=${encodeURIComponent(order)}`, {target: "#proxies-table", swap: "none"});
+      const params = new URLSearchParams(location.search);
+      await htmx.ajax("GET", `/ui/snapshot?${params}`, {target: "#proxies-table", swap: "none"});
       lastSnapshot = Date.now();
       const countrySelect = document.getElementById("selection-country");
       if (countrySelect) {
@@ -117,11 +117,39 @@
     if (!scheduled && !updating) scheduled = setTimeout(refresh, 250);
   }
 
-  const sortSelect = document.getElementById("proxy-sort");
-  sortSelect?.addEventListener("change", () => {
+  const tableFilters = document.getElementById("table-filters");
+  function applyTableFilters() {
+    if (!tableFilters) return;
     const url = new URL(location.href);
-    url.searchParams.set("sort", sortSelect.value);
+    for (const field of ["city", "country", "status", "sort"]) {
+      const value = tableFilters.elements.namedItem(field).value.trim();
+      if (value) url.searchParams.set(field, value);
+      else url.searchParams.delete(field);
+    }
     history.replaceState(null, "", url);
+    schedule();
+  }
+  tableFilters?.addEventListener("submit", event => {
+    event.preventDefault();
+    applyTableFilters();
+  });
+  tableFilters?.addEventListener("change", event => {
+    if (event.target.tagName === "SELECT") applyTableFilters();
+  });
+  document.addEventListener("click", event => {
+    if (!event.target.closest("[data-reset-table-filters]") || !tableFilters) return;
+    event.preventDefault();
+    for (const field of ["city", "country", "status"]) {
+      tableFilters.elements.namedItem(field).value = "";
+    }
+    applyTableFilters();
+  });
+  window.addEventListener("popstate", () => {
+    if (!tableFilters) return;
+    const params = new URLSearchParams(location.search);
+    for (const field of ["city", "country", "status", "sort"]) {
+      tableFilters.elements.namedItem(field).value = params.get(field) || (field === "sort" ? "best" : "");
+    }
     schedule();
   });
 

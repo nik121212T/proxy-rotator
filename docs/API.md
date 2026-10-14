@@ -208,3 +208,12 @@ metadata is also available internally when external geolocation is disabled.
 Dashboard and `/ui/snapshot` also accept `sort=city`: alphabetical city order,
 case/accent-insensitive, unknown cities last, stable proxy-ID tie breaker.
 Rows display both city and country from the latest observed exit IP.
+
+### Dashboard display filters
+
+`GET /`, `/ui/snapshot` and `/ui/proxies/{id}` accept `city`, `country`, `status`
+in addition to `sort`. City is an accent/case-insensitive substring; country is
+an ISO alpha-2 code; status is `alive|unknown|quarantine|dead|all`. An omitted or
+invalid status hides dead proxies. These filters never change RotationSelection.
+Snapshots include result counts and known-location suggestions. Row fragments
+remove proxies that do not match the current filters.

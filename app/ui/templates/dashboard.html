@@ -5,8 +5,8 @@
   <meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"selfRequestsOnly":true}'>
   <title>Dashboard · Proxy Rotator</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <link rel="stylesheet" href="/static/styles.css?v=split-pages-11">
-  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=city-selection-12" defer></script>
+  <link rel="stylesheet" href="/static/styles.css?v=table-filters-13">
+  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=table-filters-13" defer></script>
 </head>
 <body>
 <div id="page-top" tabindex="-1"></div>
@@ -20,11 +20,20 @@
   <div id="feedback" class="feedback" role="status" aria-live="polite"></div>
   <section class="pool-panel" aria-labelledby="pool-title">
     <div class="table-toolbar"><h2 id="pool-title">Vos proxies</h2><div class="toolbar-actions"><a class="button secondary" href="/api/proxies/export?status=alive" download>Exporter les actifs</a><button type="button" class="secondary" hx-post="/api/pool/clear-dead" hx-target="#feedback" hx-disabled-elt="this">Purger les hors pool</button><button type="button" class="danger" hx-post="/api/pool/clear-all" hx-target="#feedback" hx-disabled-elt="this" hx-confirm="Supprimer TOUS les proxies du pool ? Cette action est irréversible.">Tout effacer</button><a class="button" href="/parametres">⚙ Paramètres</a></div></div>
-    <div class="table-sort"><label for="proxy-sort">Trier par</label><select id="proxy-sort" name="sort">{% for value, label in sort_options.items() %}<option value="{{ value }}" {% if value == sort_order %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <form id="table-filters" class="table-filters" method="get" action="/" aria-label="Filtrer le tableau">
+      <div class="filter-field"><label for="filter-city">Ville</label><input id="filter-city" name="city" value="{{ filter_city }}" maxlength="128" list="table-city-options" placeholder="Toutes les villes" autocomplete="off"></div>
+      <div class="filter-field"><label for="filter-country">Pays (code)</label><input id="filter-country" name="country" value="{{ filter_country }}" maxlength="2" list="table-country-options" placeholder="Ex. FR" autocomplete="off"></div>
+      <div class="filter-field"><label for="filter-status">État</label><select id="filter-status" name="status">{% for value, label in status_filters.items() %}<option value="{{ value }}" {% if value == filter_status %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+      <div class="filter-field"><label for="proxy-sort">Trier par</label><select id="proxy-sort" name="sort">{% for value, label in sort_options.items() %}<option value="{{ value }}" {% if value == sort_order %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+      <div class="filter-actions"><button type="submit" class="secondary">Filtrer</button><a href="/?sort={{ sort_order }}" data-reset-table-filters>Réinitialiser les filtres</a></div>
+    </form>
+    <p class="table-filter-help">Ces filtres modifient uniquement le tableau. La sélection des proxies utilisés se règle dans les paramètres.</p>
+    {% include '_table_filter_summary.html' %}
+    {% include '_table_filter_options.html' %}
     <div class="table-scroll" tabindex="0" role="region" aria-label="Table des proxies, défilement horizontal disponible">
       <table id="proxies-table"><caption class="sr-only">État et performances des proxies</caption><thead><tr><th scope="col">Proxy</th><th scope="col">État</th><th scope="col">Latence</th><th scope="col">Score</th><th scope="col">Réussite</th><th scope="col">Dernier test</th><th scope="col">Actions</th></tr></thead><tbody id="proxy-rows">{% include '_rows.html' %}</tbody></table>
     </div>
-    <p class="table-note">Pool vide ? <a href="/parametres#import-form">Importez des proxies</a>. Les hors pool sont masqués.</p>
+    <p class="table-note">Pool vide ? <a href="/parametres#import-form">Importez des proxies</a>. Les proxies hors pool sont masqués par défaut.</p>
   </section>
 </main>
 <nav class="page-shortcuts" aria-label="Raccourcis de navigation"><a href="/parametres#import-form" class="button secondary" aria-label="Aller à Importer une liste">↓ Importer</a><a href="#page-top" class="button secondary" aria-label="Remonter en haut" title="Remonter en haut">↑ Haut</a></nav>

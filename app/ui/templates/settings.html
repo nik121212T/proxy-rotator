@@ -5,8 +5,8 @@
   <meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"selfRequestsOnly":true}'>
   <title>Paramètres · Proxy Rotator</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <link rel="stylesheet" href="/static/styles.css?v=split-pages-11">
-  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=city-selection-12" defer></script>
+  <link rel="stylesheet" href="/static/styles.css?v=table-filters-13">
+  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=table-filters-13" defer></script>
 </head>
 <body>
 <div id="page-top" tabindex="-1"></div>
@@ -55,7 +55,7 @@
         {% if not geo_enabled %}<p class="helper">La géolocalisation est désactivée : seules les localisations conservées des imports Dichvusocks sont disponibles.</p>{% endif %}
         <label for="selection-score">Score de santé minimum</label>
         <input id="selection-score" type="number" name="min_score" min="0" max="100" value="{{ selection.min_score }}" required>
-        <label class="pin-only"><input type="checkbox" name="pinned_only" {% if selection.pinned_only %}checked{% endif %}> Uniquement les proxies épinglés</label>
+        <label class="pin-only"><input type="checkbox" name="pinned_only" {% if selection.pinned_only %}checked{% endif %}> Uniquement les proxies prioritaires</label>
         <button type="submit" class="secondary wide">Appliquer la sélection</button>
       </form>
     </section>
