@@ -99,7 +99,10 @@ async def export_proxies(
     lines = runtime.pool.export_lines(status=status, countries=set(country or []))
     body = "\n".join(lines) + ("\n" if lines else "")
     stamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
-    filename = f"proxies-{status or 'all'}-{stamp}.txt"
+    countries_label = "-".join(
+        "pays-inconnu" if code == "unknown" else code for code in sorted(set(country or []))
+    ) or "tous-pays"
+    filename = f"proxies-{status or 'all'}-{countries_label}-{stamp}.txt"
     return Response(
         content=body,
         media_type="text/plain; charset=utf-8",

@@ -463,3 +463,8 @@ script auto-attach).
 - [x] Résumé sur deux lignes (5 indicateurs puis 4 compteurs), zéro explicite.
 - [x] Test API exports simple/multiple/tous/inconnu/vide/invalide ; revue Chromium
   du résumé et de la conservation/réinitialisation des cases après quarantaine.
+
+### T11.5 — Nom du fichier exporté
+
+- [x] Inclure les codes pays sélectionnés, triés et dédupliqués, dans le nom
+  du fichier ; tous-pays sans filtre et pays-inconnu pour les IP non localisées.

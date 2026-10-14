@@ -285,6 +285,7 @@ async def test_export_only_selected_available_countries(dashboard):
         assert 'name="country" value="US"' not in html
     response = await client.get("/api/proxies/export", params=[("country", "FR"), ("country", "GB")])
     assert response.headers["X-Line-Count"] == "2"
+    assert 'filename="proxies-alive-FR-GB-' in response.headers["Content-Disposition"]
     assert "host1.invalid" in response.text and "host2.invalid" in response.text
     assert "host3.invalid" not in response.text
     assert (await client.get("/api/proxies/export")).headers["X-Line-Count"] == "3"
