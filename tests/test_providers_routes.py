@@ -197,4 +197,6 @@ async def test_import_views_each_entry_and_adds_to_pool(
     assert response.status_code == 200
     body = response.json()
     assert body["imported"] == 1
+    assert body["with_auth"] == 1
+    assert body["without_auth"] == 0
     assert app.state.runtime.pool.all()[0].host == "203.0.113.7"

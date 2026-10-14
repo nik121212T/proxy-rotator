@@ -22,6 +22,8 @@ async def test_import_skips_malformed_lines_and_existing(
     assert response.status_code == 200
     assert response.json() == {
         "imported": 1,
+        "with_auth": 1,
+        "without_auth": 0,
         "skipped": 2,
         "errors": [{"line": 4, "reason": "Invalid proxy format"}],
     }
@@ -30,7 +32,7 @@ async def test_import_skips_malformed_lines_and_existing(
     clean = await client.post("/api/proxies/import", json={"text": valid})
     assert clean.json()["imported"] == 0
     again = await client.post("/api/proxies/import", json={"text": valid})
-    assert again.json() == {"imported": 0, "skipped": 1, "errors": []}
+    assert again.json() == { "imported": 0, "with_auth": 0, "without_auth": 0, "skipped": 1, "errors": []}
 
 
 async def test_list_filters_pagination_and_credentials(api: tuple[httpx.AsyncClient, int]) -> None:
@@ -230,6 +232,8 @@ async def test_mixed_authentication_import_rejects_only_malformed_lines(
     report = (await client.post("/api/proxies/import", json={"text": text})).json()
     assert report == {
         "imported": 3,
+        "with_auth": 2,
+        "without_auth": 1,
         "skipped": 1,
         "errors": [
             {"line": 3, "reason": "Invalid proxy format"},

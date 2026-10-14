@@ -11,7 +11,7 @@ from app.parser import parse_line
 from app.pool import Pool
 from app.rotator import Rotator
 from app.routes import pool as pool_routes
-from app.routes import ui
+from app.routes import proxies, ui
 from app.runtime import Runtime
 
 
@@ -23,6 +23,7 @@ async def dashboard(db):
     runtime = Runtime(pool, HealthChecker(pool, key), Rotator(), "", "")
     app.state.runtime = runtime
     app.include_router(ui.router)
+    app.include_router(proxies.router)
     app.include_router(pool_routes.router)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -190,3 +191,27 @@ async def test_mixed_authentication_survives_storage_export_and_live_rows(dashbo
     html = (await client.get(f"/ui/proxies/{plain.id}")).text
     assert "Sans identifiants" in html
     assert "Avec identifiants" not in html
+
+
+async def test_import_reports_auth_counts_and_summary_refreshes(dashboard):
+    client, pool, runtime, _ = dashboard
+    text = "user:fake@proxy.invalid:80\nproxy.invalid:80\nproxy.invalid:80\nbroken"
+    response = await client.post("/api/proxies/import", json={"text": text})
+    report = response.json()
+    assert report["imported"] == 2
+    assert report["with_auth"] == 1
+    assert report["without_auth"] == 1
+    assert report["skipped"] == 2
+    repeated = (await client.post("/api/proxies/import", json={"text": text})).json()
+    assert repeated["with_auth"] == repeated["without_auth"] == 0
+    for path in ["/", "/ui/snapshot"]:
+        html = (await client.get(path)).text
+        assert "<dt>Avec identifiants</dt><dd>1</dd>" in html
+        assert "<dt>Sans identifiants</dt><dd>1</dd>" in html
+    response = await client.post(
+        "/api/proxies/import", json={"text": "another.invalid:8080"},
+        headers={"HX-Request": "true"},
+    )
+    assert "0 avec identifiants" in response.text
+    assert "1 sans identifiants" in response.text
+    assert "<dt>Sans identifiants</dt><dd>2</dd>" in (await client.get("/ui/snapshot")).text

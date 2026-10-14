@@ -107,6 +107,8 @@ class ImportReport(BaseModel):
     """Public import counts plus accepted records for the storage caller."""
 
     imported: int = 0
+    with_auth: int = Field(default=0, ge=0)
+    without_auth: int = Field(default=0, ge=0)
     skipped: int = 0
     errors: list[ImportLineError] = Field(default_factory=list)
     proxies: list[ParsedProxy] = Field(default_factory=list, exclude=True, repr=False)
@@ -148,4 +150,8 @@ def parse_bulk(text: str) -> ImportReport:
         seen.add(identity)
         report.proxies.append(proxy)
         report.imported += 1
+        if proxy.username:
+            report.with_auth += 1
+        else:
+            report.without_auth += 1
     return report

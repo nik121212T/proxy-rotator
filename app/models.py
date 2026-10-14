@@ -77,6 +77,8 @@ class PoolStats(_DTO):
     """Dashboard snapshot; unknown proxies are included in total."""
 
     total: Count = 0
+    with_auth: Count = 0
+    without_auth: Count = 0
     alive: Count = 0
     quarantine: Count = 0
     dead: Count = 0

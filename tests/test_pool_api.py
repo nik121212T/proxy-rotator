@@ -9,6 +9,8 @@ async def test_stats_and_strategy(api: tuple[httpx.AsyncClient, int]) -> None:
     assert response.status_code == 200
     assert response.json() == {
         "total": 0,
+        "with_auth": 0,
+        "without_auth": 0,
         "alive": 0,
         "quarantine": 0,
         "dead": 0,

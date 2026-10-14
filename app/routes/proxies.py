@@ -29,7 +29,9 @@ async def import_proxies(
     if request.headers.get("HX-Request") == "true":
         return feedback(
             request,
-            f"{report.imported} proxy(s) importé(s) · {report.skipped} ligne(s) ignorée(s).",
+            f"{report.imported} proxy(s) importé(s) : "
+            f"{report.with_auth} avec identifiants · {report.without_auth} sans identifiants. "
+            f"{report.skipped} ligne(s) ignorée(s).",
             errors=[e.model_dump() for e in report.errors],
             clear_import=not report.errors,
         )

@@ -266,3 +266,7 @@ Le tableau distingue « Avec identifiants » et « Sans identifiants ». Ce dern
 libellé ne signifie pas que le proxy est public : le fournisseur peut exiger
 une autorisation de votre IP. Les tests et passerelles n’envoient aucune
 authentification pour ces entrées. L’export conserve les deux formats.
+
+Chaque rapport d’import détaille les proxies ajoutés avec et sans identifiants
+(doublons exclus). Les compteurs en haut du tableau donnent les deux totaux
+du pool, tous états confondus, indépendamment des filtres d’affichage.

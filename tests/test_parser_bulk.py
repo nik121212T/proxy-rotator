@@ -18,7 +18,7 @@ def test_bulk_import_retains_valid_records_and_ignores_empty_comments() -> None:
     assert report.errors == []
     assert len(report.proxies) == 1
     assert report.proxies[0].host == "proxy.example"
-    assert report.model_dump() == {"imported": 1, "skipped": 0, "errors": []}
+    assert report.model_dump() == {"imported": 1, "with_auth": 1, "without_auth": 0, "skipped": 0, "errors": []}
 
 
 def test_bulk_import_is_partial_and_deduplicates_by_identity() -> None:

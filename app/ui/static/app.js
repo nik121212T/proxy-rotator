@@ -605,7 +605,7 @@
         const r = await fetch('/api/providers/dichvusocks/import?' + params, { method: 'POST' });
         const body = await r.json();
         if (!r.ok) throw new Error(body.detail || 'HTTP ' + r.status);
-        setHint(`Importés : ${body.imported} · dédupliqués : ${body.deduped ?? 0} · ignorés : ${(body.skipped || []).length}`, 'good');
+        setHint(`Importés : ${body.imported} · avec identifiants : ${body.with_auth ?? 0} · sans identifiants : ${body.without_auth ?? 0} · dédupliqués : ${body.deduped ?? 0} · ignorés : ${(body.skipped || []).length}`, 'good');
         document.body.dispatchEvent(new Event("pool-refresh"));
         await loadBalance();
       } catch (err) {

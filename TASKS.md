@@ -429,3 +429,13 @@ script auto-attach).
   contrat rejetant les entrées sans identifiants. Contrat mis à jour puis test
   ciblé réussi (397 tests validés au total). Ruff, mypy et diff --check passent.
   Aucun proxy réel du lot utilisateur importé ni contacté.
+
+### T11.2 — Compteurs d’authentification
+
+- [x] Rapport de chaque import manuel/fichier/fournisseur : nombre ajouté
+  avec et sans identifiants, doublons exclus. Champs API with_auth/without_auth.
+- [x] Deux compteurs dans le résumé global, actualisés dans les snapshots live
+  et calculés depuis le pool (tous les états, indépendants des filtres du tableau).
+- [x] Régression import mixte, doublons, retour HTML, API fournisseur et résumé.
+- [x] Validation : 398 tests Python réussis, 2 ignorés ; 8 tests JavaScript
+  réussis. Ruff, mypy, diff --check et détecteur UI passent.

@@ -128,6 +128,8 @@ def test_check_result_rejects_invalid_fields(field: str, value: object) -> None:
 def pool_record() -> dict[str, object]:
     return {
         "total": 50,
+        "with_auth": 40,
+        "without_auth": 10,
         "alive": 34,
         "quarantine": 4,
         "dead": 12,

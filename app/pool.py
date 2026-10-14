@@ -193,6 +193,8 @@ class Pool:
         snapshot = self._snapshot
         latencies = [p.latency_ms for p in snapshot if p.latency_ms is not None]
         return PoolStats(
+            with_auth=sum(bool(p.username) for p in snapshot),
+            without_auth=sum(not p.username for p in snapshot),
             total=len(snapshot), alive=sum(p.status == "alive" for p in snapshot),
             quarantine=sum(p.status == "quarantine" for p in snapshot),
             dead=sum(p.status == "dead" for p in snapshot),
@@ -322,6 +324,8 @@ class Pool:
             for stored in saved:
                 self._events.publish(ProxyEvent(type="added", proxy_id=stored.id, payload=stored))
             return ImportReport(imported=len(saved),
+                                with_auth=sum(bool(p.username) for p in saved),
+                                without_auth=sum(not p.username for p in saved),
                                 skipped=report.skipped + report.imported - len(saved),
                                 errors=report.errors)
 

@@ -34,7 +34,7 @@ async function widget(enabled, responder, timers={}) {
 }
 const ok = body => ({ok:true,status:200,json:async()=>body});
 const normal = url => ok(url.endsWith('/countries') ? ['FR','US'] : url.endsWith('/user-info') ?
-  {user:{username:'demo',point:12}} : {imported:1,deduped:0,skipped:[]});
+  {user:{username:'demo',point:12}} : {imported:1,with_auth:1,without_auth:0,deduped:0,skipped:[]});
 
 test('disabled provider shows disconnected state without making requests',async()=>{
   const w=await widget(false, normal);
@@ -46,6 +46,7 @@ test('successful import is not reported as a JavaScript failure',async()=>{
   const w=await widget(true,normal);
   await w.nodes['dichvusocks-import'].trigger('click');
   assert.match(w.nodes['dichvusocks-hint'].textContent,/^Importés : 1/);
+  assert.match(w.nodes['dichvusocks-hint'].textContent,/avec identifiants : 1 · sans identifiants : 0/);
   assert.equal(w.requests.filter(([url])=>url.includes('/import?')).length,1);
 });
 test('saving a token repeatedly does not duplicate countries',async()=>{

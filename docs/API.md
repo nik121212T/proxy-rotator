@@ -25,12 +25,16 @@ Response `200`:
 ```json
 {
   "imported": 2,
+  "with_auth": 1,
+  "without_auth": 1,
   "skipped": 0,
   "errors": []
 }
 ```
 
 Invalid lines are skipped and reported; valid records are imported together in one database transaction.
+`with_auth` and `without_auth` split newly imported records by credential presence;
+they exclude duplicates and sum to `imported`. Both are zero when nothing is added.
 `imported` counts valid new records, `skipped` counts invalid/duplicate records, and
 `errors[i] = {"line": 4, "reason": "Invalid proxy format"}` preserves each parse error.
 `line` is the 1-based physical line number, never the submitted credential-bearing text.
@@ -90,6 +94,8 @@ Validation errors return a sanitized 422 response without echoing submitted inpu
 ```json
 {
   "total": 50,
+  "with_auth": 40,
+  "without_auth": 10,
   "alive": 34,
   "quarantine": 4,
   "dead": 12,
@@ -98,6 +104,9 @@ Validation errors return a sanitized 422 response without echoing submitted inpu
   "strategy": "weighted"
 }
 ```
+
+`with_auth` and `without_auth` count the entire stored pool across all statuses,
+independent of dashboard display filters, and sum to `total`.
 
 ### `POST /api/pool/clear-dead`
 
