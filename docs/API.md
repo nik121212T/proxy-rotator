@@ -217,3 +217,9 @@ an ISO alpha-2 code; status is `alive|unknown|quarantine|dead|all`. An omitted o
 invalid status hides dead proxies. These filters never change RotationSelection.
 Snapshots include result counts and known-location suggestions. Row fragments
 remove proxies that do not match the current filters.
+
+`POST /api/pool/strategy` also accepts optional boolean `pinned_only`, preserving
+location/score filters. Omitting it preserves the current priority restriction.
+`POST /api/pool/selection` likewise preserves `pinned_only` when that field is
+omitted; an explicit boolean still updates it. The checkbox now belongs to the
+Rotation form and is saved by “Appliquer la stratégie”.

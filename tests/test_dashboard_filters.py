@@ -10,6 +10,7 @@ from app.models import CheckResult
 from app.parser import parse_line
 from app.pool import Pool
 from app.rotator import Rotator
+from app.routes import pool as pool_routes
 from app.routes import ui
 from app.runtime import Runtime
 
@@ -22,6 +23,7 @@ async def dashboard(db):
     runtime = Runtime(pool, HealthChecker(pool, key), Rotator(), "", "")
     app.state.runtime = runtime
     app.include_router(ui.router)
+    app.include_router(pool_routes.router)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
@@ -139,3 +141,33 @@ async def test_row_fragments_honor_filters_and_explicit_dead_visibility(dashboar
     assert 'hx-swap-oob="delete"' in excluded.text
     empty = await client.get("/?city=%22%3E%3Cscript%3Ealert(1)%3C/script%3E")
     assert "<script>alert(1)</script>" not in empty.text
+
+
+async def test_priority_setting_belongs_to_rotation_and_survives_location_updates(dashboard):
+    from app.models import RotationSelection
+
+    client, _, runtime, _ = dashboard
+    runtime.rotator.selection = RotationSelection(country="FR", city="Paris", min_score=70)
+    response = await client.post(
+        "/api/pool/strategy",
+        json={
+            "strategy": "round_robin",
+            "pinned_only": True,
+        },
+    )
+    assert response.status_code == 200
+    assert runtime.rotator.selection.pinned_only is True
+    assert runtime.rotator.selection.city == "Paris"
+    assert runtime.rotator.selection.min_score == 70
+    await client.post("/api/pool/selection", json={"country": "US", "city": "Boston"})
+    assert runtime.rotator.selection.pinned_only is True
+    await client.post("/api/pool/strategy", json={"strategy": "weighted"})
+    assert runtime.rotator.selection.pinned_only is True
+    html = (await client.get("/parametres")).text
+    strategy_form = html.split('id="strategy-form"', 1)[1].split("</form>", 1)[0]
+    location_form = html.split('id="selection-form"', 1)[1].split("</form>", 1)[0]
+    assert 'name="pinned_only"' in strategy_form
+    assert 'name="pinned_only"' not in location_form
+    await client.post("/api/pool/strategy", json={"strategy": "weighted", "pinned_only": False})
+    assert runtime.rotator.selection.pinned_only is False
+    assert runtime.rotator.selection.city == "Boston"

@@ -7,13 +7,15 @@
     },
     encodeParameters(xhr, parameters, element) {
       const data = Object.fromEntries(new FormData(element));
-      if (element.id === "strategy-form") data.interval_minutes = Number(data.interval_minutes);
+      if (element.id === "strategy-form") {
+        data.interval_minutes = Number(data.interval_minutes);
+        data.pinned_only = element.querySelector('[name="pinned_only"]').checked;
+      }
       if (element.id === "selection-form") {
         data.country = data.country || null;
         data.city = data.city.trim() || null;
         data.region = data.region.trim() || null;
         data.min_score = Number(data.min_score);
-        data.pinned_only = element.querySelector('[name="pinned_only"]').checked;
       }
       return JSON.stringify(data);
     }

@@ -369,3 +369,11 @@ script auto-attach).
   fragments et échappement HTML ; vérifications Ruff/mypy/JavaScript.
 - [ ] Contrôle visuel en navigateur : Chromium interdit par le sandbox
   (`bootstrap_check_in: Permission denied`). Revue source et détecteur sans anomalie.
+
+### T9.1 — Priorité dans Rotation
+
+- [x] Déplacer « Utiliser uniquement les proxies prioritaires » sous le mode
+  de rotation et l’appliquer avec « Appliquer la stratégie ».
+- [x] Préserver les filtres géographiques au changement de priorité, et la
+  priorité au changement de filtres. API existante compatible lorsque le champ
+  est omis. Test de régression ASGI : 37 tests ciblés passent ; Ruff/mypy/JS verts.
