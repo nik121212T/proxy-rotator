@@ -38,10 +38,19 @@ async def lookup(ip: str, runtime: Services, request: Request) -> dict[str, obje
     _rate_limit(client_host)
     hit = await service.lookup(ip)
     if hit is None:
-        return {"ip": ip, "country": None, "country_code": None, "source": "unknown"}
+        return {
+            "ip": ip,
+            "country": None,
+            "country_code": None,
+            "source": "unknown",
+            "city": None,
+            "region": None,
+        }
     return {
         "ip": hit.ip,
         "country": hit.country,
         "country_code": hit.country_code,
         "source": hit.source,
+        "city": hit.city,
+        "region": hit.region,
     }

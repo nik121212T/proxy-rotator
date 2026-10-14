@@ -10,6 +10,8 @@
       if (element.id === "strategy-form") data.interval_minutes = Number(data.interval_minutes);
       if (element.id === "selection-form") {
         data.country = data.country || null;
+        data.city = data.city.trim() || null;
+        data.region = data.region.trim() || null;
         data.min_score = Number(data.min_score);
         data.pinned_only = element.querySelector('[name="pinned_only"]').checked;
       }
@@ -461,11 +463,15 @@
         limit: limitInput.value || '5',
       });
       if (countrySel.value) params.set('country', countrySel.value);
+      for (const field of ['region', 'city']) {
+        const value = document.getElementById('dichvusocks-' + field).value.trim();
+        if (value) params.set(field, value);
+      }
       try {
         const r = await fetch('/api/providers/dichvusocks/preview?' + params);
         const body = await r.json();
         if (!r.ok) throw new Error(body.detail || 'HTTP ' + r.status);
-        setHint(`${body.length} sock(s) disponible(s) pour ${countrySel.value || 'tous les pays'}. Aucun crédit débité.`, 'good');
+        setHint(`${body.length} sock(s) disponible(s) pour ${[params.get('city'), params.get('region'), countrySel.value].filter(Boolean).join(', ') || 'tous les pays'}. Aucun crédit débité.`, 'good');
       } catch (err) {
         setHint('Aperçu KO : ' + err.message, 'error');
       } finally {
@@ -481,6 +487,10 @@
       importBtn.disabled = true;
       const params = new URLSearchParams({ limit: String(n) });
       if (countrySel.value) params.set('country', countrySel.value);
+      for (const field of ['region', 'city']) {
+        const value = document.getElementById('dichvusocks-' + field).value.trim();
+        if (value) params.set(field, value);
+      }
       try {
         const r = await fetch('/api/providers/dichvusocks/import?' + params, { method: 'POST' });
         const body = await r.json();

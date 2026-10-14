@@ -151,11 +151,13 @@ async def test_preview_relays_filters_without_importing(
     provider_upstream.set_inline_handler("/socks/view", view_handler)
 
     response = await client.get(
-        "/api/providers/dichvusocks/preview?country=FR&limit=3&page=1"
+        "/api/providers/dichvusocks/preview?country=FR&region=IDF&city=Paris&limit=3&page=1"
     )
     assert response.status_code == 200
     assert response.json()[0]["id"] == 1
     assert seen["country"] == "FR"
+    assert seen["region"] == "IDF"
+    assert seen["city"] == "Paris"
     assert seen["limit"] == "3"
     assert viewed == []  # preview NEVER calls view (would debit credit)
 

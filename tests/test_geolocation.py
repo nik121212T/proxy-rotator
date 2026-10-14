@@ -14,7 +14,15 @@ async def test_geolocation_coalesces_and_survives_caller_cancellation(db):
         calls += 1
         entered.set()
         await release.wait()
-        return web.json_response({"status": "success", "country": "France", "countryCode": "FR"})
+        return web.json_response(
+            {
+                "status": "success",
+                "country": "France",
+                "countryCode": "FR",
+                "city": "Paris",
+                "regionName": "Île-de-France",
+            }
+        )
 
     app = web.Application()
     app.router.add_get("/{ip}", provider)
@@ -41,6 +49,10 @@ async def test_geolocation_coalesces_and_survives_caller_cancellation(db):
         release.set()
         result = await asyncio.wait_for(second, 0.5)
         assert result.country_code == "FR"
+        assert result.city == "Paris"
+        assert result.region == "Île-de-France"
+        cached = await service.lookup("8.8.8.8")
+        assert (cached.city, cached.region) == ("Paris", "Île-de-France")
         assert (await service.lookup("8.8.8.8")).source == "cache"
         assert calls == 1
     finally:

@@ -51,9 +51,23 @@ CREATE TABLE IF NOT EXISTS provider_tokens (
 );
 """
 
-# This migration contains four simple statements, with no semicolons in literals.
-# Each version marker is static SQL: PRAGMA assignment does not accept '?' parameters.
+# Refresh derived country-only cache entries so cities are fetched after upgrading.
+MIGRATION_003 = """ALTER TABLE geo_cache ADD COLUMN city TEXT;
+ALTER TABLE geo_cache ADD COLUMN region TEXT;
+DELETE FROM geo_cache;
+"""
+
 MIGRATIONS: tuple[tuple[str, ...], ...] = (
-    (*tuple(sql.strip() for sql in MIGRATION_001.split(";") if sql.strip()), "PRAGMA user_version = 1"),
-    (*tuple(sql.strip() for sql in MIGRATION_002.split(";") if sql.strip()), "PRAGMA user_version = 2"),
+    (
+        *tuple(sql.strip() for sql in MIGRATION_001.split(";") if sql.strip()),
+        "PRAGMA user_version = 1",
+    ),
+    (
+        *tuple(sql.strip() for sql in MIGRATION_002.split(";") if sql.strip()),
+        "PRAGMA user_version = 2",
+    ),
+    (
+        *tuple(sql.strip() for sql in MIGRATION_003.split(";") if sql.strip()),
+        "PRAGMA user_version = 3",
+    ),
 )

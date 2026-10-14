@@ -34,6 +34,8 @@ class GeoLookup:
     country_code: str | None  # ISO 3166-1 alpha-2 (e.g. "US", "FR")
     cached_at: datetime
     source: str  # "cache" | "provider" | "unknown"
+    city: str | None = None
+    region: str | None = None
 
 
 class GeolocationService:
@@ -68,7 +70,9 @@ class GeolocationService:
                 country       TEXT,
                 country_code  TEXT,
                 cached_at     TEXT NOT NULL,
-                source        TEXT NOT NULL
+                source        TEXT NOT NULL,
+                city          TEXT,
+                region        TEXT
             )
             """
         )
@@ -77,10 +81,8 @@ class GeolocationService:
     async def lookup(self, ip: str) -> GeoLookup | None:
         """Return a geolocation hit for ``ip`` or ``None`` when unknown.
 
-        Returns ``None`` immediately when the service is disabled.
+        When disabled, only cached metadata from explicit imports is available.
         """
-        if not self._enabled:
-            return None
         try:
             parsed = ip_address(ip)
         except ValueError:
@@ -91,6 +93,9 @@ class GeolocationService:
         cached = await self._fetch_cached(ip)
         if cached is not None:
             return cached
+
+        if not self._enabled:
+            return None
 
         # Shield the shared request: one disconnected caller cannot strand others.
         task = self._inflight.get(ip)
@@ -106,8 +111,34 @@ class GeolocationService:
             task.add_done_callback(finished)
         return await asyncio.shield(task)
 
+    async def remember_provider_location(
+        self,
+        ip: str,
+        country: str,
+        country_code: str,
+        *,
+        city: str | None = None,
+        region: str | None = None,
+    ) -> None:
+        """Cache metadata from an explicit import; never makes a network request."""
+        try:
+            canonical_ip = str(ip_address(ip))
+        except ValueError:
+            return
+        await self._store(
+            GeoLookup(
+                ip=canonical_ip,
+                country=country,
+                country_code=country_code.upper(),
+                cached_at=datetime.now(UTC),
+                source="dichvusocks",
+                city=city,
+                region=region,
+            )
+        )
+
     def start(self, pool: Pool) -> None:
-        if self._enabled and self._worker is None:
+        if self._worker is None:
             self._worker = asyncio.create_task(self._refresh_pool(pool))
 
     async def stop(self) -> None:
@@ -132,7 +163,11 @@ class GeolocationService:
                     continue
                 hit = await self.lookup(ip)
                 if hit and hit.country_code and hit.country:
-                    pool.set_country(ip, hit.country_code, hit.country)
+                    pool.set_country(
+                        ip, hit.country_code, hit.country, city=hit.city, region=hit.region
+                    )
+                else:
+                    pool.clear_location(ip)
                 next_check[ip] = loop.time() + (self._cache_ttl.total_seconds() if hit else 60)
                 # Serial, paced requests; cached data never blocks gateway selection.
                 await asyncio.sleep(1.5)
@@ -140,8 +175,9 @@ class GeolocationService:
 
     async def _fetch_cached(self, ip: str) -> GeoLookup | None:
         async with self._conn.execute(
-            "SELECT country, country_code, cached_at, source FROM geo_cache WHERE ip = ?",
-            (ip,),
+            "SELECT country, country_code, cached_at, source, city, region FROM geo_cache "
+            "WHERE ip = ? AND (? OR source = 'dichvusocks')",
+            (ip, self._enabled),
         ) as cursor:
             row = await cursor.fetchone()
         if row is None:
@@ -150,7 +186,13 @@ class GeolocationService:
         if datetime.now(tz=UTC) - cached_at > self._cache_ttl:
             return None
         return GeoLookup(
-            ip=ip, country=row[0], country_code=row[1], cached_at=cached_at, source="cache"
+            ip=ip,
+            country=row[0],
+            country_code=row[1],
+            cached_at=cached_at,
+            source="cache",
+            city=row[4],
+            region=row[5],
         )
 
     async def _fetch_provider(self, ip: str) -> GeoLookup | None:
@@ -179,9 +221,16 @@ class GeolocationService:
             return None
 
         country, country_code = _parse_provider_payload(payload)
+        city, region = _parse_city_payload(payload)
         now = datetime.now(tz=UTC)
         result = GeoLookup(
-            ip=ip, country=country, country_code=country_code, cached_at=now, source="provider"
+            ip=ip,
+            country=country,
+            country_code=country_code,
+            cached_at=now,
+            source="provider",
+            city=city,
+            region=region,
         )
         await self._store(result)
         return result
@@ -189,15 +238,25 @@ class GeolocationService:
     async def _store(self, hit: GeoLookup) -> None:
         await self._conn.execute(
             """
-            INSERT INTO geo_cache (ip, country, country_code, cached_at, source)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO geo_cache (ip, country, country_code, cached_at, source, city, region)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(ip) DO UPDATE SET
                 country       = excluded.country,
                 country_code  = excluded.country_code,
                 cached_at     = excluded.cached_at,
-                source        = excluded.source
+                source        = excluded.source,
+                city          = excluded.city,
+                region        = excluded.region
             """,
-            (hit.ip, hit.country, hit.country_code, hit.cached_at.isoformat(), hit.source),
+            (
+                hit.ip,
+                hit.country,
+                hit.country_code,
+                hit.cached_at.isoformat(),
+                hit.source,
+                hit.city,
+                hit.region,
+            ),
         )
         await self._conn.commit()
 
@@ -228,3 +287,17 @@ def _parse_provider_payload(payload: bytes) -> tuple[str | None, str | None]:
         else None
     )
     return country, country_code
+
+
+def _parse_city_payload(payload: bytes) -> tuple[str | None, str | None]:
+    try:
+        data = json.loads(payload)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None, None
+    if not isinstance(data, dict) or data.get("status") not in ("success", None):
+        return None, None
+
+    def text(value: object) -> str | None:
+        return value.strip() if isinstance(value, str) and 0 < len(value.strip()) <= 128 else None
+
+    return text(data.get("city")), text(data.get("regionName") or data.get("region"))

@@ -204,3 +204,29 @@ launcher first asks the existing instance to stop, waits up to 10 seconds, then
 forces termination if necessary. Active proxy connections are interrupted.
 Processes from other project directories are left untouched; a port occupied
 by another application must be resolved separately.
+
+### Sélection par ville
+
+Dans **Paramètres → Filtrer les proxies utilisés**, choisissez un pays, puis
+saisissez une ville et, si nécessaire, une région. Les suggestions de villes
+proviennent des localisations connues du pool. Laissez les champs vides pour
+retirer ces filtres. La comparaison ignore la casse et les espaces en début/fin.
+Les filtres s'appliquent à toutes les stratégies et aux nouvelles connexions ;
+aucune correspondance (ou ville inconnue) signifie refus, sans connexion directe.
+
+La localisation correspond à la dernière IP de sortie observée par une sonde :
+elle reste une estimation. Pour les proxies collés manuellement, activez
+`GEOLOCATION_ENABLED=true` dans `.env` pour obtenir les villes. Un import
+Dichvusocks conserve les métadonnées pays/région/ville reçues ; elles peuvent être
+utilisées sans requête de géolocalisation supplémentaire, après vérification que
+l'IP de sortie correspond. Le cache respecte `GEOLOCATION_CACHE_TTL_S` ; sans
+localisation valide, les proxies ne sont pas éligibles à un filtre par ville.
+
+Le formulaire Dichvusocks permet également de transmettre une région et une
+ville à l'aperçu et à l'import. Utilisez les noms reconnus par le fournisseur et
+vérifiez l'aperçu avant de dépenser des crédits. Les filtres de rotation restent
+indépendants des filtres d'import et sont réinitialisés au redémarrage.
+
+La migration 003 ajoute ville/région au cache et efface les anciennes entrées de
+localisation pour permettre leur enrichissement. Proxies et identifiants sont
+conservés. Redémarrez l'application pour charger cette version.

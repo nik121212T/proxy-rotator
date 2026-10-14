@@ -6,7 +6,7 @@
   <title>Paramètres · Proxy Rotator</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="stylesheet" href="/static/styles.css?v=split-pages-11">
-  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=split-pages-11" defer></script>
+  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=city-selection-12" defer></script>
 </head>
 <body>
 <div id="page-top" tabindex="-1"></div>
@@ -46,6 +46,13 @@
         <h3>Filtrer les proxies utilisés</h3>
         <label for="selection-country">Pays de sortie vérifié</label>
         <select id="selection-country" name="country"><option value="">Tous les pays</option>{% for code, name in countries %}<option value="{{ code }}" {% if selection.country == code %}selected{% endif %}>{{ name }} ({{ code }})</option>{% endfor %}</select>
+        <label for="selection-region">Région <span class="optional">facultatif</span></label>
+        <input id="selection-region" name="region" maxlength="128" value="{{ selection.region or '' }}" placeholder="Toutes les régions">
+        <label for="selection-city">Ville de sortie</label>
+        <input id="selection-city" name="city" list="selection-cities" maxlength="128" value="{{ selection.city or '' }}" placeholder="Toutes les villes" aria-describedby="selection-city-help">
+        <datalist id="selection-cities">{% for code, region, city in cities %}<option value="{{ city }}" data-country="{{ code }}" data-region="{{ region }}">{{ region }} · {{ code }}</option>{% endfor %}</datalist>
+        <p id="selection-city-help" class="helper">Laissez vide pour toutes les villes. Utilisez le nom indiqué par la géolocalisation ou le fournisseur. Aucun proxy correspondant : connexion refusée. La ville reste une estimation de l’IP de sortie.</p>
+        {% if not geo_enabled %}<p class="helper">La géolocalisation est désactivée : seules les localisations conservées des imports Dichvusocks sont disponibles.</p>{% endif %}
         <label for="selection-score">Score de santé minimum</label>
         <input id="selection-score" type="number" name="min_score" min="0" max="100" value="{{ selection.min_score }}" required>
         <label class="pin-only"><input type="checkbox" name="pinned_only" {% if selection.pinned_only %}checked{% endif %}> Uniquement les proxies épinglés</label>
@@ -71,6 +78,11 @@
       <form id="dichvusocks-form" autocomplete="off" hidden>
         <label for="dichvusocks-country">Pays</label>
         <select id="dichvusocks-country" name="country"><option value="">Tous</option></select>
+        <label for="dichvusocks-region">Région <span class="optional">facultatif</span></label>
+        <input id="dichvusocks-region" name="region" maxlength="128" placeholder="Toutes les régions">
+        <label for="dichvusocks-city">Ville <span class="optional">facultatif</span></label>
+        <input id="dichvusocks-city" name="city" maxlength="128" placeholder="Ex. Paris" aria-describedby="dichvusocks-city-help">
+        <p id="dichvusocks-city-help" class="helper">Saisissez le nom utilisé par Dichvusocks, puis vérifiez l’aperçu avant d’importer.</p>
         <label for="dichvusocks-limit">Nombre à importer <span class="optional">1–50</span></label>
         <input id="dichvusocks-limit" name="limit" type="number" min="1" max="50" value="5">
         <div class="dichvusocks-actions">

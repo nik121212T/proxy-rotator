@@ -65,6 +65,7 @@ class Pool:
         self._pinned: set[int] = set()
         self._exits: dict[int, ExitObservation] = {}
         self._countries: dict[str, tuple[str, str]] = {}
+        self._cities: dict[str, tuple[str | None, str | None]] = {}
         self._lock = asyncio.Lock()
         self._events = EventBus()
         self.activity = GatewayActivity()
@@ -104,8 +105,26 @@ class Pool:
     def exit_observations(self) -> dict[int, ExitObservation]:
         return dict(self._exits)
 
-    def set_country(self, ip: str, code: str, name: str) -> None:
+    def set_country(
+        self, ip: str, code: str, name: str, *,
+        city: str | None = None, region: str | None = None,
+    ) -> None:
         self._countries[ip] = (code, name)
+        self._cities[ip] = (city, region)
+
+    def clear_location(self, ip: str) -> None:
+        self._countries.pop(ip, None)
+        self._cities.pop(ip, None)
+
+    def city_name(self, proxy_id: int) -> str | None:
+        observed = self._exits.get(proxy_id)
+        location = self._cities.get(str(observed.ip)) if observed else None
+        return location[0] if location else None
+
+    def region_name(self, proxy_id: int) -> str | None:
+        observed = self._exits.get(proxy_id)
+        location = self._cities.get(str(observed.ip)) if observed else None
+        return location[1] if location else None
 
     def country_code(self, proxy_id: int) -> str | None:
         observed = self._exits.get(proxy_id)
@@ -202,7 +221,17 @@ class Pool:
 
         return await self._mutate(write)
 
-    async def clear_all(self) -> int:
+    async def clear_all(self, *, drain_timeout_s: float = 10.0) -> int:
+        # Mark everything dead first so no new picks reach these proxies, then
+        # wait briefly for active tunnels to drain naturally before dropping
+        # them from the DB (audit B8). We never block indefinitely: the
+        # timeout caps the wait and the hard delete goes through regardless.
+        await self._soft_delete_all()
+        if drain_timeout_s > 0:
+            deadline = self._clock().timestamp() + drain_timeout_s
+            while self.activity.active() and self._clock().timestamp() < deadline:
+                await asyncio.sleep(0.05)
+
         async def write() -> int:
             ids = tuple(p.id for p in self._snapshot)
             async with transaction(self._conn):
@@ -217,6 +246,18 @@ class Pool:
             return len(ids)
 
         return await self._mutate(write)
+
+    async def _soft_delete_all(self) -> None:
+        async def write() -> None:
+            for proxy in self._snapshot:
+                if proxy.status != "dead":
+                    updated = proxy.model_copy(
+                        update={"status": "dead", "quarantine_until": None}
+                    )
+                    await repository.update_proxy_health(self._conn, updated)
+                    self._publish_proxy(updated)
+
+        await self._mutate(write)
 
     @property
     def subscriber_count(self) -> int:

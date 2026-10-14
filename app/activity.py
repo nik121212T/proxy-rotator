@@ -55,5 +55,8 @@ class GatewayActivity:
             for record, start in self._active.values()
         )
 
+    def active_count_for(self, proxy_id: int) -> int:
+        return sum(1 for record, _ in self._active.values() if record.proxy_id == proxy_id)
+
     def recent(self) -> tuple[ConnectionActivity, ...]:
         return tuple(self._recent)

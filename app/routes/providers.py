@@ -108,15 +108,21 @@ async def import_from_provider(
             skipped.append({"id": sock_id, "reason": "no credentials returned"})
             continue
         try:
-            parse_line(
-                f"socks5://{sock.username}:{sock.password}@{sock.ip}:{sock.port}"
-            )
+            parse_line(f"socks5://{sock.username}:{sock.password}@{sock.ip}:{sock.port}")
         except ValueError as exc:
             skipped.append({"id": sock_id, "reason": f"parse: {exc}"})
             continue
         lines.append(f"socks5://{sock.username}:{sock.password}@{sock.ip}:{sock.port}")
         if sock.country_code:
             country_codes.append(sock.country_code)
+            if runtime.geo is not None and sock.country:
+                await runtime.geo.remember_provider_location(
+                    sock.ip,
+                    sock.country,
+                    sock.country_code,
+                    city=sock.city,
+                    region=sock.region,
+                )
     if not lines:
         return {"imported": 0, "skipped": skipped}
     cc = country_codes[0] if country_codes else "??"
@@ -149,7 +155,10 @@ async def set_token(payload: TokenPayload, runtime: Services) -> Response:
     from app import provider_store  # noqa: PLC0415
 
     await provider_store.set_token(
-        runtime.db_conn, "dichvusocks", payload.token, runtime.fernet_key  # type: ignore[arg-type]
+        runtime.db_conn,  # type: ignore[arg-type]
+        "dichvusocks",
+        payload.token,
+        runtime.fernet_key,
     )
     if runtime.dichvusocks is not None:
         runtime.dichvusocks.set_token(payload.token)
@@ -163,7 +172,10 @@ async def clear_token(runtime: Services) -> Response:
     from app import provider_store  # noqa: PLC0415
 
     await provider_store.set_token(
-        runtime.db_conn, "dichvusocks", None, runtime.fernet_key  # type: ignore[arg-type]
+        runtime.db_conn,  # type: ignore[arg-type]
+        "dichvusocks",
+        None,
+        runtime.fernet_key,
     )
     if runtime.dichvusocks is not None:
         runtime.dichvusocks.set_token(None)

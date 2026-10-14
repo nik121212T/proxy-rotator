@@ -1,3 +1,5 @@
+import asyncio
+
 import httpx2 as httpx
 
 
@@ -83,3 +85,49 @@ async def test_clear_all_wipes_pool(api, running_app) -> None:
     assert (stats["total"], stats["alive"], stats["quarantine"], stats["dead"]) == (0, 0, 0, 0)
     assert app.state.runtime.pool.pinned_ids() == set()
     assert (await client.post("/api/pool/clear-all")).json() == {"deleted": 0}
+
+
+async def test_clear_all_marks_dead_before_dropping_rows(api, running_app) -> None:
+    """B8: clear_all emits an 'updated' event with status='dead' before the
+    final 'removed' event for the same proxy, giving in-flight tunnels a
+    window to finish naturally."""
+    client, port = api
+    app, _ = running_app
+    await client.post(
+        "/api/proxies/import",
+        json={"text": f"userA:fake@127.0.0.1:{port}"},
+    )
+    pool = app.state.runtime.pool
+    proxy_id = pool.all()[0].id
+    stream = pool.subscribe(capacity=16, drop_oldest=False)
+    seen: list[tuple[str, str | None]] = []
+    try:
+        await pool.clear_all(drain_timeout_s=0.0)
+        for _ in range(8):
+            try:
+                event = await asyncio.wait_for(anext(stream), 0.5)
+            except (TimeoutError, StopAsyncIteration):
+                break
+            payload = getattr(event, "payload", None)
+            status = getattr(payload, "status", None) if payload is not None else None
+            seen.append((event.type, status))
+            if event.type == "removed":
+                break
+    finally:
+        await stream.aclose()
+    types_for_proxy = [
+        (event_type, status)
+        for event_type, status in seen
+    ]
+    updated_dead = next(
+        (i for i, (t, s) in enumerate(types_for_proxy) if t == "updated" and s == "dead"),
+        None,
+    )
+    removed = next(
+        (i for i, (t, _) in enumerate(types_for_proxy) if t == "removed"),
+        None,
+    )
+    assert updated_dead is not None, seen
+    assert removed is not None and removed > updated_dead, seen
+    assert pool.all() == ()
+    assert proxy_id not in pool.pinned_ids()

@@ -80,12 +80,21 @@ def render(
                 if runtime.pool.country_code(p.id)
             }
         ),
+        "cities": sorted(
+            {
+                (
+                    runtime.pool.country_code(p.id) or "",
+                    runtime.pool.region_name(p.id) or "",
+                    runtime.pool.city_name(p.id) or "",
+                )
+                for p in runtime.pool.all()
+                if runtime.pool.city_name(p.id)
+            }
+        ),
         "selection": runtime.rotator.selection,
         "interval_minutes": runtime.rotator.interval_minutes,
         "geo_enabled": bool(runtime.geo and runtime.geo.enabled),
-        "provider_dichvusocks_enabled": bool(
-            runtime.dichvusocks and runtime.dichvusocks.enabled
-        ),
+        "provider_dichvusocks_enabled": bool(runtime.dichvusocks and runtime.dichvusocks.enabled),
     }
     context.update(extra or {})
     return templates.TemplateResponse(request=request, name=template, context=context)

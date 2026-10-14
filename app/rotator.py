@@ -56,11 +56,21 @@ class Rotator:
         target_domain: str = "",
     ) -> Proxy | None:
         country_of = getattr(pool, "country_code", lambda proxy_id: None)
+        city_of = getattr(pool, "city_name", lambda proxy_id: None)
+        region_of = getattr(pool, "region_name", lambda proxy_id: None)
         active = tuple(
             p
             for p in pool.active()
             if p.score >= self.selection.min_score
             and (self.selection.country is None or country_of(p.id) == self.selection.country)
+            and (
+                self.selection.city is None
+                or (city_of(p.id) or "").casefold() == self.selection.city.casefold()
+            )
+            and (
+                self.selection.region is None
+                or (region_of(p.id) or "").casefold() == self.selection.region.casefold()
+            )
         )
         if not active:
             return None

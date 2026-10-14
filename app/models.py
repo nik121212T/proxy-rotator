@@ -135,6 +135,14 @@ class CheckBatchStatus(_DTO):
 
 
 class RotationSelection(_DTO):
+    city: str | None = Field(default=None, max_length=128)
+    region: str | None = Field(default=None, max_length=128)
+
+    @field_validator("city", "region")
+    @classmethod
+    def clean_location(cls, value: str | None) -> str | None:
+        return value.strip() or None if value is not None else None
+
     country: str | None = Field(default=None, pattern=r"^[A-Z]{2}$")
     min_score: Score = 0
     pinned_only: bool = False

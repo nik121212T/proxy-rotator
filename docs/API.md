@@ -190,3 +190,17 @@ the next eligible proxy is selected; an unavailable proxy is replaced immediatel
 Existing tunnels are never forcibly closed. Applying the strategy resets the timer.
 Only one eligible proxy means it will be reused; a different exit IP is not guaranteed.
 The dashboard interval resets to one minute on application restart.
+
+### City and region selection
+
+`POST /api/pool/selection` additionally accepts `city` and `region` (nullable
+strings, at most 128 characters). Example:
+`{"country":"FR","city":"Paris","region":"Île-de-France","min_score":40}`.
+Whitespace-only fields become null. Matching is case-insensitive and combines
+all filters; unknown/mismatched locations are excluded with no fallback.
+`GET /api/geo/{ip}` includes `city` and `region` when geolocation is enabled.
+
+Dichvusocks preview/import query parameters `city` and `region` are exposed in
+the settings form. Explicit imports cache the provider's location metadata;
+rotation uses it only for a matching health-observed exit IP. Cached import
+metadata is also available internally when external geolocation is disabled.

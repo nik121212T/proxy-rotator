@@ -329,3 +329,20 @@ distinct exit IPs across eight requests on both gateways.
 
 Still open from the audit: B8, E4–E8, F2 (doc), F3–F9, G1–G4, H3 (smoke
 script auto-attach).
+
+## T8 — Sélection par ville (demande utilisateur, 2026-10-14)
+
+- [x] Filtrer les cinq stratégies par pays/région/ville, sans repli si la ville
+  est inconnue ou ne correspond pas ; suivre les changements d'IP de sortie.
+- [x] Migration 003 : cache ville/région ; conservation des métadonnées
+  Dichvusocks et lecture des schémas ipapi/ip-api.
+- [x] Champs région/ville dans les réglages et l'aperçu/import Dichvusocks,
+  suggestions des villes connues, validation et aide intégrées.
+- [x] Tests ciblés : 39 passed (rotation, API ASGI sans listeners, import avec
+  fournisseur simulé, cache, migration, DB et observations d'IP). Ruff, mypy,
+  syntaxe JavaScript et diff --check passent. Import asyncio manquant corrigé
+  dans le test préexistant de purge du pool ; modifications locales préservées.
+- [ ] Validation complète hors sandbox : tentative de suite complète, 222
+  passed, 2 skipped, 28 failed, 124 errors ; ports locaux interdits par le
+  sandbox et test préexistant du lanceur également en échec. Aucun import réel
+  payant ni preuve contre l'API Dichvusocks distante dans cette session.

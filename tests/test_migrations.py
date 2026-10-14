@@ -1,5 +1,6 @@
-"""Migrations 001 and 002 must match SPEC section 9 exactly."""
+"""Migrations 001–003 must match SPEC section 9 exactly."""
 
+import re
 from pathlib import Path
 
 import aiosqlite
@@ -13,7 +14,7 @@ async def schema(conn: aiosqlite.Connection) -> list[tuple[str, str, str]]:
         "SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' "
         "ORDER BY type, name"
     ) as cursor:
-        return [tuple(row) for row in await cursor.fetchall()]
+        return [(row[0], row[1], re.sub(r"\s+", "", row[2])) for row in await cursor.fetchall()]
 
 
 async def test_migrations_match_spec_and_are_idempotent(
@@ -26,7 +27,7 @@ async def test_migrations_match_spec_and_are_idempotent(
         assert await schema(db) == await schema(reference)
 
     async with db.execute("PRAGMA user_version") as cursor:
-        assert (await cursor.fetchone())[0] == 2
+        assert (await cursor.fetchone())[0] == 3
     async with db.execute("PRAGMA schema_version") as cursor:
         before = (await cursor.fetchone())[0]
     await migrate(db)
@@ -36,8 +37,12 @@ async def test_migrations_match_spec_and_are_idempotent(
 
 @pytest.mark.parametrize(
     ("scheme", "port", "status"),
-    [("ftp", 80, "unknown"), ("http", 0, "unknown"), ("http", 65536, "unknown"),
-     ("http", 80, "invalid")],
+    [
+        ("ftp", 80, "unknown"),
+        ("http", 0, "unknown"),
+        ("http", 65536, "unknown"),
+        ("http", 80, "invalid"),
+    ],
 )
 async def test_schema_enforces_proxy_constraints(
     db: aiosqlite.Connection, scheme: str, port: int, status: str
@@ -63,7 +68,9 @@ async def test_schema_enforces_identity_and_check_constraints(db: aiosqlite.Conn
             pass
     for parent, ok in [(999999, 1), (proxy_id, 2)]:
         with pytest.raises(aiosqlite.IntegrityError):
-            async with db.execute("INSERT INTO proxy_checks (proxy_id, ok) VALUES (?, ?)", (parent, ok)):
+            async with db.execute(
+                "INSERT INTO proxy_checks (proxy_id, ok) VALUES (?, ?)", (parent, ok)
+            ):
                 pass
     async with db.execute("INSERT INTO proxy_checks (proxy_id, ok) VALUES (?, ?)", (proxy_id, 1)):
         pass

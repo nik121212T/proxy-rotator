@@ -256,7 +256,9 @@ CREATE TABLE IF NOT EXISTS geo_cache (
   country       TEXT,
   country_code  TEXT,
   cached_at     TEXT NOT NULL,
-  source        TEXT NOT NULL
+  source        TEXT NOT NULL,
+  city TEXT,
+  region TEXT
 );
 CREATE TABLE IF NOT EXISTS provider_tokens (
   provider    TEXT PRIMARY KEY,
@@ -291,3 +293,17 @@ opt-in surface (geolocation lookups and the Dichvusocks provider token).
 - Automatic subscription-URL polling (user pastes manually for now).
 
 These are listed in `docs/MIGRATION_ELECTRON.md` and `TASKS.md` v2 section.
+
+## 12. City selection (2026-10-14)
+
+RotationSelection accepts nullable city/region strings (128 characters maximum),
+trimmed and compared case-insensitively in addition to country, score and pins.
+Unknown location fails the filter. Metadata is keyed by the latest observed exit
+IP, not the upstream hostname. Existing tunnels continue; all five strategies
+respect the selection for new connections.
+
+Migration 003 extends geo_cache with city and region and invalidates old derived
+country-only entries. Explicit Dichvusocks imports retain provider location
+metadata in that cache. Only cached import metadata is read when external
+geolocation is disabled; no lookup is sent. Location remains an estimate and
+expires according to the cache TTL. Selection resets on restart.
