@@ -346,3 +346,11 @@ script auto-attach).
   passed, 2 skipped, 28 failed, 124 errors ; ports locaux interdits par le
   sandbox et test préexistant du lanceur également en échec. Aucun import réel
   payant ni preuve contre l'API Dichvusocks distante dans cette session.
+
+### T8.1 — Ville dans le tableau principal
+
+- [x] Afficher ville et pays sur chaque ligne, y compris dans les fragments live.
+- [x] Ajouter « Ville : A à Z » au menu de tri ; ignorer casse/accents,
+  placer les villes inconnues en dernier et départager par ID.
+- [x] Vérifier page initiale, snapshot après changement de ville et fragment
+  individuel via ASGI sans listeners : 34 tests ciblés passent ; Ruff/mypy verts.

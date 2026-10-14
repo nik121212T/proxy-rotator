@@ -204,3 +204,7 @@ Dichvusocks preview/import query parameters `city` and `region` are exposed in
 the settings form. Explicit imports cache the provider's location metadata;
 rotation uses it only for a matching health-observed exit IP. Cached import
 metadata is also available internally when external geolocation is disabled.
+
+Dashboard and `/ui/snapshot` also accept `sort=city`: alphabetical city order,
+case/accent-insensitive, unknown cities last, stable proxy-ID tie breaker.
+Rows display both city and country from the latest observed exit IP.

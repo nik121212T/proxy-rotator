@@ -5,6 +5,7 @@ Moved out of ``app/ui/`` so routes no longer have to import the UI package
 owns the Python glue that routes call into.
 """
 
+import unicodedata
 from pathlib import Path
 
 from fastapi import Request
@@ -22,6 +23,7 @@ SORT_OPTIONS = {
     "best": "Meilleurs résultats d’abord",
     "issues": "Problèmes d’abord",
     "latency": "Latence : plus rapides d’abord",
+    "city": "Ville : A à Z",
     "score": "Score : du meilleur au moins bon",
     "success": "Taux de réussite décroissant",
     "recent": "Derniers tests d’abord",
@@ -29,7 +31,24 @@ SORT_OPTIONS = {
 }
 
 
-def ordered_proxies(proxies: tuple[Proxy, ...], order: str) -> tuple[Proxy, ...]:
+def ordered_proxies(
+    proxies: tuple[Proxy, ...],
+    order: str,
+    city_names: dict[int, str | None] | None = None,
+) -> tuple[Proxy, ...]:
+    if order == "city":
+
+        def city_key(proxy: Proxy) -> tuple[bool, str, int]:
+            city = ((city_names or {}).get(proxy.id) or "").strip()
+            normalized = "".join(
+                char
+                for char in unicodedata.normalize("NFKD", city.casefold())
+                if not unicodedata.combining(char)
+            )
+            return (not bool(city), normalized, proxy.id)
+
+        return tuple(sorted(proxies, key=city_key))
+
     def key(proxy: Proxy) -> tuple[float, ...]:
         latency = proxy.latency_ms if proxy.latency_ms is not None else float("inf")
         if order == "latency":
@@ -60,11 +79,12 @@ def render(
     order = request.query_params.get("sort", "best")
     if order not in SORT_OPTIONS:
         order = "best"
+    city_names = {p.id: runtime.pool.city_name(p.id) for p in runtime.pool.all()}
     context: dict[str, object] = {
         "sort_order": order,
         "sort_options": SORT_OPTIONS,
         "proxies": ordered_proxies(
-            tuple(p for p in runtime.pool.all() if p.status != "dead"), order
+            tuple(p for p in runtime.pool.all() if p.status != "dead"), order, city_names
         ),
         "stats": runtime.pool.stats(runtime.rotator.strategy),
         "gateway": runtime.gateway,
@@ -72,6 +92,7 @@ def render(
         "pinned_ids": runtime.pool.pinned_ids(),
         "activity": runtime.activity(),
         "exits": runtime.pool.exit_observations(),
+        "city_names": city_names,
         "country_names": {p.id: runtime.pool.country_name(p.id) for p in runtime.pool.all()},
         "countries": sorted(
             {

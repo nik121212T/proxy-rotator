@@ -240,3 +240,46 @@ async def test_city_import_passes_filters_and_keeps_provider_location(db, monkey
             assert runtime.rotator.pick(pool).id == proxy.id
         finally:
             await geo.stop()
+
+
+async def test_dashboard_city_sort_and_live_rows(db):
+    import re
+
+    import httpx2 as httpx
+    from fastapi import FastAPI
+
+    from app.health_checker import HealthChecker
+    from app.routes import ui
+    from app.runtime import Runtime
+
+    key = Fernet.generate_key()
+    pool = await Pool.load(db, key)
+    for index, city in enumerate([None, "Zurich", "Évry"]):
+        proxy = await pool.add(parse_line(f"tester:fake@city{index}.invalid:80"))
+        ip = f"8.8.8.{index + 1}"
+        await pool.apply_check(
+            CheckResult(
+                proxy_id=proxy.id, ok=True, exit_ip=ip, latency_ms=10, checked_at=datetime.now(UTC)
+            )
+        )
+        pool.set_country(ip, "FR", "France", city=city)
+    app = FastAPI()
+    app.state.runtime = Runtime(pool, HealthChecker(pool, key), Rotator(), "", "")
+    app.include_router(ui.router)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        for url in ["/?sort=city", "/ui/snapshot?sort=city"]:
+            response = await client.get(url)
+            assert response.status_code == 200
+            assert re.findall(r'<tr id="proxy-(\d+)"', response.text) == ["3", "2", "1"]
+            assert "Évry · France" in response.text
+            assert "ville inconnue · France" in response.text
+        page = await client.get("/?sort=city")
+        assert 'value="city" selected' in page.text
+        assert "Ville : A à Z" in page.text
+        pool.set_country("8.8.8.2", "FR", "France", city="Amiens")
+        refreshed = await client.get("/ui/snapshot?sort=city")
+        assert re.findall(r'<tr id="proxy-(\d+)"', refreshed.text) == ["2", "3", "1"]
+        row = await client.get("/ui/proxies/2")
+        assert "Amiens · France" in row.text
