@@ -8,6 +8,7 @@
     encodeParameters(xhr, parameters, element) {
       const data = Object.fromEntries(new FormData(element));
       if (element.id === "strategy-form") {
+        data.strategy = element.querySelector('[name="strategy"]').value;
         data.interval_minutes = Number(data.interval_minutes);
         data.pinned_only = element.querySelector('[name="pinned_only"]').checked;
       }
@@ -66,13 +67,17 @@
     strategyDirty = true;
     updateStrategyHelp();
   });
+  function syncPriorityMode() {
+    if (!strategySelect || !priorityCheckbox) return;
+    strategySelect.disabled = priorityCheckbox.checked;
+    if (priorityCheckbox.checked) strategySelect.value = "round_robin";
+    updateStrategyHelp();
+  }
   priorityCheckbox?.addEventListener("change", () => {
     strategyDirty = true;
-    if (priorityCheckbox.checked && strategySelect) {
-      strategySelect.value = "round_robin";
-      strategySelect.dispatchEvent(new Event("change", {bubbles: true}));
-    }
+    syncPriorityMode();
   });
+  syncPriorityMode();
   updateStrategyHelp();
 
   function syncBusyRows() {

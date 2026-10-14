@@ -163,6 +163,7 @@ async def test_priority_setting_belongs_to_rotation_and_survives_location_update
     assert runtime.rotator.selection.pinned_only is True
     await client.post("/api/pool/strategy", json={"strategy": "weighted"})
     assert runtime.rotator.selection.pinned_only is True
+    assert runtime.rotator.strategy == "round_robin"
     html = (await client.get("/parametres")).text
     strategy_form = html.split('id="strategy-form"', 1)[1].split("</form>", 1)[0]
     location_form = html.split('id="selection-form"', 1)[1].split("</form>", 1)[0]

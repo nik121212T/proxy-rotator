@@ -386,3 +386,11 @@ script auto-attach).
   à jour à la sélection (zone aria-live). Décocher conserve le mode choisi.
 - [x] Test comportemental JS via `node --test tests/rotation_controls.test.cjs` :
   initialisation, case et cinq modes validés ; 37 tests Python ciblés passent.
+
+### T9.3 — Verrouillage du mode prioritaire
+
+- [x] Case cochée : menu désactivé sur « À tour de rôle », y compris au chargement.
+  Case décochée : menu réactivé. Explication visible mise à jour.
+- [x] Envoyer explicitement le mode même lorsque le select est désactivé ;
+  imposer aussi la cohérence côté API. Tests JS de verrouillage et soumission,
+  régression API et 37 tests Python ciblés passent ; Ruff/mypy verts.

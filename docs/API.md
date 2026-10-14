@@ -223,3 +223,7 @@ location/score filters. Omitting it preserves the current priority restriction.
 `POST /api/pool/selection` likewise preserves `pinned_only` when that field is
 omitted; an explicit boolean still updates it. The checkbox now belongs to the
 Rotation form and is saved by “Appliquer la stratégie”.
+
+When `pinned_only` is enabled, the control is locked to `round_robin` and both
+strategy/selection endpoints enforce that mode. Disable the restriction before
+choosing another strategy. The form explicitly serializes the disabled select.

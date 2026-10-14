@@ -26,12 +26,13 @@ async def stats(runtime: Services) -> PoolStats:
 async def strategy(
     body: StrategyRequest, runtime: Services, request: Request
 ) -> PoolStats | HTMLResponse:
-    runtime.rotator.configure(body.strategy, interval_minutes=body.interval_minutes)
     if body.pinned_only is not None:
         runtime.rotator.selection = runtime.rotator.selection.model_copy(
             update={"pinned_only": body.pinned_only}
         )
-    result = runtime.pool.publish_stats(body.strategy)
+    chosen = "round_robin" if runtime.rotator.selection.pinned_only else body.strategy
+    runtime.rotator.configure(chosen, interval_minutes=body.interval_minutes)
+    result = runtime.pool.publish_stats(chosen)
     if request.headers.get("HX-Request") == "true":
         return feedback(request, "Stratégie de rotation mise à jour.")
     return result
@@ -65,6 +66,8 @@ async def selection(
     if "pinned_only" not in body.model_fields_set:
         body = body.model_copy(update={"pinned_only": runtime.rotator.selection.pinned_only})
     runtime.rotator.selection = body
+    if body.pinned_only and runtime.rotator.strategy != "round_robin":
+        runtime.rotator.configure("round_robin")
     runtime.pool.publish_stats(runtime.rotator.strategy)
     if request.headers.get("HX-Request") == "true":
         return feedback(
