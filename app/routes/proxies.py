@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, ConfigDict, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from app.models import CheckResult, Proxy, ProxyStatus
 from app.parser import ImportReport
@@ -25,15 +25,15 @@ class ImportRequest(BaseModel):
 async def import_proxies(
     body: ImportRequest, runtime: Services, request: Request
 ) -> ImportReport | HTMLResponse:
-    report = await runtime.pool.import_text(body.text.get_secret_value(), label=body.label)
+    report = await runtime.pool.import_text(body.text.get_secret_value(), label=body.label, verify=runtime.checker.probe_candidate)
     if request.headers.get("HX-Request") == "true":
         return feedback(
             request,
             f"{report.imported} proxy(s) importé(s) : "
             f"{report.with_auth} avec identifiants · {report.without_auth} sans identifiants. "
-            f"{report.skipped} ligne(s) ignorée(s).",
+            f"{report.failed} échec(s) au test · {report.skipped} ligne(s) ignorée(s) au total.",
             errors=[e.model_dump() for e in report.errors],
-            clear_import=not report.errors,
+            clear_import=not report.errors and not report.failed,
         )
     return report
 
@@ -91,11 +91,12 @@ async def unpin_proxy(
 async def export_proxies(
     runtime: Services,
     status: Annotated[ProxyStatus | None, Query()] = "alive",
+    country: Annotated[list[Annotated[str, Field(pattern=r"^(?:[A-Z]{2}|unknown)$")]] | None, Query()] = None,
 ) -> Response:
     """Plain-text download of proxies (default: alive only)."""
     from datetime import UTC, datetime  # noqa: PLC0415 - keep import local
 
-    lines = runtime.pool.export_lines(status=status)
+    lines = runtime.pool.export_lines(status=status, countries=set(country or []))
     body = "\n".join(lines) + ("\n" if lines else "")
     stamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
     filename = f"proxies-{status or 'all'}-{stamp}.txt"

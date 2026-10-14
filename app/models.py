@@ -79,6 +79,8 @@ class PoolStats(_DTO):
     total: Count = 0
     with_auth: Count = 0
     without_auth: Count = 0
+    alive_with_auth: Count = 0
+    alive_without_auth: Count = 0
     alive: Count = 0
     quarantine: Count = 0
     dead: Count = 0

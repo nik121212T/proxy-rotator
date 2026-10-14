@@ -163,10 +163,11 @@ async def test_preview_relays_filters_without_importing(
 
 
 async def test_import_views_each_entry_and_adds_to_pool(
-    api, running_app, provider_upstream
+    api, running_app, provider_upstream, monkeypatch, successful_candidate_probe
 ) -> None:
     client, _ = api
     app, _ = running_app
+    monkeypatch.setattr(app.state.runtime.checker, "probe_candidate", successful_candidate_probe)
     await _wire_client(api, running_app, provider_upstream)
 
     async def list_handler(request: web.Request) -> web.Response:

@@ -373,3 +373,30 @@ async def test_probe_without_credentials_sends_no_authorization(db, upstream):
     result = await checker.check_one(proxy.id)
     assert result.ok
     assert not upstream.authenticated
+
+
+async def test_verified_import_discards_failures_before_storage(db, upstream):
+    key = Fernet.generate_key()
+    pool = await Pool.load(db, key)
+    checker = HealthChecker(pool, key, probe_url="http://probe.invalid/?format=json")
+    text = f"user:fake@127.0.0.1:{upstream.port}\n127.0.0.1:{upstream.port}"
+    upstream.status = 407
+    report = await pool.import_text(text, verify=checker.probe_candidate)
+    assert report.imported == 0
+    assert report.failed == 2
+    assert pool.all() == ()
+    async with db.execute("SELECT count(*) FROM proxies") as cursor:
+        assert (await cursor.fetchone())[0] == 0
+    upstream.status = 200
+    report = await pool.import_text(text, verify=checker.probe_candidate)
+    assert report.imported == 2
+    assert report.with_auth == report.without_auth == 1
+    assert report.failed == 0
+    assert all(p.status == "alive" and p.success_count == 1 for p in pool.all())
+    reloaded = await Pool.load(db, key)
+    assert all(p.status == "alive" for p in reloaded.all())
+    assert len(reloaded.exit_observations()) == 2
+    previous_requests = upstream.requests
+    report = await pool.import_text(text, verify=checker.probe_candidate)
+    assert report.imported == 0 and report.skipped == 2
+    assert upstream.requests == previous_requests

@@ -192,7 +192,10 @@ async def test_city_import_passes_filters_and_keeps_provider_location(db, monkey
     key = Fernet.generate_key()
     pool = await Pool.load(db, key)
     checker = HealthChecker(pool, key)
-    monkeypatch.setattr(checker, "queue_all", lambda: 0)
+    async def probe_candidate(candidate):
+        return CheckResult(proxy_id=1, ok=True, exit_ip="8.8.8.8", checked_at=datetime.now(UTC))
+
+    monkeypatch.setattr(checker, "probe_candidate", probe_candidate)
     geo = GeolocationService(
         db, enabled=False, provider_url="https://unused.invalid/{ip}", cache_ttl_s=60, timeout_s=1
     )

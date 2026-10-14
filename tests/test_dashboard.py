@@ -28,7 +28,9 @@ def test_dashboard_and_local_assets(tmp_path: Path) -> None:
             assert client.get(f"/static/{path}").status_code == 200
 
 
-def test_htmx_import_returns_html_and_escapes_labels(tmp_path: Path) -> None:
+def test_htmx_import_returns_html_and_escapes_labels(
+    tmp_path: Path, monkeypatch, successful_candidate_probe
+) -> None:
     app = create_app(
         Settings(
             _env_file=None,
@@ -40,6 +42,7 @@ def test_htmx_import_returns_html_and_escapes_labels(tmp_path: Path) -> None:
     )
     with TestClient(app) as client:
         client.portal.call(app.state.runtime.checker.stop)
+        monkeypatch.setattr(app.state.runtime.checker, "probe_candidate", successful_candidate_probe)
         response = client.post(
             "/api/proxies/import",
             headers={"HX-Request": "true"},

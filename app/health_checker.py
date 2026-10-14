@@ -15,9 +15,10 @@ from pydantic import SecretStr
 from yarl import URL
 
 from app.burn_detector import BurnDetector
-from app.crypto import decrypt_password
+from app.crypto import decrypt_password, encrypt_password
 from app.events import Subscription
 from app.models import CheckBatchStatus, CheckResult, Proxy
+from app.parser import ParsedProxy
 from app.pool import Pool, utc_now
 
 
@@ -110,6 +111,15 @@ class HealthChecker:
             except (ValueError, RecursionError):
                 return 200, None, "Invalid probe response"
             return 200, address, None
+
+    async def probe_candidate(self, candidate: ParsedProxy) -> CheckResult:
+        """Test an import candidate without storing or publishing it."""
+        encrypted = await asyncio.to_thread(encrypt_password, candidate.password, self._key)
+        proxy = Proxy(
+            id=1, scheme=candidate.scheme, host=candidate.host, port=candidate.port,
+            username=candidate.username, password_enc=encrypted, created_at=self._clock(),
+        )
+        return await self.probe(proxy)
 
     async def probe(self, proxy: Proxy) -> CheckResult:
         async with self._semaphore:

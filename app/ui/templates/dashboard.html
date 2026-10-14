@@ -5,8 +5,8 @@
   <meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"selfRequestsOnly":true}'>
   <title>Dashboard · Proxy Rotator</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <link rel="stylesheet" href="/static/styles.css?v=provider-status-17">
-  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=auth-counts-18" defer></script>
+  <link rel="stylesheet" href="/static/styles.css?v=summary-export-20">
+  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=summary-export-20" defer></script>
 </head>
 <body>
 <div id="page-top" tabindex="-1"></div>
@@ -19,7 +19,16 @@
   {% include '_check_controls.html' %}
   <div id="feedback" class="feedback" role="status" aria-live="polite"></div>
   <section class="pool-panel" aria-labelledby="pool-title">
-    <div class="table-toolbar"><h2 id="pool-title">Vos proxies</h2><div class="toolbar-actions"><a class="button secondary" href="/api/proxies/export?status=alive" download>Exporter les actifs</a><button type="button" class="secondary" hx-post="/api/pool/clear-dead" hx-target="#feedback" hx-disabled-elt="this">Purger les hors pool</button><button type="button" class="danger" hx-post="/api/pool/clear-all" hx-target="#feedback" hx-disabled-elt="this" hx-confirm="Supprimer TOUS les proxies du pool ? Cette action est irréversible.">Tout effacer</button><a class="button" href="/parametres">⚙ Paramètres</a></div></div>
+    <div class="table-toolbar"><h2 id="pool-title">Vos proxies</h2><div class="toolbar-actions"><button type="button" class="secondary" hx-post="/api/pool/clear-dead" hx-target="#feedback" hx-disabled-elt="this">Purger les hors pool</button><button type="button" class="secondary" hx-post="/api/pool/clear-without-auth" hx-target="#feedback" hx-disabled-elt="this">Retirer les sans identifiants</button><button type="button" class="danger" hx-post="/api/pool/clear-all" hx-target="#feedback" hx-disabled-elt="this" hx-confirm="Supprimer TOUS les proxies du pool ? Cette action est irréversible.">Tout effacer</button><a class="button" href="/parametres">⚙ Paramètres</a></div></div>
+    <details class="export-panel">
+      <summary>Exporter les actifs</summary>
+      <form id="export-form" action="/api/proxies/export" method="get">
+        <input type="hidden" name="status" value="alive">
+        <p class="helper">Cochez les pays souhaités. Aucun pays coché = tous les disponibles.</p>
+        {% include '_export_countries.html' %}
+        <div class="export-actions"><button type="submit">Télécharger</button><button type="reset" class="secondary">Tous les pays</button></div>
+      </form>
+    </details>
     <form id="table-filters" class="table-filters" method="get" action="/" aria-label="Filtrer le tableau">
       <div class="filter-field"><label for="filter-city">Ville</label><input id="filter-city" name="city" value="{{ filter_city }}" maxlength="128" list="table-city-options" placeholder="Toutes les villes" autocomplete="off"></div>
       <div class="filter-field"><label for="filter-country">Pays (code)</label><input id="filter-country" name="country" value="{{ filter_country }}" maxlength="2" list="table-country-options" placeholder="Ex. FR" autocomplete="off"></div>

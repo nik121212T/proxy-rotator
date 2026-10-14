@@ -28,11 +28,15 @@ Response `200`:
   "with_auth": 1,
   "without_auth": 1,
   "skipped": 0,
+  "failed": 0,
   "errors": []
 }
 ```
 
-Invalid lines are skipped and reported; valid records are imported together in one database transaction.
+New candidates are probed before storage; only successful probes are imported
+in one database transaction, with alive status and the measured check.
+`failed` counts unsuccessful probes (included in `skipped`). Duplicates are
+skipped before probing. Requests may take several minutes for large batches.
 `with_auth` and `without_auth` split newly imported records by credential presence;
 they exclude duplicates and sum to `imported`. Both are zero when nothing is added.
 `imported` counts valid new records, `skipped` counts invalid/duplicate records, and
@@ -96,6 +100,8 @@ Validation errors return a sanitized 422 response without echoing submitted inpu
   "total": 50,
   "with_auth": 40,
   "without_auth": 10,
+  "alive_with_auth": 30,
+  "alive_without_auth": 4,
   "alive": 34,
   "quarantine": 4,
   "dead": 12,
@@ -107,6 +113,14 @@ Validation errors return a sanitized 422 response without echoing submitted inpu
 
 `with_auth` and `without_auth` count the entire stored pool across all statuses,
 independent of dashboard display filters, and sum to `total`.
+
+`alive_with_auth` and `alive_without_auth` restrict those counts to alive entries.
+
+### `POST /api/pool/clear-without-auth`
+
+Cancel current probes and delete all proxies without credentials, regardless of
+status or dashboard filters. Returns `{deleted: n}` or HTMX feedback. Future
+imports are unaffected; authenticated proxies are preserved.
 
 ### `POST /api/pool/clear-dead`
 
@@ -236,3 +250,11 @@ Rotation form and is saved by “Appliquer la stratégie”.
 When `pinned_only` is enabled, the control is locked to `round_robin` and both
 strategy/selection endpoints enforce that mode. Disable the restriction before
 choosing another strategy. The form explicitly serializes the disabled select.
+
+### Filtre de pays pour `GET /api/proxies/export`
+
+`country=FR&country=GB` sélectionne plusieurs pays à partir de la dernière IP
+de sortie connue. Les codes doivent être deux lettres majuscules ; `unknown`
+cible les localisations inconnues. Sans `country`, tous les pays sont inclus.
+Le statut reste `alive` par défaut. Aucune correspondance produit un fichier
+vide et `X-Line-Count: 0`, sans repli sur tous les pays.

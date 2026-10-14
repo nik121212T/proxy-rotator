@@ -170,7 +170,7 @@ class Pool:
         self._pinned.discard(proxy_id)
         return removed
 
-    def export_lines(self, status: str | None = None) -> tuple[str, ...]:
+    def export_lines(self, status: str | None = None, *, countries: set[str] | None = None) -> tuple[str, ...]:
         """Return canonical ``scheme://user:pass@host:port`` lines, filterable by status."""
         from app.crypto import decrypt_password  # noqa: PLC0415
 
@@ -179,6 +179,8 @@ class Pool:
         )
         lines: list[str] = []
         for proxy in selected:
+            if countries and (self.country_code(proxy.id) or "unknown") not in countries:
+                continue
             try:
                 password = decrypt_password(proxy.password_enc.get_secret_value(), self._key)
             except Exception as exc:  # noqa: BLE001  skip rows whose decryption fails
@@ -193,6 +195,8 @@ class Pool:
         snapshot = self._snapshot
         latencies = [p.latency_ms for p in snapshot if p.latency_ms is not None]
         return PoolStats(
+            alive_with_auth=sum(p.status == "alive" and bool(p.username) for p in snapshot),
+            alive_without_auth=sum(p.status == "alive" and not p.username for p in snapshot),
             with_auth=sum(bool(p.username) for p in snapshot),
             without_auth=sum(not p.username for p in snapshot),
             total=len(snapshot), alive=sum(p.status == "alive" for p in snapshot),
@@ -212,8 +216,14 @@ class Pool:
         return stats
 
     async def clear_dead(self) -> int:
+        return await self._remove_matching(lambda proxy: proxy.status == "dead")
+
+    async def clear_without_auth(self) -> int:
+        return await self._remove_matching(lambda proxy: not proxy.username)
+
+    async def _remove_matching(self, predicate: Callable[[Proxy], bool]) -> int:
         async def write() -> int:
-            dead = tuple(p for p in self._snapshot if p.status == "dead")
+            dead = tuple(p for p in self._snapshot if predicate(p))
             async with transaction(self._conn):
                 for proxy in dead:
                     await repository.delete_proxy(self._conn, proxy.id)
@@ -307,27 +317,68 @@ class Pool:
 
         return await self._mutate(write)
 
-    async def import_text(self, text: str, *, label: str | None = None) -> ImportReport:
+    async def import_text(
+        self, text: str, *, label: str | None = None,
+        verify: Callable[[ParsedProxy], Awaitable[CheckResult]] | None = None,
+    ) -> ImportReport:
         report = await asyncio.to_thread(parse_bulk, text)
 
+        def identity(proxy: ParsedProxy | Proxy) -> tuple[str, str, int, str]:
+            return proxy.scheme, proxy.host, proxy.port, proxy.username
+
+        seen = {identity(p) for p in self._snapshot}
+        candidates = [p for p in report.proxies if identity(p) not in seen]
+        checks: dict[tuple[str, str, int, str], CheckResult] = {}
+        failed = 0
+        if verify is not None:
+            # Bound network concurrency in the checker; cancel siblings on error.
+            async def measure(candidate: ParsedProxy) -> CheckResult:
+                assert verify is not None
+                return await verify(candidate)
+
+            async with asyncio.TaskGroup() as group:
+                tasks = [group.create_task(measure(p)) for p in candidates]
+            checks = {identity(p): task.result() for p, task in zip(candidates, tasks, strict=True)}
+            failed = sum(not check.ok for check in checks.values())
+            candidates = [p for p in candidates if checks[identity(p)].ok]
+
         async def write() -> ImportReport:
-            seen = {(p.scheme, p.host, p.port, p.username) for p in self._snapshot}
-            accepted = [p for p in report.proxies
-                        if (p.scheme, p.host, p.port, p.username) not in seen]
+            # Another import may have committed while probes were running.
+            existing = {identity(p) for p in self._snapshot}
+            accepted = [p for p in candidates if identity(p) not in existing]
             saved = []
+            stored_checks = []
             async with transaction(self._conn):
-                for proxy in accepted:
-                    saved.append(await repository.insert_proxy(
-                        self._conn, proxy, self._key, label=label,
-                    ))
+                for candidate in accepted:
+                    stored = await repository.insert_proxy(
+                        self._conn, candidate, self._key, label=label,
+                    )
+                    check = checks.get(identity(candidate))
+                    if check is not None:
+                        check = check.model_copy(update={"proxy_id": stored.id})
+                        stored = stored.model_copy(update={
+                            "status": "alive", "latency_ms": check.latency_ms,
+                            "success_count": 1, "last_checked_at": check.checked_at,
+                        })
+                        stored = stored.model_copy(update={"score": health_score(stored, self._clock())})
+                        await repository.record_check(self._conn, check)
+                        stored = await repository.update_proxy_health(self._conn, stored)
+                        stored_checks.append(check)
+                    saved.append(stored)
             self._snapshot = (*self._snapshot, *saved)
+            for check in stored_checks:
+                self._latest_checks[check.proxy_id] = check
+                self._latencies[check.proxy_id] = (check.latency_ms,)
+                self._observe_exit(check)
             for stored in saved:
                 self._events.publish(ProxyEvent(type="added", proxy_id=stored.id, payload=stored))
+            for check in stored_checks:
+                self._events.publish(ProxyEvent(type="check_result", proxy_id=check.proxy_id, payload=check))
             return ImportReport(imported=len(saved),
                                 with_auth=sum(bool(p.username) for p in saved),
                                 without_auth=sum(not p.username for p in saved),
                                 skipped=report.skipped + report.imported - len(saved),
-                                errors=report.errors)
+                                failed=failed, errors=report.errors)
 
         return await self._mutate(write)
 

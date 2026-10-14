@@ -193,8 +193,11 @@ async def test_mixed_authentication_survives_storage_export_and_live_rows(dashbo
     assert "Avec identifiants" not in html
 
 
-async def test_import_reports_auth_counts_and_summary_refreshes(dashboard):
+async def test_import_reports_auth_counts_and_summary_refreshes(
+    dashboard, monkeypatch, successful_candidate_probe
+):
     client, pool, runtime, _ = dashboard
+    monkeypatch.setattr(runtime.checker, "probe_candidate", successful_candidate_probe)
     text = "user:fake@proxy.invalid:80\nproxy.invalid:80\nproxy.invalid:80\nbroken"
     response = await client.post("/api/proxies/import", json={"text": text})
     report = response.json()
@@ -215,3 +218,76 @@ async def test_import_reports_auth_counts_and_summary_refreshes(dashboard):
     assert "0 avec identifiants" in response.text
     assert "1 sans identifiants" in response.text
     assert "<dt>Sans identifiants</dt><dd>2</dd>" in (await client.get("/ui/snapshot")).text
+
+
+async def test_remove_without_credentials_preserves_authenticated_rows(dashboard, db):
+    client, pool, runtime, key = dashboard
+    plain = await pool.add(parse_line("proxy.invalid:80"))
+    secured = await pool.add(parse_line("user:fake@proxy.invalid:80"))
+    pool.pin(plain.id)
+    await pool.mark_success(plain.id, 10)
+    await pool.mark_success(secured.id, 10)
+    response = await client.post("/api/pool/clear-without-auth", headers={"HX-Request": "true"})
+    assert response.status_code == 200
+    assert "1 proxy(s) sans identifiants supprimé(s)" in response.text
+    assert response.headers["HX-Trigger"] == "pool-refresh"
+    assert [p.id for p in pool.all()] == [secured.id]
+    reloaded = await Pool.load(db, key)
+    assert [p.id for p in reloaded.all()] == [secured.id]
+    assert (await client.post("/api/pool/clear-without-auth")).json() == {"deleted": 0}
+    assert "Retirer les sans identifiants" in (await client.get("/")).text
+    assert pool.stats(runtime.rotator.strategy).without_auth == 0
+
+
+async def test_active_auth_counts_follow_health_and_removal(dashboard):
+    client, pool, runtime, _ = dashboard
+    plain = await pool.add(parse_line("proxy.invalid:80"))
+    secured = await pool.add(parse_line("user:fake@proxy.invalid:80"))
+    await pool.add(parse_line("unknown.invalid:80"))
+    await pool.mark_success(plain.id, 10)
+    await pool.mark_success(secured.id, 10)
+    stats = pool.stats(runtime.rotator.strategy)
+    assert stats.alive_with_auth == stats.alive_without_auth == 1
+    assert stats.without_auth == 2
+    for path in ["/", "/ui/snapshot"]:
+        html = (await client.get(path)).text
+        assert "<dt>Actifs avec identifiants</dt><dd>1</dd>" in html
+        assert "<dt>Actifs sans identifiants</dt><dd>1</dd>" in html
+    await pool.quarantine(secured.id)
+    assert pool.stats(runtime.rotator.strategy).alive_with_auth == 0
+    await client.post("/api/pool/clear-without-auth")
+    stats = pool.stats(runtime.rotator.strategy)
+    assert stats.alive_without_auth == stats.without_auth == 0
+    assert stats.with_auth == 1
+
+
+async def test_export_only_selected_available_countries(dashboard):
+    client, pool, _, _ = dashboard
+    for index, (code, name, alive) in enumerate([
+        ("FR", "France", True), ("GB", "Royaume-Uni", True),
+        ("FR", "France", False), ("US", "États-Unis", False),
+        (None, None, True),
+    ], start=1):
+        proxy = await pool.add(parse_line(f"user:fake@host{index}.invalid:80"))
+        await pool.apply_check(CheckResult(
+            proxy_id=proxy.id, ok=True, exit_ip=f"203.0.113.{index}",
+            checked_at=datetime.now(UTC),
+        ))
+        if code:
+            pool.set_country(f"203.0.113.{index}", code, name)
+        if not alive:
+            await pool.quarantine(proxy.id)
+    for path in ["/", "/ui/snapshot"]:
+        html = (await client.get(path)).text
+        assert 'name="country" value="FR"' in html
+        assert 'name="country" value="GB"' in html
+        assert 'name="country" value="unknown"' in html
+        assert 'name="country" value="US"' not in html
+    response = await client.get("/api/proxies/export", params=[("country", "FR"), ("country", "GB")])
+    assert response.headers["X-Line-Count"] == "2"
+    assert "host1.invalid" in response.text and "host2.invalid" in response.text
+    assert "host3.invalid" not in response.text
+    assert (await client.get("/api/proxies/export")).headers["X-Line-Count"] == "3"
+    assert (await client.get("/api/proxies/export?country=unknown")).headers["X-Line-Count"] == "1"
+    assert (await client.get("/api/proxies/export?country=US")).headers["X-Line-Count"] == "0"
+    assert (await client.get("/api/proxies/export?country=invalid")).status_code == 422

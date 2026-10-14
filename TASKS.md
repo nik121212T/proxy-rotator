@@ -439,3 +439,27 @@ script auto-attach).
 - [x] Régression import mixte, doublons, retour HTML, API fournisseur et résumé.
 - [x] Validation : 398 tests Python réussis, 2 ignorés ; 8 tests JavaScript
   réussis. Ruff, mypy, diff --check et détecteur UI passent.
+
+### T11.3 — Retrait ciblé, import vérifié et compteurs actifs
+
+- [x] Bouton dashboard « Retirer les sans identifiants », annulation des sondes,
+  suppression persistante et rafraîchissement des totaux ; identifiants conservés.
+- [x] Tester les nouveaux candidats avant transaction d’import : échecs non
+  enregistrés, succès sauvegardés avec résultat et IP de sortie, doublons exclus.
+- [x] Appliquer aux imports manuels/fichiers et fournisseur, rapport d’échecs,
+  message d’attente ; aucun appel au lot réel utilisateur pendant les tests.
+- [x] Deux compteurs actifs avec/sans identifiants, basés sur l’état alive,
+  indépendants des totaux et des filtres du tableau.
+- [x] Validation T11.3 : suite complète 401 réussis, 2 ignorés, 11 sous-tests ;
+  8 tests JS, Ruff et mypy verts. Serveur local redémarré pour charger les
+  nouveaux champs ; API vérifiée avec 71 actifs avec identifiants et 0 sans.
+
+### T11.4 — Export par pays et résumé compact
+
+- [x] Export multi-pays à partir des seuls actifs, effectifs et pays inconnu
+  si nécessaire ; aucun pays sélectionné = tous. Validation serveur des codes.
+- [x] Préserver les choix lors des mises à jour ; un pays disparu reste
+  sélectionné avec aucun disponible, sans élargissement silencieux de l’export.
+- [x] Résumé sur deux lignes (5 indicateurs puis 4 compteurs), zéro explicite.
+- [x] Test API exports simple/multiple/tous/inconnu/vide/invalide ; revue Chromium
+  du résumé et de la conservation/réinitialisation des cases après quarantaine.

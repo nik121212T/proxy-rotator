@@ -133,7 +133,19 @@ def render(
             or normalized_text(filter_city) in normalized_text(city_names[p.id] or "")
         )
     )
+    export_counts: dict[str, int] = {}
+    export_names: dict[str, str] = {}
+    for proxy in all_proxies:
+        if proxy.status != "alive":
+            continue
+        code = runtime.pool.country_code(proxy.id) or "unknown"
+        export_names[code] = runtime.pool.country_name(proxy.id) or "Pays inconnu"
+        export_counts[code] = export_counts.get(code, 0) + 1
     context: dict[str, object] = {
+        "export_countries": [
+            {"code": code, "name": export_names[code], "count": count}
+            for code, count in sorted(export_counts.items(), key=lambda item: export_names[item[0]])
+        ],
         "sort_order": order,
         "sort_options": SORT_OPTIONS,
         "proxies": ordered_proxies(visible, order, city_names),

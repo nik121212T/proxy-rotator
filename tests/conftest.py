@@ -86,3 +86,19 @@ async def api(running_app: tuple[FastAPI, int]) -> AsyncIterator[tuple[httpx.Asy
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
         yield client, port
+
+
+@pytest.fixture
+def successful_candidate_probe():
+    """Isolated UI/provider tests; network verification is covered separately."""
+    from datetime import UTC, datetime
+
+    from app.models import CheckResult
+
+    async def probe(candidate):
+        return CheckResult(
+            proxy_id=1, ok=True, latency_ms=10, exit_ip="203.0.113.30",
+            checked_at=datetime.now(UTC),
+        )
+
+    return probe

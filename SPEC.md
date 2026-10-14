@@ -314,3 +314,11 @@ country-only entries. Explicit Dichvusocks imports retain provider location
 metadata in that cache. Only cached import metadata is read when external
 geolocation is disabled; no lookup is sent. Location remains an estimate and
 expires according to the cache TTL. Selection resets on restart.
+
+## Import vérifié (2026-10-14)
+
+Les routes d’import testent chaque nouvelle identité avant stockage. Seuls les
+succès sont enregistrés, avec état alive et résultat initial. Les échecs
+augmentent failed et skipped ; les doublons sont exclus avant test puis revérifiés
+à la transaction. L’import interne sans vérificateur reste disponible pour les
+fixtures et outils internes ; les routes utilisateur imposent le vérificateur.

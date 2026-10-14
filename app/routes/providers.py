@@ -124,15 +124,15 @@ async def import_from_provider(
                     region=sock.region,
                 )
     if not lines:
-        return {"imported": 0, "with_auth": 0, "without_auth": 0, "skipped": skipped}
+        return {"imported": 0, "with_auth": 0, "without_auth": 0, "failed": 0, "skipped": skipped}
     cc = country_codes[0] if country_codes else "??"
-    report = await runtime.pool.import_text("\n".join(lines), label=f"dichvusocks:{cc}")
-    runtime.checker.queue_all()
+    report = await runtime.pool.import_text("\n".join(lines), label=f"dichvusocks:{cc}", verify=runtime.checker.probe_candidate)
     return {
         "imported": report.imported,
         "with_auth": report.with_auth,
         "without_auth": report.without_auth,
-        "deduped": len(lines) - report.imported,
+        "failed": report.failed,
+        "deduped": len(lines) - report.imported - report.failed,
         "skipped": skipped,
     }
 

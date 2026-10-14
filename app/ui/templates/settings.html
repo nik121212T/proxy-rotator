@@ -5,8 +5,8 @@
   <meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"selfRequestsOnly":true}'>
   <title>Paramètres · Proxy Rotator</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <link rel="stylesheet" href="/static/styles.css?v=provider-status-17">
-  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=auth-counts-18" defer></script>
+  <link rel="stylesheet" href="/static/styles.css?v=summary-export-20">
+  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=summary-export-20" defer></script>
 </head>
 <body>
 <div id="page-top" tabindex="-1"></div>
@@ -17,7 +17,7 @@
   <div id="feedback" class="feedback" role="status" aria-live="polite"></div>
 
   <div class="settings-grid">
-    <section class="control-section"><h2>Importer une liste</h2><p class="helper">Une ligne par proxy. La vérification démarre automatiquement.</p>
+    <section class="control-section"><h2>Importer une liste</h2><p class="helper">Une ligne par proxy. Chaque nouveau proxy est testé avant ajout ; seuls ceux qui répondent sont importés.</p>
       <form id="import-form" hx-post="/api/proxies/import" hx-ext="json-form" hx-target="#feedback" hx-disabled-elt="find button" autocomplete="off">
         <div class="file-drop" id="proxy-drop" tabindex="0" aria-label="Déposer un fichier .txt ou .csv de proxies">
           <input id="proxy-file" type="file" accept=".txt,.csv,.list,text/plain" multiple hidden>
@@ -29,7 +29,7 @@
         <label for="proxy-label">Libellé <span class="optional">facultatif</span></label>
         <input id="proxy-label" name="label" placeholder="Ex. : pool principal">
         <p class="helper">Formats acceptés : hôte:port ou user:pass@hôte:port, mélange possible. Sans identifiants, le fournisseur peut exiger une autorisation de votre IP. Préfixe http://, https:// ou socks5:// facultatif (HTTP par défaut). 2 000 lignes maximum. Lignes invalides ignorées.</p>
-        <button type="submit" class="wide">Importer et vérifier</button>
+        <button type="submit" class="wide">Tester et importer les disponibles</button>
       </form>
     </section>
 

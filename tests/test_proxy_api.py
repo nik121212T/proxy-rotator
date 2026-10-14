@@ -22,6 +22,7 @@ async def test_import_skips_malformed_lines_and_existing(
     assert response.status_code == 200
     assert response.json() == {
         "imported": 1,
+        "failed": 0,
         "with_auth": 1,
         "without_auth": 0,
         "skipped": 2,
@@ -32,7 +33,7 @@ async def test_import_skips_malformed_lines_and_existing(
     clean = await client.post("/api/proxies/import", json={"text": valid})
     assert clean.json()["imported"] == 0
     again = await client.post("/api/proxies/import", json={"text": valid})
-    assert again.json() == { "imported": 0, "with_auth": 0, "without_auth": 0, "skipped": 1, "errors": []}
+    assert again.json() == { "imported": 0, "with_auth": 0, "without_auth": 0, "skipped": 1, "failed": 0, "errors": []}
 
 
 async def test_list_filters_pagination_and_credentials(api: tuple[httpx.AsyncClient, int]) -> None:
@@ -165,23 +166,24 @@ async def test_delete_cancels_running_probe_and_test_all_is_nonblocking(
         await asyncio.gather(pending, return_exceptions=True)
 
 
-async def test_delete_during_import_probe_keeps_scheduler_running(
-    api: tuple[httpx.AsyncClient, int],
-    probe_control: tuple[asyncio.Event, asyncio.Event],
-) -> None:
+async def test_import_candidates_are_invisible_until_probe_success(api, probe_control):
     client, port = api
     release, entered = probe_control
     release.clear()
-    await client.post("/api/proxies/import", json={"text": f"first:fake@127.0.0.1:{port}"})
-    await asyncio.wait_for(entered.wait(), 1)
-    proxy_id = (await client.get("/api/proxies")).json()["items"][0]["id"]
-    await client.delete(f"/api/proxies/{proxy_id}")
-    release.set()
-    await client.post("/api/proxies/import", json={"text": f"second:fake@127.0.0.1:{port}"})
-    async with asyncio.timeout(2):
-        while (await client.get("/api/proxies")).json()["items"][0]["status"] != "alive":
-            await asyncio.sleep(0.01)
-    assert (await client.get(f"/api/proxies/{proxy_id}")).json()["status"] == "dead"
+    pending = asyncio.create_task(client.post(
+        "/api/proxies/import", json={"text": f"first:fake@127.0.0.1:{port}"}
+    ))
+    try:
+        await asyncio.wait_for(entered.wait(), 1)
+        assert (await client.get("/api/proxies")).json()["total"] == 0
+        release.set()
+        report = (await asyncio.wait_for(pending, 2)).json()
+        assert report["imported"] == 1
+        assert (await client.get("/api/proxies")).json()["items"][0]["status"] == "alive"
+    finally:
+        release.set()
+        pending.cancel()
+        await asyncio.gather(pending, return_exceptions=True)
 
 
 async def test_import_line_cap_and_malformed_json(api: tuple[httpx.AsyncClient, int]) -> None:
@@ -228,10 +230,11 @@ async def test_mixed_authentication_import_rejects_only_malformed_lines(
     import aiosqlite
 
     client, port = api
-    text = f"first:fake@127.0.0.1:{port}\n127.0.0.1:8080\nbroken\nsecond:fake@127.0.0.1:{port}"
+    text = f"first:fake@127.0.0.1:{port}\n127.0.0.1:{port}\nbroken\nsecond:fake@127.0.0.1:{port}"
     report = (await client.post("/api/proxies/import", json={"text": text})).json()
     assert report == {
         "imported": 3,
+        "failed": 0,
         "with_auth": 2,
         "without_auth": 1,
         "skipped": 1,
@@ -272,7 +275,8 @@ async def test_test_all_ui_tracks_one_batch_until_completion(api, running_app, p
         assert "100 %" in complete.text
         assert "terminée" in complete.text
         assert " disabled" not in complete.text.replace("hx-disabled-elt", "")
-        assert app.state.pool.all()[0].success_count == 1
+        proxy = app.state.pool.all()[0]
+        assert proxy.success_count + proxy.fail_count == 2  # Import probe plus one batch probe.
     finally:
         release.set()
         await app.state.runtime.checker.stop()

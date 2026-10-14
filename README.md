@@ -270,3 +270,30 @@ authentification pour ces entrées. L’export conserve les deux formats.
 Chaque rapport d’import détaille les proxies ajoutés avec et sans identifiants
 (doublons exclus). Les compteurs en haut du tableau donnent les deux totaux
 du pool, tous états confondus, indépendamment des filtres d’affichage.
+
+### Import vérifié et retrait des proxies sans identifiants
+
+Chaque nouveau proxy est testé avant enregistrement (import manuel, fichier ou
+Dichvusocks). Seuls les tests réussis sont ajoutés, directement « Disponible ».
+Les doublons ne sont pas retestés ; les échecs sont comptés dans le rapport
+et ne sont pas conservés. Un grand lot peut prendre plusieurs minutes.
+Pour Dichvusocks, la récupération des identifiants peut consommer des crédits
+même si le test échoue ensuite. Un succès décrit la disponibilité au moment du test.
+
+Dans le dashboard, « Retirer les sans identifiants » supprime toutes ces entrées,
+quel que soit leur état ou les filtres d’affichage, en conservant les autres.
+Ce bouton ne bloque pas les futurs imports de proxies sans identifiants.
+Les compteurs « Actifs avec identifiants » et « Actifs sans identifiants »
+comptent uniquement les entrées à l’état Disponible et évoluent avec les tests.
+
+### Export des actifs par pays
+
+Ouvrez « Exporter les actifs » sur le dashboard et cochez un ou plusieurs pays.
+La liste affiche uniquement les pays des proxies actuellement disponibles, avec
+leurs effectifs ; « Pays inconnu » apparaît seulement si nécessaire. Aucune case
+cochée (ou « Tous les pays ») exporte tous les actifs. Les filtres du tableau
+n’affectent pas cet export. Un pays sélectionné qui perd ses derniers actifs
+reste coché avec « aucun disponible » ; il n’entraîne jamais un export de tous
+les pays. L’export vérifie la disponibilité au moment du téléchargement.
+Les chiffres sont répartis sur deux lignes sur ordinateur ; les compteurs actifs
+affichent explicitement zéro lorsqu’il n’y a aucune correspondance.

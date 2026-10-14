@@ -1,0 +1,6 @@
+<fieldset id="export-country-options" {% if oob %}hx-swap-oob="outerHTML"{% endif %}>
+  <legend>Pays des proxies disponibles</legend>
+  <div class="export-country-list">
+    {% for country in export_countries %}<label><input type="checkbox" name="country" value="{{ country.code }}"> {{ country.name }}{% if country.code != 'unknown' %} ({{ country.code }}){% endif %} · {{ country.count }}</label>{% else %}<p>Aucun proxy disponible.</p>{% endfor %}
+  </div>
+</fieldset>

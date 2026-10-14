@@ -130,6 +130,8 @@ def pool_record() -> dict[str, object]:
         "total": 50,
         "with_auth": 40,
         "without_auth": 10,
+        "alive_with_auth": 30,
+        "alive_without_auth": 4,
         "alive": 34,
         "quarantine": 4,
         "dead": 12,

@@ -22,6 +22,34 @@
     }
   });
 
+  let selectedExportCountries = [];
+  function restoreExportCountries(codes) {
+    const fieldset = document.getElementById("export-country-options");
+    if (!fieldset) return;
+    for (const code of codes) {
+      let input = [...fieldset.querySelectorAll('input[name="country"]')].find(item => item.value === code);
+      if (!input) {
+        // Keep an unavailable selection explicit: never silently export all countries.
+        const label = document.createElement("label");
+        input = document.createElement("input");
+        input.type = "checkbox";
+        input.name = "country";
+        input.value = code;
+        label.append(input, document.createTextNode(` ${code === "unknown" ? "Pays inconnu" : code} · aucun disponible`));
+        fieldset.querySelector(".export-country-list").append(label);
+      }
+      input.checked = true;
+    }
+  }
+  document.body.addEventListener("htmx:oobBeforeSwap", event => {
+    if (event.detail.target?.id === "export-country-options") {
+      selectedExportCountries = [...event.detail.target.querySelectorAll('input[name="country"]:checked')].map(input => input.value);
+    }
+  });
+  document.body.addEventListener("htmx:oobAfterSwap", event => {
+    if (event.detail.target?.id === "export-country-options") restoreExportCountries(selectedExportCountries);
+  });
+
   const gatewayTests = new Map();
   function syncGatewayTests() {
     document.querySelectorAll("[data-gateway-test]").forEach(button => {
@@ -299,6 +327,12 @@
       }
     } finally {
       btn.disabled = false;
+    }
+  });
+  document.body.addEventListener("htmx:beforeRequest", event => {
+    if (event.detail.elt?.id === "import-form") {
+      feedback.textContent = "Test des proxies en cours… seuls ceux qui répondent seront ajoutés. Cela peut prendre plusieurs minutes pour un grand lot.";
+      feedback.setAttribute("role", "status");
     }
   });
   document.body.addEventListener("htmx:afterRequest", event => {
@@ -593,7 +627,7 @@
       const n = Number(limitInput.value);
       if (!Number.isInteger(n) || n < 1 || n > 50) { setHint('Choisissez un nombre entre 1 et 50.', 'error'); return; }
       if (!window.confirm(`Importer ${n} proxy(s) ? Cette opération peut consommer des crédits sur votre compte Dichvusocks.`)) return;
-      setHint('Import en cours…');
+      setHint('Test en cours… seuls les proxies disponibles seront ajoutés.');
       importBtn.disabled = true;
       const params = new URLSearchParams({ limit: String(n) });
       if (countrySel.value) params.set('country', countrySel.value);
@@ -605,7 +639,7 @@
         const r = await fetch('/api/providers/dichvusocks/import?' + params, { method: 'POST' });
         const body = await r.json();
         if (!r.ok) throw new Error(body.detail || 'HTTP ' + r.status);
-        setHint(`Importés : ${body.imported} · avec identifiants : ${body.with_auth ?? 0} · sans identifiants : ${body.without_auth ?? 0} · dédupliqués : ${body.deduped ?? 0} · ignorés : ${(body.skipped || []).length}`, 'good');
+        setHint(`Importés : ${body.imported} · avec identifiants : ${body.with_auth ?? 0} · sans identifiants : ${body.without_auth ?? 0} · échecs au test : ${body.failed ?? 0} · dédupliqués : ${body.deduped ?? 0} · ignorés : ${(body.skipped || []).length}`, 'good');
         document.body.dispatchEvent(new Event("pool-refresh"));
         await loadBalance();
       } catch (err) {

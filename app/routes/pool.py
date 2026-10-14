@@ -49,6 +49,17 @@ async def clear_dead(runtime: Services, request: Request) -> dict[str, int] | HT
     return {"deleted": deleted}
 
 
+@router.post("/clear-without-auth", response_model=dict[str, int])
+async def clear_without_auth(runtime: Services, request: Request) -> dict[str, int] | HTMLResponse:
+    for proxy in runtime.pool.all():
+        if not proxy.username:
+            await runtime.checker.cancel_one(proxy.id)
+    deleted = await runtime.pool.clear_without_auth()
+    if request.headers.get("HX-Request") == "true":
+        return feedback(request, f"{deleted} proxy(s) sans identifiants supprimé(s).")
+    return {"deleted": deleted}
+
+
 @router.post("/clear-all", response_model=dict[str, int])
 async def clear_all(runtime: Services, request: Request) -> dict[str, int] | HTMLResponse:
     for proxy in runtime.pool.all():
