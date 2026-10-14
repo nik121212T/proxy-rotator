@@ -6,7 +6,7 @@
   <title>Paramètres · Proxy Rotator</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="stylesheet" href="/static/styles.css?v=table-filters-13">
-  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=rotation-priority-14" defer></script>
+  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=rotation-help-15" defer></script>
 </head>
 <body>
 <div id="page-top" tabindex="-1"></div>
@@ -35,13 +35,21 @@
 
     <section class="control-section"><h2>Rotation</h2>
       <form id="strategy-form" hx-post="/api/pool/strategy" hx-ext="json-form" hx-target="#feedback" hx-disabled-elt="find button">
+        {% set rotation_modes = [
+          ('weighted', 'Pondérée par le score', 'Favorise les proxies disponibles qui ont le meilleur score de santé. Les autres restent susceptibles d’être choisis. Utile pour privilégier la fiabilité.'),
+          ('round_robin', 'À tour de rôle', 'Utilise chaque proxy disponible à son tour pour les nouvelles connexions. Avec un seul proxy prioritaire et la case ci-dessous cochée, seul ce proxy est utilisé.'),
+          ('random', 'Aléatoire', 'Choisit un proxy disponible au hasard à chaque nouvelle connexion. Le même proxy peut être choisi plusieurs fois de suite.'),
+          ('sticky', 'Stable par domaine', 'Conserve temporairement le même proxy pour un même site et un même client. Un autre site peut utiliser un autre proxy. Si le proxy devient indisponible ou si l’association expire, il est choisi à nouveau.'),
+          ('timed', 'Toutes les X minutes', 'Garde le même proxy pendant la durée indiquée. Après ce délai, la prochaine connexion utilise le suivant. Les connexions déjà ouvertes continuent ; un proxy indisponible est remplacé sans attendre.')
+        ] %}
         <label for="strategy">Mode de sélection</label>
-        <select id="strategy" name="strategy">{% for value,label in [('weighted','Pondérée par le score'),('round_robin','À tour de rôle'),('random','Aléatoire'),('sticky','Stable par domaine'),('timed','Toutes les X minutes')] %}<option value="{{ value }}" {% if stats.strategy == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+        <select id="strategy" name="strategy" aria-describedby="strategy-help">{% for value, label, description in rotation_modes %}<option value="{{ value }}" data-description="{{ description }}" {% if stats.strategy == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+        <p id="strategy-help" class="helper" aria-live="polite">{% for value, label, description in rotation_modes %}{% if stats.strategy == value %}{{ description }}{% endif %}{% endfor %}</p>
         <label class="pin-only" for="rotation-pinned-only"><input id="rotation-pinned-only" type="checkbox" name="pinned_only" aria-describedby="rotation-priority-help" {% if selection.pinned_only %}checked{% endif %}> Utiliser uniquement les proxies prioritaires</label>
-        <p id="rotation-priority-help" class="helper">Pour rester sur un seul proxy, cliquez sur « Utiliser en priorité » sur une seule ligne du tableau, puis cochez cette case. Aucun proxy prioritaire disponible et conforme aux filtres : connexion refusée. Avec plusieurs proxies prioritaires, le mode choisi s’applique entre eux.</p>
+        <p id="rotation-priority-help" class="helper">Pour rester sur un seul proxy, cliquez sur « Utiliser en priorité » sur une seule ligne du tableau, puis cochez cette case : « À tour de rôle » sera sélectionné automatiquement. Cliquez ensuite sur « Appliquer la stratégie ». Aucun proxy prioritaire disponible et conforme aux filtres : connexion refusée. Avec plusieurs proxies prioritaires, le mode choisi s’applique entre eux.</p>
         <label for="rotation-minutes">Durée en minutes (mode temporisé)</label>
         <input id="rotation-minutes" name="interval_minutes" type="number" min="1" max="1440" step="1" value="{{ interval_minutes }}" required>
-        <p class="helper">Appliqué à la prochaine connexion. Connexions ouvertes continuent.</p>
+        <p class="helper">Tous les modes respectent les filtres ci-dessous. Avec un seul proxy disponible, il est réutilisé. Un fournisseur peut changer son IP de sortie. Les changements sont enregistrés avec « Appliquer la stratégie » et concernent les nouvelles connexions.</p>
         <button type="submit" class="secondary wide">Appliquer la stratégie</button>
       </form>
       <form id="selection-form" hx-post="/api/pool/selection" hx-ext="json-form" hx-target="#feedback" hx-disabled-elt="find button">

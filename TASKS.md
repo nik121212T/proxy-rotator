@@ -377,3 +377,12 @@ script auto-attach).
 - [x] Préserver les filtres géographiques au changement de priorité, et la
   priorité au changement de filtres. API existante compatible lorsque le champ
   est omis. Test de régression ASGI : 37 tests ciblés passent ; Ruff/mypy/JS verts.
+
+### T9.2 — Rotation expliquée et priorité simplifiée
+
+- [x] Cocher la restriction aux proxies prioritaires sélectionne automatiquement
+  « À tour de rôle » dans le formulaire ; l’application reste explicite au clic.
+- [x] Chaque mode possède une explication visible, rendue côté serveur puis mise
+  à jour à la sélection (zone aria-live). Décocher conserve le mode choisi.
+- [x] Test comportemental JS via `node --test tests/rotation_controls.test.cjs` :
+  initialisation, case et cinq modes validés ; 37 tests Python ciblés passent.

@@ -55,7 +55,25 @@
   const busyRows = new Map();
   const strategySelect = document.getElementById("strategy");
   let strategyDirty = false;
-  strategySelect?.addEventListener("change", () => { strategyDirty = true; });
+  const priorityCheckbox = document.getElementById("rotation-pinned-only");
+  const strategyHelp = document.getElementById("strategy-help");
+  function updateStrategyHelp() {
+    if (strategyHelp && strategySelect) {
+      strategyHelp.textContent = strategySelect.selectedOptions[0]?.dataset.description || "";
+    }
+  }
+  strategySelect?.addEventListener("change", () => {
+    strategyDirty = true;
+    updateStrategyHelp();
+  });
+  priorityCheckbox?.addEventListener("change", () => {
+    strategyDirty = true;
+    if (priorityCheckbox.checked && strategySelect) {
+      strategySelect.value = "round_robin";
+      strategySelect.dispatchEvent(new Event("change", {bubbles: true}));
+    }
+  });
+  updateStrategyHelp();
 
   function syncBusyRows() {
     document.querySelectorAll("[data-live-disabled]").forEach(button => {
@@ -170,7 +188,10 @@
         schedule(false, message.payload.proxy_id);
       } else if (message.type === "pool_stats") {
         const select = document.getElementById("strategy");
-        if (select && !strategyDirty && document.activeElement !== select) select.value = message.payload.strategy;
+        if (select && !strategyDirty && document.activeElement !== select) {
+          select.value = message.payload.strategy;
+          updateStrategyHelp();
+        }
         // Periodic authoritative HTML snapshots repair missed/dropped events.
         if (Date.now() - lastSnapshot >= 1800) schedule(true);
       }
