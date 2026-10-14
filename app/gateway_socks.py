@@ -300,11 +300,14 @@ class SocksGateway:
             proxy.host, proxy.port, ssl=True if proxy.scheme == "https" else None
         )
         try:
-            auth = _basic_auth(proxy, self._key)
+            auth_header = (
+                f"Proxy-Authorization: Basic {_basic_auth(proxy, self._key)}\r\n"
+                if proxy.username else ""
+            )
             request = (
                 f"CONNECT {target_host}:{target_port} HTTP/1.1\r\n"
                 f"Host: {target_host}:{target_port}\r\n"
-                f"Proxy-Authorization: Basic {auth}\r\n"
+                f"{auth_header}"
                 f"Proxy-Connection: keep-alive\r\n"
                 "\r\n"
             ).encode("ascii")

@@ -257,3 +257,12 @@ L’import reste une action distincte et confirmée ; il peut consommer des cré
 
 Tests des interactions JavaScript :
 `node --test tests/rotation_controls.test.cjs tests/provider_widget.test.cjs`.
+
+### Proxies avec ou sans identifiants
+
+L’import accepte un lot mixte : `hôte:port` et `user:pass@hôte:port`.
+Les préfixes `http://`, `https://` et `socks5://` sont acceptés (HTTP par défaut).
+Le tableau distingue « Avec identifiants » et « Sans identifiants ». Ce dernier
+libellé ne signifie pas que le proxy est public : le fournisseur peut exiger
+une autorisation de votre IP. Les tests et passerelles n’envoient aucune
+authentification pour ces entrées. L’export conserve les deux formats.

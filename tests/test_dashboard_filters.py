@@ -172,3 +172,21 @@ async def test_priority_setting_belongs_to_rotation_and_survives_location_update
     await client.post("/api/pool/strategy", json={"strategy": "weighted", "pinned_only": False})
     assert runtime.rotator.selection.pinned_only is False
     assert runtime.rotator.selection.city == "Boston"
+
+
+async def test_mixed_authentication_survives_storage_export_and_live_rows(dashboard, db):
+    client, pool, runtime, key = dashboard
+    plain = await pool.add(parse_line("203.0.113.10:8080"))
+    await pool.add(parse_line("tester:fake@203.0.113.10:8080"))
+    runtime.pool = await Pool.load(db, key)
+    assert len(runtime.pool.all()) == 2
+    exported = runtime.pool.export_lines()
+    assert "http://203.0.113.10:8080" in exported
+    assert all(parse_line(line) for line in exported)
+    for path in ["/", "/ui/snapshot"]:
+        html = (await client.get(path)).text
+        assert "Sans identifiants" in html
+        assert "Avec identifiants" in html
+    html = (await client.get(f"/ui/proxies/{plain.id}")).text
+    assert "Sans identifiants" in html
+    assert "Avec identifiants" not in html

@@ -162,3 +162,12 @@ def test_parse_serialize_round_trip(
     assert proxy.host == host[1]
     assert proxy.port == port
     assert parse_line(serialize(proxy)) == proxy
+
+
+@pytest.mark.parametrize("line", ["203.0.113.10:8080", "https://proxy.example:443", "socks5://[2001:db8::1]:1080"])
+def test_parse_without_credentials(line: str) -> None:
+    proxy = parse_line(line)
+    assert proxy.username == ""
+    assert proxy.password.get_secret_value() == ""
+    assert "@" not in serialize(proxy)
+    assert parse_line(serialize(proxy)) == proxy

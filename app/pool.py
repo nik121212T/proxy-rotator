@@ -184,10 +184,9 @@ class Pool:
             except Exception as exc:  # noqa: BLE001  skip rows whose decryption fails
                 logger.info("export_decrypt_skipped proxy_id=%s err=%s", proxy.id, exc)
                 continue
-            lines.append(
-                f"{proxy.scheme}://{proxy.username}:{password.get_secret_value()}"
-                f"@{proxy.host}:{proxy.port}"
-            )
+            host = f"[{proxy.host}]" if ":" in proxy.host else proxy.host
+            auth = f"{proxy.username}:{password.get_secret_value()}@" if proxy.username else ""
+            lines.append(f"{proxy.scheme}://{auth}{host}:{proxy.port}")
         return tuple(lines)
 
     def stats(self, strategy: RotationStrategy) -> PoolStats:

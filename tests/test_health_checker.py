@@ -363,3 +363,13 @@ async def test_a_steady_proxy_is_never_a_latency_spike(
         assert result.ok, result.error
 
     assert pool.all()[0].fail_count == 0
+
+
+async def test_probe_without_credentials_sends_no_authorization(db, upstream):
+    key = Fernet.generate_key()
+    pool = await Pool.load(db, key)
+    proxy = await pool.add(parse_line(f"127.0.0.1:{upstream.port}"))
+    checker = HealthChecker(pool, key, probe_url="http://probe.invalid/?format=json")
+    result = await checker.check_one(proxy.id)
+    assert result.ok
+    assert not upstream.authenticated

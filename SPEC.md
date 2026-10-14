@@ -7,6 +7,13 @@ This is the **source of truth** for data shapes, formulas, and rules. Any disagr
 
 ## 1. Proxy input format
 
+Depuis le 2026-10-14, les identifiants sont facultatifs : `host:port` est
+accepté, y compris avec un préfixe de protocole. Les deux formats peuvent être
+mélangés. Sans identifiants, username est vide et le mot de passe vide est
+chiffré au repos ; aucun en-tête ni échange d’authentification n’est envoyé.
+Une liste blanche IP éventuelle reste une configuration du fournisseur.
+La grammaire historique ci-dessous décrit la variante avec identifiants.
+
 ```text
 <username>:<password>@<host>:<port>
 ```

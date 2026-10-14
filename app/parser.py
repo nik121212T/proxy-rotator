@@ -11,8 +11,8 @@ Scheme = Literal["http", "https", "socks5"]
 MAX_IMPORT_LINES = 2000
 _LINE = re.compile(
     r"(?:(?P<scheme>http|https|socks5)://)?"
-    r"(?P<username>[A-Za-z0-9_.-]{3,64}):"
-    r"(?P<password>[\x20-\x7e]{1,128})@"
+    r"(?:(?P<username>[A-Za-z0-9_.-]{3,64}):"
+    r"(?P<password>[\x20-\x7e]{1,128})@)?"
     r"(?P<host>\[[^\]\s]+\]|[^:\s]+):(?P<port>[0-9]{1,5})"
 )
 _HOST_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
@@ -50,7 +50,8 @@ class ParsedProxy(BaseModel):
 
     def __str__(self) -> str:
         host = f"[{self.host}]" if ":" in self.host else self.host
-        return f"{self.scheme}://{self.username}:***@{host}:{self.port}"
+        auth = f"{self.username}:***@" if self.username else ""
+        return f"{self.scheme}://{auth}{host}:{self.port}"
 
     def __repr__(self) -> str:
         return f"ParsedProxy({str(self)!r})"
@@ -65,7 +66,7 @@ def parse_line(line: str) -> ParsedProxy:
     match = _LINE.fullmatch(line.strip())
     if match is None:
         raise ProxyParseError("Invalid proxy format")
-    password = match["password"]
+    password = match["password"] or ""
     if ":" in password or "@" in password:
         raise ProxyParseError("Invalid proxy credentials")
     port = int(match["port"])
@@ -77,7 +78,7 @@ def parse_line(line: str) -> ParsedProxy:
         raise ProxyParseError("Invalid proxy host") from None
     return ParsedProxy(
         scheme=cast(Scheme, match["scheme"] or "http"),
-        username=match["username"],
+        username=match["username"] or "",
         password=SecretStr(password),
         host=host,
         port=port,
@@ -91,10 +92,8 @@ def serialize(proxy: ParsedProxy) -> str:
     log or persist its result; use str(proxy) for a masked representation.
     """
     host = f"[{proxy.host}]" if ":" in proxy.host else proxy.host
-    return (
-        f"{proxy.scheme}://{proxy.username}:{proxy.password.get_secret_value()}"
-        f"@{host}:{proxy.port}"
-    )
+    auth = f"{proxy.username}:{proxy.password.get_secret_value()}@" if proxy.username else ""
+    return f"{proxy.scheme}://{auth}{host}:{proxy.port}"
 
 
 class ImportLineError(BaseModel):

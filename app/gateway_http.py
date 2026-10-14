@@ -436,11 +436,14 @@ class HttpGateway:
             ssl=(self._tls_context or True) if proxy.scheme == "https" else None,
         )
         try:
-            auth = _basic_auth(proxy, self._key)
+            auth_header = (
+                f"Proxy-Authorization: Basic {_basic_auth(proxy, self._key)}\r\n"
+                if proxy.username else ""
+            )
             request = (
                 f"CONNECT {target_host}:{target_port} HTTP/1.1\r\n"
                 f"Host: {target_host}:{target_port}\r\n"
-                f"Proxy-Authorization: Basic {auth}\r\n"
+                f"{auth_header}"
                 f"Proxy-Connection: keep-alive\r\n"
                 f"Via: {_VIA_TOKEN}\r\n"
                 "\r\n"
@@ -655,8 +658,8 @@ class HttpGateway:
             connector = ProxyConnector(
                 host=proxy.host,
                 port=proxy.port,
-                username=proxy.username,
-                password=password.get_secret_value(),
+                username=proxy.username or None,
+                password=password.get_secret_value() if proxy.username else None,
                 rdns=True,
             )
         else:
@@ -667,8 +670,8 @@ class HttpGateway:
                 scheme=proxy.scheme,
                 host=proxy.host,
                 port=proxy.port,
-                user=proxy.username,
-                password=password.get_secret_value(),
+                user=proxy.username or None,
+                password=password.get_secret_value() if proxy.username else None,
             )
 
         async with (

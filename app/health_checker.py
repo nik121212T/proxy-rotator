@@ -67,8 +67,8 @@ class HealthChecker:
             connector = ProxyConnector(
                 host=proxy.host,
                 port=proxy.port,
-                username=proxy.username,
-                password=password.get_secret_value(),
+                username=proxy.username or None,
+                password=password.get_secret_value() if proxy.username else None,
                 rdns=True,
             )
         else:
@@ -79,8 +79,8 @@ class HealthChecker:
                 scheme=proxy.scheme,
                 host=proxy.host,
                 port=proxy.port,
-                user=proxy.username,
-                password=password.get_secret_value(),
+                user=proxy.username or None,
+                password=password.get_secret_value() if proxy.username else None,
             )
         async with (
             aiohttp.ClientSession(

@@ -161,16 +161,15 @@ class SocksHarness:
 
 
 @pytest_asyncio.fixture
-async def socks_harness(db, upstream_http):
+async def socks_harness(db, upstream_http, request):
     key = Fernet.generate_key()
     pool = await Pool.load(db, key)
     rotator = Rotator(strategy="round_robin")
-    proxy = await pool.add(
-        parse_line(f"socksuser:secret-value@{upstream_http.host}:{upstream_http.port}")
-    )
+    auth = "socksuser:secret-value@" if getattr(request, "param", True) else ""
+    proxy = await pool.add(parse_line(f"{auth}{upstream_http.host}:{upstream_http.port}"))
     await pool.mark_success(proxy.id, 10)
     upstream_http.expected_auth = (
-        "Basic " + base64.b64encode(b"socksuser:secret-value").decode()
+        "Basic " + base64.b64encode(b"socksuser:secret-value").decode() if auth else ""
     )
     gateway = SocksGateway(pool, rotator, key, port=0, max_retry_per_request=1)
     await gateway.start()
@@ -236,6 +235,7 @@ async def test_socks5_binds_and_reports_status(socks_harness):
 
 
 @pytest.mark.filterwarnings("ignore::ResourceWarning")
+@pytest.mark.parametrize("socks_harness", [True, False], indirect=True)
 async def test_socks5_tunnel_through_http_upstream(socks_harness, upstream_http):
     echo, echo_port = await _echo_server()
     try:

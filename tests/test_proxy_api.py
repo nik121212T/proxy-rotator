@@ -220,7 +220,7 @@ async def test_detail_retains_latest_fifty_checks(
         assert (await cursor.fetchone())[0] == 50
 
 
-async def test_malformed_and_unauthenticated_lines_leave_only_valid_database_rows(
+async def test_mixed_authentication_import_rejects_only_malformed_lines(
     api: tuple[httpx.AsyncClient, int], tmp_path: Path
 ) -> None:
     import aiosqlite
@@ -229,10 +229,9 @@ async def test_malformed_and_unauthenticated_lines_leave_only_valid_database_row
     text = f"first:fake@127.0.0.1:{port}\n127.0.0.1:8080\nbroken\nsecond:fake@127.0.0.1:{port}"
     report = (await client.post("/api/proxies/import", json={"text": text})).json()
     assert report == {
-        "imported": 2,
-        "skipped": 2,
+        "imported": 3,
+        "skipped": 1,
         "errors": [
-            {"line": 2, "reason": "Invalid proxy format"},
             {"line": 3, "reason": "Invalid proxy format"},
         ],
     }
@@ -240,7 +239,7 @@ async def test_malformed_and_unauthenticated_lines_leave_only_valid_database_row
         aiosqlite.connect(tmp_path / "proxies.db") as conn,
         conn.execute("SELECT count(*) FROM proxies") as cursor,
     ):
-        assert (await cursor.fetchone())[0] == 2
+        assert (await cursor.fetchone())[0] == 3
 
 
 async def test_test_all_ui_tracks_one_batch_until_completion(api, running_app, probe_control):

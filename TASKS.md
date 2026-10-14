@@ -409,3 +409,23 @@ script auto-attach).
 - [x] Tests : 8 JS (7 panneau + 1 rotation) et 32 Python passent ; cycle token
   réel sur SQLite/ASGI sans socket. Ruff/mypy verts, détecteur UI sans anomalie.
   Aucun appel réel payant ; validation contre le fournisseur distant non faite.
+
+## T11 — Authentification visible (2026-10-14)
+
+- [x] Indiquer « Auth : identifiant / mot de passe » sur chaque ligne du tableau,
+  y compris les fragments live. Le parseur exige actuellement des identifiants ;
+  les entrées sans identifiants ne sont pas prises en charge. Une éventuelle
+  liste blanche IP chez le fournisseur ne peut pas être déduite de ces données.
+
+### T11.1 — Lots mixtes (demande utilisateur)
+
+- [x] Accepter les entrées sans identifiants dans le parseur et le modèle,
+  conserver la déduplication par protocole/hôte/port/identifiant et l’export.
+- [x] Omettre l’authentification HTTP/SOCKS lors des sondes et connexions
+  pour ces entrées ; conserver les mots de passe chiffrés au repos.
+- [x] Remplacer le libellé uniforme T11 par « Avec identifiants » /
+  « Sans identifiants » ; documenter les formats et la limite de détection IP.
+- [x] Validation : suite complète 396 réussis, 2 ignorés ; seul échec = ancien
+  contrat rejetant les entrées sans identifiants. Contrat mis à jour puis test
+  ciblé réussi (397 tests validés au total). Ruff, mypy et diff --check passent.
+  Aucun proxy réel du lot utilisateur importé ni contacté.

@@ -238,15 +238,16 @@ class GatewayHarness:
 
 
 @pytest_asyncio.fixture
-async def harness(db, upstream_proxy):
+async def harness(db, upstream_proxy, request):
     key = Fernet.generate_key()
     pool = await Pool.load(db, key)
     rotator = Rotator(strategy="round_robin")
-    proxy = await pool.add(
-        parse_line(f"gatewayuser:secret-value@{upstream_proxy.host}:{upstream_proxy.port}")
-    )
+    auth = "gatewayuser:secret-value@" if getattr(request, "param", True) else ""
+    proxy = await pool.add(parse_line(f"{auth}{upstream_proxy.host}:{upstream_proxy.port}"))
     await pool.mark_success(proxy.id, 10)
-    upstream_proxy.expected_auth = "Basic " + base64.b64encode(b"gatewayuser:secret-value").decode()
+    upstream_proxy.expected_auth = (
+        "Basic " + base64.b64encode(b"gatewayuser:secret-value").decode() if auth else ""
+    )
     gateway = HttpGateway(pool, rotator, key, port=0)
     await gateway.start()
     bound = gateway.status("configured").bound or ""
@@ -308,6 +309,7 @@ async def test_gateway_binds_and_reports_status(harness):
 
 
 @pytest.mark.filterwarnings("ignore::ResourceWarning")
+@pytest.mark.parametrize("harness", [True, False], indirect=True)
 async def test_forward_get_through_upstream_with_via(harness, origin, upstream_proxy):
     code, headers, body = await _raw_request(
         harness.port,
@@ -324,12 +326,13 @@ async def test_forward_get_through_upstream_with_via(harness, origin, upstream_p
     assert "via" in headers and "proxy-rotator" in headers["via"]
     # Gateway closes after one request/response and advertises it (audit A12).
     assert headers.get("connection", "").lower() == "close"
-    assert upstream_proxy.auth_seen[-1].startswith("Basic ")
+    assert upstream_proxy.auth_seen[-1] == upstream_proxy.expected_auth
     assert origin.requests[-1]["headers"].get("connection") != "close"
     assert "via" in origin.requests[-1]["headers"]
 
 
 @pytest.mark.filterwarnings("ignore::ResourceWarning")
+@pytest.mark.parametrize("harness", [True, False], indirect=True)
 async def test_connect_tunnel_bridges_bytes(harness, upstream_proxy):
     async def echo(reader, writer):
         try:
@@ -365,6 +368,7 @@ async def test_connect_tunnel_bridges_bytes(harness, upstream_proxy):
         with contextlib.suppress(ConnectionError, OSError):
             await writer.wait_closed()
         assert any(target.endswith(f":{echo_port}") for target in upstream_proxy.connects)
+        assert upstream_proxy.auth_seen[-1] == upstream_proxy.expected_auth
     finally:
         echo_server.close()
         await echo_server.wait_closed()

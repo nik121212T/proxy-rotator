@@ -34,8 +34,8 @@ async def open_socks_tunnel(
         proxy_type=ProxyType.SOCKS5,
         host=proxy_host,
         port=proxy_port,
-        username=username,
-        password=password,
+        username=username or None,
+        password=password if username else None,
         # Resolve names at the proxy: no local DNS leak (CLAUDE.md rule 5).
         rdns=True,
     )

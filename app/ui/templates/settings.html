@@ -25,10 +25,10 @@
           <p class="file-drop-hint" id="proxy-file-hint" aria-live="polite"></p>
         </div>
         <label for="proxy-text">Proxies <span class="optional">ou collez-les ici</span></label>
-        <textarea id="proxy-text" name="text" rows="6" required spellcheck="false" autocapitalize="off" placeholder="user:pass@hôte:port"></textarea>
+        <textarea id="proxy-text" name="text" rows="6" required spellcheck="false" autocapitalize="off" placeholder="hôte:port ou user:pass@hôte:port"></textarea>
         <label for="proxy-label">Libellé <span class="optional">facultatif</span></label>
         <input id="proxy-label" name="label" placeholder="Ex. : pool principal">
-        <p class="helper">2 000 lignes maximum. Lignes invalides ignorées.</p>
+        <p class="helper">Formats acceptés : hôte:port ou user:pass@hôte:port, mélange possible. Sans identifiants, le fournisseur peut exiger une autorisation de votre IP. Préfixe http://, https:// ou socks5:// facultatif (HTTP par défaut). 2 000 lignes maximum. Lignes invalides ignorées.</p>
         <button type="submit" class="wide">Importer et vérifier</button>
       </form>
     </section>

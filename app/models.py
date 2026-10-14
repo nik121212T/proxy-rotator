@@ -42,7 +42,7 @@ class Proxy(_DTO):
     scheme: Scheme = "http"
     host: str = Field(min_length=1)
     port: int = Field(ge=1, le=65535, strict=True)
-    username: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$")
+    username: str = Field(max_length=64, pattern=r"^(?:[A-Za-z0-9_.-]{3,64})?$")
     password_enc: SecretBytes = Field(exclude=True, repr=False)
     label: str | None = None
     status: ProxyStatus = "unknown"
