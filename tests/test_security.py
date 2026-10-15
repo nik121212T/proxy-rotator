@@ -200,5 +200,5 @@ async def test_export_filename_carries_a_utc_timestamp(
 
     response = await plain_client.get("/api/proxies/export")
     disposition = response.headers["content-disposition"]
-    match = re.search(r'filename="proxies-(alive|all)-(\d{8}-\d{6})\.txt"', disposition)
+    match = re.search(r'filename="proxies-(alive|all)-tous-pays-(\d{8}-\d{6})\.txt"', disposition)
     assert match is not None, disposition

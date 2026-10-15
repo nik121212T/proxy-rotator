@@ -258,3 +258,24 @@ de sortie connue. Les codes doivent être deux lettres majuscules ; `unknown`
 cible les localisations inconnues. Sans `country`, tous les pays sont inclus.
 Le statut reste `alive` par défaut. Aucune correspondance produit un fichier
 vide et `X-Line-Count: 0`, sans repli sur tous les pays.
+
+## Browser sessions
+
+- `GET /navigateurs`: browser control page.
+- `GET /api/browsers`: detected installed browsers, dedicated-engine availability,
+  active sessions and currently eligible proxies. No binary is downloaded here.
+- `POST /api/browsers/install/{engine}`: start a background download for `chromium`,
+  `firefox` or `webkit`; repeated requests share the running install. Status is
+  exposed in the catalog. Downloads time out after 15 minutes.
+- `POST /api/browsers/sessions`: JSON `{source: "installed"|"dedicated",
+  browser_id: "chrome"|"firefox"|..., mode: "rotation"|"fixed",
+  proxy_ids: [1,2], url: "https://api.ipify.org"}`. Fixed mode requires 1–8 IDs;
+  rotation mode opens one window. Only http(s) URLs without credentials are accepted.
+  Opening several windows rolls back the newly opened group if a launch fails.
+- `DELETE /api/browsers/sessions/{id}`: close an app-owned session and gateway,
+  remove its temporary profile. Unknown IDs are harmless and idempotent.
+
+There are at most eight active sessions. Browser executables are resolved from
+an internal discovery list, never supplied as arbitrary request paths. Installed
+Firefox uses a private profile; dedicated Firefox uses Playwright's supported
+build. The manager closes its processes/contexts and install jobs on shutdown.

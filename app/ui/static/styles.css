@@ -1042,3 +1042,13 @@ footer { padding-bottom: 88px; }
 @media (max-width: 700px) {
   .summary dl, .summary dl.auth-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.browser-workspace { max-width: 1200px; margin: 0 auto; padding: var(--space-5); }
+.browser-columns { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+.browser-columns .control-section, .browser-workspace > .control-section { padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-md); margin-bottom: var(--space-5); }
+.browser-workspace input, .browser-workspace select { width: 100%; }
+.browser-workspace [hidden] { display: none !important; }
+.browser-engine-row, .browser-session-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) 0; border-bottom: 1px solid var(--line); }
+.browser-engine-row span, .browser-session-row span { min-width: 0; overflow-wrap: anywhere; }
+.browser-workspace .helper { margin-top: var(--space-3); }
+@media (max-width: 760px) { .browser-columns { grid-template-columns: 1fr; } .topnav { flex-wrap: wrap; } .topnav-gateways { flex-wrap: wrap; } }

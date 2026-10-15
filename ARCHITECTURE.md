@@ -255,3 +255,14 @@ whole visible pool on periodic resync; pagination/windowing may be needed for
 large pools. AnyIO is pinned to 4.11.0 for compatibility with the existing
 Starlette TestClient; refresh the dependency set together in a future maintenance
 pass. Windows/CI execution remains deferred to T6.3.
+
+## Browser sessions
+
+`browser_catalog.py` owns platform discovery and native arguments/preferences.
+`browser_manager.py` owns temporary profiles, Playwright contexts, native child
+processes, download jobs and one loopback HTTP gateway per session. The runtime
+closes this service before the pool/database. A `FixedRotator` selects exactly one
+active proxy ID and never falls back; rotating sessions share the global Rotator.
+The manager never applies settings to a personal browser profile or OS proxy.
+`routes/browsers.py` validates launches and exposes the catalog/session lifecycle;
+`browser_controls.js` handles the browser page without touching dashboard state.

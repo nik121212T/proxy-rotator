@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Navigateurs · Proxy Rotator</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/styles.css?v=browsers-22">
+  <script src="/static/browser_controls.js?v=1" defer></script>
+</head>
+<body>
+{% include '_topnav.html' %}
+<main class="browser-workspace">
+  <div class="page-heading"><div><h1>Navigateurs</h1><p>Ouvrez une fenêtre séparée avec vos proxies, sans modifier votre navigateur personnel.</p></div><a class="button secondary" href="/">Retour au pool</a></div>
+  <p id="browser-feedback" role="status" aria-live="polite">Détection des navigateurs…</p>
+  <div class="browser-columns">
+    <section class="control-section" aria-labelledby="launch-title">
+      <h2 id="launch-title">Ouvrir une session</h2>
+      <form id="browser-launch">
+        <label for="browser-choice">Navigateur</label>
+        <select id="browser-choice" required disabled><option value="">Chargement…</option></select>
+        <p id="browser-detection" class="helper"></p>
+        <label for="browser-url">Page de départ</label>
+        <input id="browser-url" type="url" value="https://api.ipify.org" maxlength="2048" required>
+        <label for="browser-mode">Connexion</label>
+        <select id="browser-mode"><option value="rotation">Rotation du pool</option><option value="fixed">Proxy fixe — une fenêtre par proxy</option></select>
+        <p id="browser-mode-help" class="helper">Utilise les réglages de rotation et de sélection du pool. Les connexions déjà ouvertes gardent leur proxy.</p>
+        <div id="browser-proxy-field" hidden>
+          <label for="browser-proxies">Proxies disponibles</label>
+          <select id="browser-proxies" multiple size="6" aria-describedby="browser-proxy-help"></select>
+          <p id="browser-proxy-help" class="helper">Sélection multiple avec Cmd (Mac) ou Ctrl (Windows). Jusqu’à 8 sessions. Si un proxy devient indisponible, sa session est bloquée, sans changer de proxy.</p>
+        </div>
+        <button type="submit" id="browser-open" class="wide" disabled>Ouvrir le navigateur</button>
+      </form>
+      <p class="helper">Profils temporaires isolés : leurs cookies sont supprimés à la fermeture. Arrêter l’application ferme les sessions. L’IP indiquée est la dernière IP vérifiée ; un fournisseur peut la faire changer.</p>
+    </section>
+    <section class="control-section" aria-labelledby="engines-title">
+      <h2 id="engines-title">Moteurs dédiés à l’app</h2>
+      <p class="helper">Téléchargement à la demande, plusieurs centaines de Mo par moteur. Les navigateurs déjà installés restent séparés.</p>
+      <div id="browser-engines"></div>
+      <p class="helper">WebKit est le moteur de Safari, pas Safari. Safari installé ne permet pas ici de régler un proxy par session ; il est détecté mais ne sera pas lancé. Le proxy concerne la navigation web, pas tout le trafic du système.</p>
+    </section>
+  </div>
+  <section class="control-section" aria-labelledby="sessions-title">
+    <h2 id="sessions-title">Sessions ouvertes</h2>
+    <div id="browser-sessions"><p>Aucune session ouverte depuis l’app.</p></div>
+  </section>
+</main>
+</body>
+</html>

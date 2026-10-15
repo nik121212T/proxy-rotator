@@ -468,3 +468,20 @@ script auto-attach).
 
 - [x] Inclure les codes pays sélectionnés, triés et dédupliqués, dans le nom
   du fichier ; tous-pays sans filtre et pays-inconnu pour les IP non localisées.
+
+## T12 — Navigateurs (demande utilisateur, 2026-10-15)
+
+- [x] Détecter les navigateurs installés et lancer des profils isolés.
+- [x] Proposer Chromium, Firefox et WebKit dédiés, installation à la demande.
+- [x] Sessions avec rotation du pool ou proxy fixe ; passerelle locale dédiée,
+  refus si proxy indisponible, fermeture et nettoyage contrôlés.
+- [x] Page Navigateurs : catalogue, installation, lancement et sessions ouvertes.
+- [x] Tests du routage, du cycle de vie et des contrôles UI ; documentation.
+- Validation : 409 tests Python réussis, 2 ignorés, 11 sous-tests ; Ruff/mypy
+  verts. Chromium, Chrome et Firefox réels lancés sur une page locale via un
+  proxy authentifié, puis fermés. Le faux serveur refuse les CONNECT de fond :
+  leur pénalité est neutralisée uniquement dans ce smoke de navigation HTTP.
+  Refus de repli testé séparément sur une vraie passerelle locale.
+- UI vérifiée dans Chromium : trois moteurs, choix multi-proxy, desktop/mobile
+  sans débordement. Firefox dédié/WebKit et Windows non exécutés ; téléchargement
+  laissé à la demande. Contrat de nom d’export UTC adapté aux pays déjà ajoutés.

@@ -297,3 +297,47 @@ reste coché avec « aucun disponible » ; il n’entraîne jamais un export de 
 les pays. L’export vérifie la disponibilité au moment du téléchargement.
 Les chiffres sont répartis sur deux lignes sur ordinateur ; les compteurs actifs
 affichent explicitement zéro lorsqu’il n’y a aucune correspondance.
+
+### Navigateurs installés et dédiés
+
+Depuis **Navigateurs** (ou **Ouvrir un navigateur** dans le dashboard), choisissez
+un navigateur détecté ou un moteur dédié. Chrome, Edge, Brave, Chromium et Firefox
+sont recherchés dans leurs emplacements habituels sur macOS/Windows et dans PATH
+sur Linux. Safari est signalé mais ne peut pas être lancé ici avec un proxy par
+session sans modifier les réglages système.
+
+Les moteurs dédiés **Chromium, Firefox et WebKit** se téléchargent individuellement
+avec leur bouton. Aucun téléchargement de moteur n’est lancé au démarrage de
+l’application. Ils utilisent le cache standard de Playwright. WebKit n’est pas
+l’application Safari ; Firefox dédié est une distribution distincte du Firefox
+installé. Les téléchargements peuvent représenter plusieurs centaines de Mo.
+
+- **Rotation du pool** : la fenêtre utilise les réglages de rotation et de
+  sélection existants ; les tunnels déjà ouverts conservent leur proxy.
+- **Proxy fixe** : sélectionnez un ou plusieurs proxies disponibles, une fenêtre
+  par proxy, jusqu’à huit sessions simultanées. Si ce proxy disparaît ou devient
+  indisponible, la session refuse les nouvelles connexions sans basculer sur un
+  autre proxy. L’IP d’un fournisseur peut néanmoins changer derrière un même proxy.
+
+Chaque fenêtre possède son profil temporaire sous `data/browser-profiles/` et
+sa propre passerelle HTTP sur un port local aléatoire. Les identifiants du proxy
+restent dans l’application ; les arguments des navigateurs ne contiennent que
+l’adresse de cette passerelle. Les profils personnels et les paramètres système
+ne sont pas modifiés. **Fermer** termine uniquement la session créée par l’app,
+ferme sa passerelle et supprime son profil temporaire. L’arrêt normal de l’app
+ferme toutes ses sessions ; un arrêt forcé peut laisser des profils temporaires.
+Les fenêtres s’ouvrent sur l’ordinateur qui exécute l’application.
+
+La configuration concerne la navigation web, pas un VPN système. Chromium et
+Firefox désactivent les connexions WebRTC directes dans ces profils ; WebKit
+n’offre pas ici le même réglage. Les politiques d’entreprise peuvent empêcher le
+lancement d’un navigateur installé. Dans ce cas, utilisez un moteur dédié.
+
+Validation macOS : lancement réel de Chromium dédié, Chrome et Firefox installés
+contre un faux proxy local authentifié ; fermeture et suppression des profils.
+Firefox dédié et WebKit restent téléchargeables à la demande, non téléchargés
+pendant cette validation. Les lancements natifs Windows/Linux n’ont pas été
+exécutés sur cette machine.
+
+Références : [moteurs Playwright](https://playwright.dev/python/docs/browsers),
+[profils et configuration proxy](https://playwright.dev/python/docs/api/class-browsertype).

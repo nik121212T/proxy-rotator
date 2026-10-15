@@ -19,6 +19,9 @@ cryptography==50.0.2
 cachetools==5.5.0
 click==8.1.7
 
+# Browser engines are downloaded separately, only on explicit user action.
+playwright==1.63.0
+
 # Dev / tests. Kept in one file for MVP simplicity, as before; this comment
 # used to point at a requirements-dev.txt that never existed.
 # httpx2: the Starlette 1.x TestClient requires it (httpx is deprecated there).

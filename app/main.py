@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
+from app.browser_manager import BrowserManager
 from app.burn_detector import BurnDetector
 from app.config import Settings
 from app.crypto import CryptoConfigError, decrypt_password, derive_key
@@ -25,7 +26,7 @@ from app.health_checker import HealthChecker
 from app.pool import Pool
 from app.providers.dichvusocks import DichvusocksClient
 from app.rotator import Rotator
-from app.routes import events, gateway, geo, providers, proxies, ui
+from app.routes import browsers, events, gateway, geo, providers, proxies, ui
 from app.routes import pool as pool_routes
 from app.runtime import Runtime
 from app.salt import load_or_create_salt
@@ -131,7 +132,10 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
             )
             cleanup.push_async_callback(geo_service.stop)
             geo_service.start(pool)
+            browser_manager = BrowserManager(pool, rotator, key, config.db_path.parent / "browser-profiles")
+            cleanup.push_async_callback(browser_manager.stop)
             yield Runtime(
+                browsers=browser_manager,
                 pool=pool,
                 checker=checker,
                 rotator=rotator,
@@ -197,7 +201,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.runtime = None
     app.state.config_failed = False
     app.state.admin_token_required = bool(admin_token)
-    for router in (proxies.router, pool_routes.router, gateway.router, events.router, geo.router, providers.router, ui.router):
+    for router in (browsers.router, proxies.router, pool_routes.router, gateway.router, events.router, geo.router, providers.router, ui.router):
         app.include_router(router)
 
     @app.get("/login", response_class=HTMLResponse, include_in_schema=False)

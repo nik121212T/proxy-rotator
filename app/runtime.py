@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 
 from fastapi import HTTPException, Request
 
+from app.browser_manager import BrowserManager
 from app.gateway_http import HttpGateway
 from app.gateway_socks import SocksGateway
 from app.geolocation import GeolocationService
@@ -28,6 +29,7 @@ class Runtime:
     socks5_gateway: SocksGateway | None = field(default=None)
     geo: GeolocationService | None = field(default=None)
     dichvusocks: DichvusocksClient | None = field(default=None)
+    browsers: BrowserManager | None = None
     gateway_test_locks: dict[str, asyncio.Lock] = field(default_factory=dict)
 
     def activity(self) -> dict[str, object]:

@@ -1,0 +1,246 @@
+"""Application-owned browser sessions, private gateways and on-demand engines."""
+
+import asyncio
+import contextlib
+import os
+import shutil
+import signal
+import sys
+import uuid
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal
+from urllib.parse import urlsplit
+
+from playwright.async_api import BrowserContext, Error, Playwright, async_playwright
+
+from app.browser_catalog import ENGINES, discover_installed, firefox_preferences, native_arguments
+from app.gateway_http import HttpGateway
+from app.models import Proxy
+from app.pool import Pool
+from app.rotator import ActivePool, Rotator
+
+
+class BrowserError(ValueError):
+    """Safe user-facing errors only, never upstream credentials or driver output."""
+
+
+class FixedRotator(Rotator):
+    def __init__(self, proxy_id: int) -> None:
+        super().__init__("round_robin")
+        self.proxy_id = proxy_id
+
+    def pick(self, pool: ActivePool, *, client_ip: str = "", target_domain: str = "") -> Proxy | None:
+        return next((p for p in pool.active() if p.id == self.proxy_id), None)
+
+
+@dataclass
+class BrowserSession:
+    id: str
+    name: str
+    proxy_id: int | None
+    profile: Path
+    gateway: HttpGateway
+    process: asyncio.subprocess.Process | None = None
+    context: BrowserContext | None = None
+    watcher: asyncio.Task[None] | None = None
+
+
+async def terminate_process(process: asyncio.subprocess.Process) -> None:
+    if process.returncode is not None:
+        return
+    if sys.platform == "win32":
+        killer = await asyncio.create_subprocess_exec(
+            "taskkill", "/PID", str(process.pid), "/T", "/F",  # noqa: S603,S607 - owned PID only
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+        )
+        await killer.wait()
+    else:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGTERM)
+    try:
+        await asyncio.wait_for(process.wait(), 5)
+    except TimeoutError:
+        with contextlib.suppress(ProcessLookupError):
+            if sys.platform == "win32":
+                process.kill()
+            else:
+                os.killpg(process.pid, signal.SIGKILL)
+        await process.wait()
+
+
+class BrowserManager:
+    def __init__(self, pool: Pool, rotator: Rotator, key: bytes, root: Path, *, headless: bool = False) -> None:
+        self.pool, self.rotator, self.key = pool, rotator, key
+        self.root = root
+        self.headless = headless
+        self.sessions: dict[str, BrowserSession] = {}
+        self.installs: dict[str, str] = {}
+        self._install_tasks: dict[str, asyncio.Task[None]] = {}
+        self._driver: Playwright | None = None
+        self._lock = asyncio.Lock()
+        self._driver_lock = asyncio.Lock()
+        self._closing = False
+
+    async def _playwright(self) -> Playwright:
+        async with self._driver_lock:
+            if self._driver is None:
+                self._driver = await async_playwright().start()
+            return self._driver
+
+    async def catalog(self) -> dict[str, object]:
+        installed = await asyncio.to_thread(discover_installed)
+        driver = await self._playwright()
+        dedicated = []
+        for engine in ENGINES:
+            ready = Path(getattr(driver, engine).executable_path).is_file()
+            dedicated.append({"id": engine, "name": {"chromium": "Chromium", "firefox": "Firefox", "webkit": "WebKit"}[engine], "ready": ready, "status": self.installs.get(engine, "ready" if ready else "missing")})
+        return {
+            "installed": [{"id": b.id, "name": b.name, "engine": b.engine, "supported": b.supported} for b in installed],
+            "dedicated": dedicated,
+        }
+
+    def session_views(self) -> list[dict[str, object]]:
+        exits = self.pool.exit_observations()
+        return [{
+            "id": s.id, "name": s.name, "proxy_id": s.proxy_id,
+            "mode": "fixed" if s.proxy_id is not None else "rotation",
+            "exit_ip": str(exits[s.proxy_id].ip) if s.proxy_id in exits else None,
+            "available": any(p.id == s.proxy_id for p in self.pool.active()) if s.proxy_id is not None else bool(self.pool.active()),
+        } for s in self.sessions.values()]
+
+    def install(self, engine: str) -> None:
+        if engine not in ENGINES:
+            raise BrowserError("Moteur inconnu.")
+        if self._closing:
+            raise BrowserError("Application en cours d’arrêt.")
+        if engine in self._install_tasks:
+            return
+        self.installs[engine] = "installing"
+        self._install_tasks[engine] = asyncio.create_task(self._install(engine))
+
+    async def _install(self, engine: str) -> None:
+        process = None
+        try:
+            process = await asyncio.create_subprocess_exec(
+                sys.executable, "-m", "playwright", "install", engine,
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+                start_new_session=sys.platform != "win32",
+            )
+            code = await asyncio.wait_for(process.wait(), 900)
+            self.installs[engine] = "ready" if code == 0 else "error"
+        except (OSError, TimeoutError):
+            self.installs[engine] = "error"
+        finally:
+            if process is not None and process.returncode is None:
+                await terminate_process(process)
+            self._install_tasks.pop(engine, None)
+
+    async def launch(self, source: Literal["installed", "dedicated"], browser_id: str, proxy_id: int | None, url: str) -> str:
+        try:
+            parsed = urlsplit(url)
+        except ValueError:
+            raise BrowserError("URL invalide.") from None
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password or len(url) > 2048:
+            raise BrowserError("Saisissez une URL http:// ou https:// sans identifiants.")
+        async with self._lock:
+            if self._closing or len(self.sessions) >= 8:
+                raise BrowserError("Huit sessions maximum ; fermez une session avant de continuer.")
+            if proxy_id is not None and not any(p.id == proxy_id for p in self.pool.active()):
+                raise BrowserError("Ce proxy n’est plus disponible.")
+            if not self.pool.active():
+                raise BrowserError("Aucun proxy disponible. Importez et testez vos proxies.")
+            installed = next((b for b in await asyncio.to_thread(discover_installed) if b.id == browser_id), None) if source == "installed" else None
+            if source == "installed" and (installed is None or not installed.supported):
+                raise BrowserError("Navigateur absent ou incompatible avec un proxy isolé. Utilisez un moteur dédié.")
+            if source == "dedicated" and browser_id not in ENGINES:
+                raise BrowserError("Moteur inconnu.")
+            identifier = uuid.uuid4().hex
+            profile = self.root / identifier
+            await asyncio.to_thread(profile.mkdir, parents=True, mode=0o700)
+            gateway = HttpGateway(self.pool, FixedRotator(proxy_id) if proxy_id is not None else self.rotator, self.key, port=0)
+            session = BrowserSession(identifier, installed.name if installed else browser_id.capitalize(), proxy_id, profile, gateway)
+            try:
+                await gateway.start()
+                bound = gateway.status("").bound
+                assert bound is not None
+                port = int(bound.rsplit(":", 1)[1])
+                if installed:
+                    args = await asyncio.to_thread(native_arguments, installed, profile, port, url)
+                    session.process = await asyncio.create_subprocess_exec(
+                        *args, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+                        start_new_session=sys.platform != "win32",
+                    )
+                    await asyncio.sleep(0.4)
+                    if session.process.returncode is not None:
+                        raise BrowserError("Le navigateur s’est fermé au lancement. Essayez le moteur dédié.")
+                else:
+                    driver = await self._playwright()
+                    browser_type = getattr(driver, browser_id)
+                    if not Path(browser_type.executable_path).is_file():
+                        raise BrowserError("Téléchargez ce moteur avant de l’ouvrir.")
+                    kwargs: dict[str, object] = {}
+                    if browser_id == "chromium":
+                        kwargs["args"] = ["--proxy-bypass-list=<-loopback>", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--disable-quic"]
+                    if browser_id == "firefox":
+                        kwargs["firefox_user_prefs"] = firefox_preferences(port)
+                    session.context = await browser_type.launch_persistent_context(
+                        str(profile), headless=self.headless, proxy={"server": f"http://127.0.0.1:{port}"},
+                        timeout=30000, **kwargs,
+                    )
+                    assert session.context is not None
+                    page = session.context.pages[0] if session.context.pages else await session.context.new_page()
+                    # A proxy may fail after opening; keep the window and its error page.
+                    with contextlib.suppress(Error):
+                        await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+                self.sessions[identifier] = session
+                session.watcher = asyncio.create_task(self._watch(session))
+                return identifier
+            except BaseException as exc:
+                await self._dispose(session)
+                if isinstance(exc, Error | OSError):
+                    raise BrowserError("Ouverture impossible. Vérifiez l’installation du navigateur et l’accès au bureau.") from None
+                raise
+
+    async def _watch(self, session: BrowserSession) -> None:
+        try:
+            if session.process:
+                await session.process.wait()
+            elif session.context:
+                while session.context.browser and session.context.browser.is_connected():
+                    await asyncio.sleep(1)
+            await self.close_session(session.id)
+        except asyncio.CancelledError:
+            pass
+
+    async def _dispose(self, session: BrowserSession) -> None:
+        if session.context:
+            with contextlib.suppress(Error):
+                await session.context.close()
+        if session.process:
+            await terminate_process(session.process)
+        await session.gateway.stop()
+        # These are only our UUID-named, temporary profiles, never user profiles.
+        await asyncio.to_thread(shutil.rmtree, session.profile, True)
+
+    async def close_session(self, identifier: str) -> None:
+        async with self._lock:
+            session = self.sessions.pop(identifier, None)
+            if session is None:
+                return
+            if session.watcher and session.watcher is not asyncio.current_task():
+                session.watcher.cancel()
+                await asyncio.gather(session.watcher, return_exceptions=True)
+            await self._dispose(session)
+
+    async def stop(self) -> None:
+        self._closing = True
+        tasks = list(self._install_tasks.values())
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        for identifier in list(self.sessions):
+            await self.close_session(identifier)
+        if self._driver:
+            await self._driver.stop()
+            self._driver = None
