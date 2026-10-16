@@ -548,3 +548,17 @@ script auto-attach).
   Aucun champ blacklist/hostname fournisseur ni durée en ligne inventés.
 - Validation finale T14 : 421 tests Python réussis, 8 ignorés, 11 sous-tests ;
   Ruff/mypy et diff --check verts. Archive Windows reconstruite.
+
+## T15 — Taille et suppression des moteurs dédiés (16 octobre 2026)
+
+- [x] Afficher la taille installée de chaque moteur et proposer sa suppression.
+- [x] Bloquer la suppression pendant une session ou une installation et permettre
+  de retélécharger ; préserver les autres moteurs et les navigateurs personnels.
+
+- Validation T15 : 424 tests réussis, 8 ignorés ; Ruff/mypy/JS verts.
+  Parcours Chromium avec API simulée : confirmation, refus en utilisation,
+  suppression et retour du téléchargement ; mobile sans débordement.
+- Taille des fichiers des révisions courantes (Chromium inclut son headless shell),
+  calcul mise en cache 30 s, invalidation après installation/suppression.
+  Dossiers inconnus et liens symboliques refusés ; ffmpeg et autres moteurs
+  préservés. Cache Playwright partagé signalé dans la confirmation.

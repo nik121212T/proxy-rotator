@@ -340,3 +340,53 @@ async def test_download_cleanup_failure_does_not_block_retry(db, tmp_path, monke
     await service._install_tasks["firefox"]
     assert not service._install_tasks
     assert service.installs["firefox"] == "error"
+
+
+async def test_engine_removal_size_guards_and_redownload(db, tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from app.browser_manager import BrowserSession
+    from app.gateway_http import HttpGateway
+
+    key = Fernet.generate_key()
+    pool = await Pool.load(db, key)
+    service = BrowserManager(pool, Rotator(), key, tmp_path / 'profiles')
+    folder = tmp_path / 'firefox-123'
+    folder.mkdir()
+    executable = folder / 'browser'
+    executable.write_bytes(b'12345')
+    driver = SimpleNamespace(**{engine: SimpleNamespace(executable_path=str(
+        executable if engine == 'firefox' else tmp_path / f'{engine}-1/browser'
+    )) for engine in ('chromium', 'firefox', 'webkit')})
+
+    async def playwright():
+        return driver
+
+    monkeypatch.setattr(service, '_playwright', playwright)
+    catalog = await service.catalog()
+    firefox = next(e for e in catalog['dedicated'] if e['id'] == 'firefox')
+    assert firefox['size_bytes'] == 5 and firefox['can_remove']
+    service.sessions['active'] = BrowserSession('active', 'Firefox', None, tmp_path / 'profile',
+        HttpGateway(pool, Rotator(), key), engine='firefox')
+    with pytest.raises(BrowserError, match='Fermez'):
+        await service.uninstall('firefox')
+    assert executable.exists()
+    service.sessions.clear()
+    service._install_tasks['firefox'] = asyncio.current_task()
+    with pytest.raises(BrowserError, match='opération'):
+        await service.uninstall('firefox')
+    service._install_tasks.clear()
+    await service.uninstall('firefox')
+    assert not folder.exists()
+    catalog = await service.catalog()
+    firefox = next(e for e in catalog['dedicated'] if e['id'] == 'firefox')
+    assert firefox['size_bytes'] == 0 and not firefox['ready']
+    async def reinstall(engine):
+        folder.mkdir()
+        executable.write_bytes(b'123456')
+        service._sizes.pop(engine, None)
+        service._install_tasks.pop(engine, None)
+    monkeypatch.setattr(service, '_install', reinstall)
+    service.install('firefox')
+    await service._install_tasks['firefox']
+    assert executable.exists()

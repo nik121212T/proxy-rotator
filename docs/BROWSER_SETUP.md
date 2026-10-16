@@ -76,3 +76,13 @@ Run three times → should see three different IPs if `weighted` or `round_robin
 | DNS resolves to local ISP    | SOCKS DNS leak                              | Set `network.proxy.socks_remote_dns = true`   |
 | `502 Bad Gateway` sometimes  | Burn detector retried N times and gave up   | Normal under heavy burn — more proxies needed |
 | Connection refused           | Gateway not running                         | Check logs — port might be bound by another process |
+
+### Espace disque des moteurs dédiés
+
+La page Navigateurs affiche la taille installée de chaque moteur. « Supprimer »
+retire la révision courante après confirmation ; fermer ses sessions et attendre
+la fin d’un téléchargement avant de le supprimer. Le moteur peut ensuite être
+retéléchargé. Chromium inclut son composant headless ; les dépendances communes
+comme ffmpeg sont conservées. Le cache Playwright peut être utilisé par d’autres
+applications : celles-ci devront retélécharger un moteur retiré si nécessaire.
+Les navigateurs personnels ne sont pas désinstallés par cette commande.

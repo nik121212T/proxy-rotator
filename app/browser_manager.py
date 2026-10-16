@@ -8,6 +8,7 @@ import shutil
 import signal
 import stat
 import sys
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,6 +18,7 @@ from urllib.parse import urlsplit
 from playwright.async_api import BrowserContext, Error, Playwright, async_playwright
 
 from app.browser_catalog import ENGINES, discover_installed, firefox_preferences, native_arguments
+from app.browser_storage import delete_engine, engine_folders, installed_size
 from app.burn_detector import BurnDetector
 from app.config import Settings
 from app.gateway_http import HttpGateway
@@ -51,6 +53,7 @@ class BrowserSession:
     context: BrowserContext | None = None
     watcher: asyncio.Task[None] | None = None
     close_error: str | None = None
+    engine: str | None = None
 
 
 def remove_profile(profile: Path) -> None:
@@ -109,6 +112,8 @@ class BrowserManager:
         self._lock = asyncio.Lock()
         self._driver_lock = asyncio.Lock()
         self._closing = False
+        self._removing: set[str] = set()
+        self._sizes: dict[str, tuple[float, int | None]] = {}
 
     async def _playwright(self) -> Playwright:
         async with self._driver_lock:
@@ -121,8 +126,22 @@ class BrowserManager:
         driver = await self._playwright()
         dedicated = []
         for engine in ENGINES:
-            ready = Path(getattr(driver, engine).executable_path).is_file()
-            dedicated.append({"id": engine, "name": {"chromium": "Chromium", "firefox": "Firefox", "webkit": "WebKit"}[engine], "ready": ready, "status": self.installs.get(engine, "ready" if ready else "missing"), "error": self.install_errors.get(engine)})
+            executable = Path(getattr(driver, engine).executable_path)
+            ready = executable.is_file()
+            cached = self._sizes.get(engine)
+            if cached is None or time.monotonic() - cached[0] > 30:
+                try:
+                    size = await asyncio.to_thread(installed_size, engine_folders(engine, executable))
+                except (ValueError, OSError):
+                    size = None
+                self._sizes[engine] = (time.monotonic(), size)
+            else:
+                size = cached[1]
+            in_use = any(s.engine == engine for s in self.sessions.values())
+            dedicated.append({"id": engine, "name": {"chromium": "Chromium", "firefox": "Firefox", "webkit": "WebKit"}[engine], "ready": ready, "status": self.installs.get(engine, "ready" if ready else "missing"), "error": self.install_errors.get(engine), "size_bytes": size,
+                              "removing": engine in self._removing,
+                              "can_remove": (ready or bool(size)) and not in_use and engine not in self._install_tasks and engine not in self._removing,
+                              "in_use": in_use})
         return {
             "installed": [{"id": b.id, "name": b.name, "engine": b.engine, "supported": b.supported} for b in installed],
             "dedicated": dedicated,
@@ -143,6 +162,8 @@ class BrowserManager:
             raise BrowserError("Moteur inconnu.")
         if self._closing:
             raise BrowserError("Application en cours d’arrêt.")
+        if engine in self._removing:
+            raise BrowserError("Suppression en cours. Patientez avant de télécharger ce moteur.")
         if engine in self._install_tasks:
             return
         self.install_errors.pop(engine, None)
@@ -182,6 +203,28 @@ class BrowserManager:
                     self.installs[engine] = "error"
                     self.install_errors[engine] = "Téléchargement interrompu. Réessayez à la prochaine ouverture."
                 self._install_tasks.pop(engine, None)
+                self._sizes.pop(engine, None)
+
+    async def uninstall(self, engine: str) -> None:
+        if engine not in ENGINES:
+            raise BrowserError("Moteur inconnu.")
+        async with self._lock:
+            if self._closing or engine in self._install_tasks or engine in self._removing:
+                raise BrowserError("Une opération est en cours sur ce moteur. Réessayez ensuite.")
+            if any(s.engine == engine for s in self.sessions.values()):
+                raise BrowserError("Fermez les sessions de ce moteur avant de le supprimer.")
+            self._removing.add(engine)
+            try:
+                driver = await self._playwright()
+                folders = engine_folders(engine, Path(getattr(driver, engine).executable_path))
+                await asyncio.to_thread(delete_engine, folders)
+                self.installs.pop(engine, None)
+                self.install_errors.pop(engine, None)
+            except (ValueError, OSError):
+                raise BrowserError("Suppression impossible. Fermez les fenêtres de ce moteur et réessayez.") from None
+            finally:
+                self._removing.discard(engine)
+                self._sizes.pop(engine, None)
 
     async def launch(self, source: Literal["installed", "dedicated"], browser_id: str, proxy_id: int | None, url: str) -> str:
         try:
@@ -216,7 +259,7 @@ class BrowserManager:
                 max_connections=config.gateway_max_connections if config else 256,
                 burn_detector=BurnDetector(timeout_s=timeout, inspect_body=config.burn_inspect_body if config else True),
             )
-            session = BrowserSession(identifier, installed.name if installed else browser_id.capitalize(), proxy_id, profile, gateway)
+            session = BrowserSession(identifier, installed.name if installed else browser_id.capitalize(), proxy_id, profile, gateway, engine=browser_id if source == "dedicated" else None)
             try:
                 await gateway.start()
                 bound = gateway.status("").bound

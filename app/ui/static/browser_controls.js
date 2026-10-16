@@ -27,6 +27,12 @@
       : "Utilise les réglages de rotation et de sélection du pool. Les connexions déjà ouvertes gardent leur proxy.";
     open.disabled = opening || !choice.value || (mode.value === "fixed" && !proxies.selectedOptions.length);
   }
+  function sizeLabel(bytes) {
+    if (bytes == null) return "Taille indisponible";
+    const unit = bytes >= 1024 ** 3 ? "Go" : "Mo";
+    const value = bytes / (unit === "Go" ? 1024 ** 3 : 1024 ** 2);
+    return value.toLocaleString("fr-FR", {maximumFractionDigits: 1}) + " " + unit;
+  }
   function render(data) {
     const previous = choice.value;
     choice.replaceChildren(new Option("Choisir un navigateur…", ""));
@@ -44,8 +50,33 @@
       const row = document.createElement("div"); row.className = "browser-engine-row";
       const label = document.createElement("span");
       label.textContent = engine.name + " · " + ({installing:"Téléchargement en cours…",error:engine.error || "Téléchargement échoué — réessayez"}[engine.status] || (engine.ready ? "Téléchargé" : "Non téléchargé"));
-      row.append(label);
-      if (!engine.ready || engine.status === "installing") {
+      if (engine.removing) label.textContent = engine.name + " · Suppression en cours…";
+      const info = document.createElement("div"); info.className = "browser-engine-info";
+      info.append(label);
+      if (engine.ready || engine.size_bytes) {
+        const size = document.createElement("span"); size.className = "helper browser-engine-size";
+        size.textContent = (engine.size_bytes == null ? "Taille indisponible" : sizeLabel(engine.size_bytes) + " installés") + (engine.in_use ? " · En cours d’utilisation" : "");
+        info.append(size);
+      }
+      row.append(info);
+      if ((engine.ready || engine.size_bytes) && !engine.removing) {
+        const remove = document.createElement("button"); remove.type = "button"; remove.className = "secondary danger";
+        remove.textContent = "Supprimer";
+        remove.setAttribute("aria-label", "Supprimer le moteur " + engine.name);
+        remove.disabled = !engine.can_remove;
+        if (engine.in_use) remove.title = "Fermez les sessions de ce moteur avant de le supprimer.";
+        remove.addEventListener("click", async () => {
+          if (!window.confirm("Supprimer " + engine.name + " (" + sizeLabel(engine.size_bytes) + ") ? Vous pourrez le télécharger à nouveau. Ce moteur peut être partagé avec d’autres applications Playwright.")) return;
+          remove.disabled = true; remove.textContent = "Suppression…";
+          try {
+            await request("/api/browsers/engines/" + engine.id, {method:"DELETE"});
+            message(engine.name + " supprimé. Vous pouvez le télécharger à nouveau.");
+          } catch (error) { message(error.message, true); }
+          finally { await refresh(); }
+        });
+        row.append(remove);
+      }
+      if ((!engine.ready || engine.status === "installing") && !engine.removing) {
         const button = document.createElement("button"); button.type = "button"; button.className = "secondary";
         button.textContent = engine.status === "installing" ? "Téléchargement…" : "Télécharger";
         button.disabled = engine.status === "installing";

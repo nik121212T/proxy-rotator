@@ -101,3 +101,12 @@ async def close_browser(identifier: str, runtime: Services) -> dict[str, bool]:
     except BrowserError as exc:
         raise HTTPException(409, str(exc)) from None
     return {"closed": True}
+
+
+@router.delete("/api/browsers/engines/{engine}")
+async def uninstall_engine(engine: Literal["chromium", "firefox", "webkit"], runtime: Services) -> dict[str, bool]:
+    try:
+        await manager(runtime).uninstall(engine)
+    except BrowserError as exc:
+        raise HTTPException(409, str(exc)) from None
+    return {"removed": True}

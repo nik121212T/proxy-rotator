@@ -1061,3 +1061,8 @@ footer { padding-bottom: 88px; }
 .browser-engine-row span, .browser-session-row span { min-width: 0; overflow-wrap: anywhere; }
 .browser-workspace .helper { margin-top: var(--space-3); }
 @media (max-width: 760px) { .browser-columns { grid-template-columns: 1fr; } .topnav { flex-wrap: wrap; } .topnav-gateways { flex-wrap: wrap; } }
+
+.browser-engine-info { display: grid; gap: var(--space-1); min-width: 0; }
+.browser-engine-size { display: block; margin: 0; font-variant-numeric: tabular-nums; }
+.browser-engine-row { gap: var(--space-4); }
+.browser-engine-row button { flex-shrink: 0; }
