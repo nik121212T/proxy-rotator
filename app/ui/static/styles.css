@@ -877,18 +877,26 @@ tr.is-pinned:hover td {
 #proxies-table { table-layout: fixed; font-size: .82rem; }
 #proxies-table th, #proxies-table td { padding: 10px 8px; }
 #proxies-table th { font-size: .65rem; letter-spacing: .025em; white-space: normal; }
-#proxies-table th:first-child { width: 30%; }
-#proxies-table th:nth-child(2) { width: 14%; }
-#proxies-table th:nth-child(3) { width: 10%; }
+#proxies-table th:first-child { width: 23%; }
+#proxies-table th:nth-child(2) { width: 18%; }
+#proxies-table th:nth-child(3) { width: 13%; }
 #proxies-table th:nth-child(4) { width: 9%; }
-#proxies-table th:nth-child(5) { width: 10%; }
-#proxies-table th:nth-child(6) { width: 14%; }
-#proxies-table th:last-child { width: 13%; }
+#proxies-table th:nth-child(5) { width: 12%; }
+#proxies-table th:nth-child(6) { width: 13%; }
+#proxies-table th:last-child { width: 12%; }
 #proxies-table .endpoint { font-size: .82rem; }
-#proxies-table .row-meta { display: block; max-width: 100%; white-space: normal; overflow-wrap: anywhere; font-size: .65rem; letter-spacing: 0; }
+#proxies-table .row-meta { display: block; max-width: 100%; white-space: normal; overflow-wrap: anywhere; font-size: .75rem; letter-spacing: 0; line-height: 1.5; color: var(--ink-soft); padding: 0; border: 0; background: none; border-radius: 0; font-weight: 400; text-transform: none; overflow: visible; }
 #proxies-table .status { padding: 3px 6px; font-size: .68rem; }
 #proxies-table .row-actions button { display: block; margin-left: auto; padding: 5px 3px; font-size: .78rem; }
 #proxies-table time { white-space: normal; }
+#proxies-table .cell-primary { display: block; font-size: .85rem; font-weight: 600; overflow-wrap: anywhere; }
+#proxies-table .proxy-exit { margin-block: var(--space-1); }
+#proxies-table .exit-address { font-family: var(--font-mono); }
+#proxies-table .proxy-latency, #proxies-table .proxy-quality { text-align: left; font-variant-numeric: tabular-nums; }
+#proxies-table .location-region { color: var(--muted); }
+#proxies-table .proxy-checked .cell-primary { font-weight: 500; }
+#proxies-table td { vertical-align: top; }
+
 @media (max-width: 640px) {
   #proxies-table, #proxies-table tbody { display: block; }
   #proxies-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
@@ -896,6 +904,7 @@ tr.is-pinned:hover td {
   #proxies-table td { display: block; padding: 6px; border: 0; text-align: left; }
   #proxies-table td:first-child, #proxies-table td.row-actions, #proxies-table td[colspan] { grid-column: 1 / -1; }
   #proxies-table td[data-label]::before { content: attr(data-label); display: block; font-size: .65rem; color: var(--muted); margin-bottom: 4px; }
+  #proxies-table .proxy-location, #proxies-table .proxy-checked { grid-column: span 2; }
   #proxies-table .row-actions { display: flex; flex-wrap: wrap; gap: 12px; }
   #proxies-table .row-actions button { margin: 0; min-height: 40px; }
 }

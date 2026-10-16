@@ -292,3 +292,22 @@ async def test_export_only_selected_available_countries(dashboard):
     assert (await client.get("/api/proxies/export?country=unknown")).headers["X-Line-Count"] == "1"
     assert (await client.get("/api/proxies/export?country=US")).headers["X-Line-Count"] == "0"
     assert (await client.get("/api/proxies/export?country=invalid")).status_code == 422
+
+
+async def test_proxy_location_and_quality_are_present_in_all_live_views(dashboard):
+    client, pool, _, _ = dashboard
+    proxy = await pool.add(parse_line("tester:private-value@proxy.invalid:80"))
+    await pool.apply_check(CheckResult(
+        proxy_id=proxy.id, ok=True, exit_ip="203.0.113.8", latency_ms=125,
+        checked_at=datetime.now(UTC),
+    ))
+    pool.set_country("203.0.113.8", "FR", "France", city="Paris", region="Île-de-France <test>")
+    for path in ("/", "/ui/snapshot", f"/ui/proxies/{proxy.id}"):
+        html = (await client.get(path)).text
+        assert 'data-label="Localisation"' in html
+        assert "France" in html and "Paris" in html
+        assert "Île-de-France &lt;test&gt;" in html
+        assert 'data-label="Fiabilité"' in html
+        assert "100 % de réussite" in html
+        assert "À l’instant" in html
+        assert "private-value" not in html

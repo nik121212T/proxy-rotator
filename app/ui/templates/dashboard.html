@@ -5,7 +5,7 @@
   <meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"selfRequestsOnly":true}'>
   <title>Dashboard · Proxy Rotator</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <link rel="stylesheet" href="/static/styles.css?v=browsers-22">
+  <link rel="stylesheet" href="/static/styles.css?v=pool-location-23">
   <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=summary-export-20" defer></script>
 </head>
 <body>
@@ -40,8 +40,9 @@
     {% include '_table_filter_summary.html' %}
     {% include '_table_filter_options.html' %}
     <div class="table-scroll" tabindex="0" role="region" aria-label="Table des proxies, défilement horizontal disponible">
-      <table id="proxies-table"><caption class="sr-only">État et performances des proxies</caption><thead><tr><th scope="col">Proxy</th><th scope="col">État</th><th scope="col">Latence</th><th scope="col">Score</th><th scope="col">Réussite</th><th scope="col">Dernier test</th><th scope="col">Actions</th></tr></thead><tbody id="proxy-rows">{% include '_rows.html' %}</tbody></table>
+      <table id="proxies-table"><caption class="sr-only">État et performances des proxies</caption><thead><tr><th scope="col">IP &amp; connexion</th><th scope="col">Localisation</th><th scope="col">État</th><th scope="col">Latence</th><th scope="col">Fiabilité</th><th scope="col">Dernier test</th><th scope="col">Actions</th></tr></thead><tbody id="proxy-rows">{% include '_rows.html' %}</tbody></table>
     </div>
+    <p class="table-note">La localisation correspond à l’IP de sortie. Le dernier test indique une observation, pas une durée de connexion continue.</p>
     <p class="table-note">Pool vide ? <a href="/parametres#import-form">Importez des proxies</a>. Les proxies hors pool sont masqués par défaut.</p>
   </section>
 </main>

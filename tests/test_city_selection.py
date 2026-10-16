@@ -276,8 +276,10 @@ async def test_dashboard_city_sort_and_live_rows(db):
             response = await client.get(url)
             assert response.status_code == 200
             assert re.findall(r'<tr id="proxy-(\d+)"', response.text) == ["3", "2", "1"]
-            assert "Évry · France" in response.text
-            assert "ville inconnue · France" in response.text
+            locations = re.findall(r'<td class="proxy-location".*?</td>', response.text, re.S)
+            assert len(locations) == 3
+            assert "Évry" in locations[0] and "France" in locations[0]
+            assert "Ville inconnue" in locations[2] and "France" in locations[2]
         page = await client.get("/?sort=city")
         assert 'value="city" selected' in page.text
         assert "Ville : A à Z" in page.text
@@ -285,4 +287,5 @@ async def test_dashboard_city_sort_and_live_rows(db):
         refreshed = await client.get("/ui/snapshot?sort=city")
         assert re.findall(r'<tr id="proxy-(\d+)"', refreshed.text) == ["2", "3", "1"]
         row = await client.get("/ui/proxies/2")
-        assert "Amiens · France" in row.text
+        location = re.search(r'<td class="proxy-location".*?</td>', row.text, re.S)
+        assert location and "Amiens" in location[0] and "France" in location[0]

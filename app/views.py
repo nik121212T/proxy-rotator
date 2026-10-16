@@ -6,6 +6,7 @@ owns the Python glue that routes call into.
 """
 
 import unicodedata
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import Request
@@ -107,12 +108,28 @@ def check_failure(check: CheckResult | None) -> str | None:
     return "Vérification échouée — relancez le test."
 
 
+def check_age(checked_at: datetime | None, now: datetime) -> str:
+    """Age of an observation, never a claim of continuous uptime."""
+    if checked_at is None:
+        return "Jamais testé"
+    seconds = max(0, int((now - checked_at).total_seconds()))
+    if seconds < 60:
+        return "À l’instant"
+    if seconds < 3600:
+        return f"Il y a {seconds // 60} min"
+    if seconds < 86400:
+        return f"Il y a {seconds // 3600} h"
+    days = seconds // 86400
+    return f"Il y a {days} jour{'s' if days > 1 else ''}"
+
+
 def render(
     request: Request, template: str, runtime: Runtime, extra: dict[str, object] | None = None
 ) -> HTMLResponse:
     order = request.query_params.get("sort", "best")
     if order not in SORT_OPTIONS:
         order = "best"
+    now = datetime.now(UTC)
     all_proxies = runtime.pool.all()
     city_names = {p.id: runtime.pool.city_name(p.id) for p in all_proxies}
     filter_city = request.query_params.get("city", "").strip()[:128]
@@ -163,6 +180,8 @@ def render(
         "activity": runtime.activity(),
         "exits": runtime.pool.exit_observations(),
         "city_names": city_names,
+        "region_names": {p.id: runtime.pool.region_name(p.id) for p in all_proxies},
+        "check_ages": {p.id: check_age(p.last_checked_at, now) for p in all_proxies},
         "check_failures": {
             p.id: check_failure(runtime.pool.latest_check(p.id)) for p in runtime.pool.all()
         },

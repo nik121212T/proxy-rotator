@@ -532,3 +532,19 @@ script auto-attach).
 - Suite éventuelle : essai utilisateur manuel Windows 11, puis intégration de
   la branche dans main. La CI ne certifie pas les fuites DNS/WebRTC ni toutes
   les configurations de navigateurs installés. Aucun nouveau chantier lancé.
+
+## T14 — Liste des IP enrichie dans le dashboard (16 octobre 2026)
+
+- [x] Localisation dédiée (pays, ville, région), fiabilité regroupée et âge du
+  dernier test ; conserver actions, filtres et mises à jour en direct.
+- [x] Vérifier desktop/mobile, données absentes et échappement des données.
+
+- Tableau conservé à sept colonnes ; suppression des encadrés répétitifs des
+  métadonnées, localisation sur trois lignes, score/réussite regroupés.
+- Vérification Chromium sur données fictives à 1440 px et 390 px : aucun
+  débordement horizontal. Les tests couvrent pages, snapshots et lignes OOB,
+  tri par ville, région échappée et absence de mot de passe dans le rendu.
+- Application rechargée sur http://127.0.0.1:8081 ; page et snapshot contrôlés.
+  Aucun champ blacklist/hostname fournisseur ni durée en ligne inventés.
+- Validation finale T14 : 421 tests Python réussis, 8 ignorés, 11 sous-tests ;
+  Ruff/mypy et diff --check verts. Archive Windows reconstruite.
