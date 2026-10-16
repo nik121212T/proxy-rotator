@@ -485,3 +485,26 @@ script auto-attach).
 - UI vérifiée dans Chromium : trois moteurs, choix multi-proxy, desktop/mobile
   sans débordement. Firefox dédié/WebKit et Windows non exécutés ; téléchargement
   laissé à la demande. Contrat de nom d’export UTC adapté aux pays déjà ajoutés.
+
+## T13 — Fiabilisation Windows et sessions (accord utilisateur, 2026-10-15)
+
+- [x] Reconnaître les erreurs Winsock et stabiliser le test de timeout.
+- [x] Respecter les réglages de passerelle et les filtres en mode rotation.
+- [x] Vérifier fermeture et suppression des profils, signaler/reprendre les échecs.
+- [x] Encadrer Python Windows et améliorer les diagnostics des moteurs.
+- [ ] Tests Windows des trois moteurs, HTTP/HTTPS et absence de repli direct.
+- [x] Distribution Windows propre avec instructions et sans données utilisateur.
+
+- Reprise du 16 octobre : nettoyage des lancements multiples poursuivi même si
+  une fermeture échoue ; erreurs de téléchargement affichées et état débloqué.
+  Whoer conservé comme page de départ. Profils exclus de Git et de la distribution.
+- Validation macOS : 425 tests Python réussis, 2 ignorés, 11 sous-tests ; inclut
+  les six scénarios réels Chromium/Firefox/WebKit avec/sans authentification,
+  HTTP/HTTPS, rotation/proxy fixe, refus de repli direct, fermeture et nettoyage.
+  8 tests JS réussis ; Ruff/mypy et diff --check verts. L’ancien Node global
+  ne démarre pas (bibliothèque ICU manquante), Node Homebrew node@22 utilisé.
+- Windows : job dédié ajouté à `.github/workflows/ci.yml` ; exécution Windows
+  encore à confirmer. Guide `docs/WINDOWS.md`, construction reproductible via
+  `scripts/build_windows.py`. Archive locale `dist/proxy-rotator-windows.zip`.
+- Limite conservée : les profils résiduels après fermeture ratée sont visibles
+  et réessayables pendant la session, mais ne sont pas repris après redémarrage.

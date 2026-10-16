@@ -47,6 +47,9 @@ class BurnDetector:
             errno.ECONNREFUSED,
             errno.ECONNRESET,
             errno.ETIMEDOUT,
+            10054,  # WSAECONNRESET (also preserved by aiohttp on Windows)
+            10060,  # WSAETIMEDOUT
+            10061,  # WSAECONNREFUSED
         }:
             return BurnResult(burned=True, reason="Connection failure")
         media_type = (content_type or "").partition(";")[0].strip().lower()

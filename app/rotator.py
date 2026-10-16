@@ -48,13 +48,8 @@ class Rotator:
         self._timed_id = None
         self._deadline = 0.0
 
-    def pick(
-        self,
-        pool: ActivePool,
-        *,
-        client_ip: str = "",
-        target_domain: str = "",
-    ) -> Proxy | None:
+    def eligible(self, pool: ActivePool) -> tuple[Proxy, ...]:
+        """Apply selection without advancing rotation or sticky state."""
         country_of = getattr(pool, "country_code", lambda proxy_id: None)
         city_of = getattr(pool, "city_name", lambda proxy_id: None)
         region_of = getattr(pool, "region_name", lambda proxy_id: None)
@@ -73,7 +68,7 @@ class Rotator:
             )
         )
         if not active:
-            return None
+            return ()
         # Pinned-first override: if any pinned proxy is active, pick among those.
         pinned_fn = getattr(pool, "pinned_ids", None)
         if callable(pinned_fn):
@@ -82,6 +77,18 @@ class Rotator:
                 narrowed = tuple(p for p in active if p.id in pinned)
                 if narrowed or self.selection.pinned_only:
                     active = narrowed
+        if not active:
+            return ()
+        return active
+
+    def pick(
+        self,
+        pool: ActivePool,
+        *,
+        client_ip: str = "",
+        target_domain: str = "",
+    ) -> Proxy | None:
+        active = self.eligible(pool)
         if not active:
             return None
         if self.strategy == "timed":

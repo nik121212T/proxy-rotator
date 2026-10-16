@@ -48,3 +48,24 @@ jobs:
       # workflow did not run it, which let 49 advisories accumulate unnoticed.
       - name: pip-audit
         run: pip-audit -r requirements.txt
+
+  windows-browser-engines:
+    name: Windows browser engines
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install dependencies and real engines
+        run: |
+          python -m pip install -r requirements.txt
+          python -m playwright install chromium firefox webkit
+      - name: Real browser HTTP and HTTPS through synthetic proxies
+        env:
+          RUN_BROWSER_ENGINES: '1'
+          GATEWAY_HTTP_PORT: '0'
+          GATEWAY_SOCKS_PORT: '0'
+        run: python -m pytest -q tests/test_browser_engines.py

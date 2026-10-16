@@ -32,3 +32,6 @@ build/
 .ruff_cache/
 .hypothesis/
 api documentation - dichvusocks.net.pdf
+
+# Isolated browser profiles can contain private browsing data
+data/browser-profiles/

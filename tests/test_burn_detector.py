@@ -66,3 +66,11 @@ def test_a_completed_response_is_never_reported_as_a_timeout() -> None:
     # A completed response can still be a latency spike.
     spike = detector.classify(status_code=200, elapsed_ms=400, median_latency_ms=100)
     assert spike.reason == "Latency spike"
+
+
+@pytest.mark.parametrize("code", [10054, 10060, 10061])
+def test_winsock_connection_errors_are_recognized(code):
+    result = BurnDetector().classify(error=OSError(code, "synthetic-secret"))
+    assert result.burned
+    assert result.reason == "Connection failure"
+    assert "synthetic-secret" not in result.model_dump_json()

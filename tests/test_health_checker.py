@@ -29,13 +29,18 @@ class FakeProxy:
     requests: int = 0
     authenticated: bool = False
     raw_body: bytes | None = None
+    entered: asyncio.Event = field(default_factory=asyncio.Event)
+    release: asyncio.Event | None = None
 
     async def handle(self, request: web.Request) -> web.Response:
         self.active += 1
         self.peak = max(self.peak, self.active)
         self.requests += 1
+        self.entered.set()
         self.authenticated = request.headers.get("Proxy-Authorization", "").startswith("Basic ")
         try:
+            if self.release is not None:
+                await self.release.wait()
             await asyncio.sleep(self.delay)
             if self.raw_body is not None:
                 return web.Response(body=self.raw_body, content_type="application/json")
@@ -112,16 +117,17 @@ async def test_timeout_is_safe_and_requests_for_same_proxy_coalesce(
     db: aiosqlite.Connection,
     upstream: FakeProxy,
 ) -> None:
-    upstream.delay = 0.1
+    upstream.delay = 60
     key = Fernet.generate_key()
     pool = await Pool.load(db, key)
     proxy = await pool.add(parse_line(f"user:pw@127.0.0.1:{upstream.port}"))
-    checker = HealthChecker(pool, key, probe_url="http://probe.invalid", timeout_s=0.02)
+    checker = HealthChecker(pool, key, probe_url="http://probe.invalid", timeout_s=0.1)
     first, second = await asyncio.gather(checker.check_one(proxy.id), checker.check_one(proxy.id))
     assert first == second
     assert not first.ok
     assert first.error == "Timeout"
-    assert upstream.requests == 1
+    # The deadline can expire before the TCP server receives the request on Windows.
+    assert upstream.requests <= 1
     assert pool.all()[0].fail_count == 1
 
 
@@ -400,3 +406,24 @@ async def test_verified_import_discards_failures_before_storage(db, upstream):
     report = await pool.import_text(text, verify=checker.probe_candidate)
     assert report.imported == 0 and report.skipped == 2
     assert upstream.requests == previous_requests
+
+
+async def test_same_proxy_checks_share_one_inflight_request(db, upstream):
+    key = Fernet.generate_key()
+    pool = await Pool.load(db, key)
+    proxy = await pool.add(parse_line(f"127.0.0.1:{upstream.port}"))
+    checker = HealthChecker(pool, key, probe_url="http://probe.invalid", timeout_s=10)
+    upstream.release = asyncio.Event()
+    checks = [asyncio.create_task(checker.check_one(proxy.id)) for _ in range(2)]
+    try:
+        await asyncio.wait_for(upstream.entered.wait(), 5)
+        upstream.release.set()
+        first, second = await asyncio.gather(*checks)
+        assert first == second and first.ok
+        assert upstream.requests == 1
+        assert pool.all()[0].success_count == 1
+    finally:
+        upstream.release.set()
+        for task in checks:
+            task.cancel()
+        await asyncio.gather(*checks, return_exceptions=True)

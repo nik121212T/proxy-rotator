@@ -177,3 +177,164 @@ async def test_engine_download_runs_once_and_shutdown_cancels_it(db, tmp_path, m
     assert len(processes) == 1
     assert processes[0].returncode is not None
     assert not service._install_tasks
+
+
+async def test_rotation_browser_availability_respects_selection(db, tmp_path):
+    from app.browser_manager import BrowserSession
+    from app.gateway_http import HttpGateway
+    from app.models import RotationSelection
+
+    key = Fernet.generate_key()
+    pool = await Pool.load(db, key)
+    proxy = await pool.add(parse_line("proxy.invalid:80"))
+    await pool.mark_success(proxy.id, 10)
+    rotator = Rotator()
+    service = BrowserManager(pool, rotator, key, tmp_path)
+    service.sessions["test"] = BrowserSession("test", "test", None, tmp_path / "test", HttpGateway(pool, rotator, key))
+    rotator.selection = RotationSelection(country="FR")
+    assert service.session_views()[0]["available"] is False
+    with pytest.raises(BrowserError, match="sélection"):
+        await service.launch("dedicated", "chromium", None, "https://example.invalid")
+    rotator.selection = RotationSelection()
+    assert service.session_views()[0]["available"] is True
+    service.sessions.clear()
+    await service.stop()
+
+
+async def test_browser_gateway_uses_configured_body_inspection(db, tmp_path, monkeypatch):
+    import sys
+
+    from app import browser_manager
+    from app.config import Settings
+
+    async def upstream(reader, writer):
+        await reader.readuntil(b"\r\n\r\n")
+        writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 7\r\nConnection: close\r\n\r\ncaptcha")
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+
+    server = await asyncio.start_server(upstream, "127.0.0.1", 0)
+    key = Fernet.generate_key()
+    pool = await Pool.load(db, key)
+    proxy = await pool.add(parse_line(f"127.0.0.1:{server.sockets[0].getsockname()[1]}"))
+    await pool.mark_success(proxy.id, 10)
+    monkeypatch.setattr(browser_manager, "discover_installed", lambda: [InstalledBrowser("chrome", "Chrome", "chromium", Path(sys.executable))])
+    monkeypatch.setattr(browser_manager, "native_arguments", lambda *a: [sys.executable, "-c", "import time; time.sleep(60)"])
+    settings = Settings(_env_file=None, master_secret="synthetic", burn_inspect_body=False, max_retry_per_request=0)
+    service = BrowserManager(pool, Rotator(), key, tmp_path / "profiles", settings=settings)
+    try:
+        identifier = await service.launch("installed", "chrome", proxy.id, "http://example.invalid")
+        port = int(service.sessions[identifier].gateway.status("").bound.rsplit(":", 1)[1])
+        reader, writer = await asyncio.open_connection("127.0.0.1", port)
+        writer.write(b"GET http://example.invalid/ HTTP/1.1\r\nHost: example.invalid\r\n\r\n")
+        await writer.drain()
+        response = await reader.read()
+        writer.close()
+        await writer.wait_closed()
+        assert b"captcha" in response
+        assert pool.all()[0].fail_count == 0
+    finally:
+        await service.stop()
+        server.close()
+        await server.wait_closed()
+
+
+async def test_failed_profile_cleanup_is_visible_and_retryable(db, tmp_path, monkeypatch):
+    import sys
+
+    from app import browser_manager
+
+    key = Fernet.generate_key()
+    pool = await Pool.load(db, key)
+    proxy = await pool.add(parse_line("proxy.invalid:80"))
+    await pool.mark_success(proxy.id, 10)
+    service = BrowserManager(pool, Rotator(), key, tmp_path / "profiles")
+    monkeypatch.setattr(browser_manager, "discover_installed", lambda: [InstalledBrowser("chrome", "Chrome", "chromium", Path(sys.executable))])
+    monkeypatch.setattr(browser_manager, "native_arguments", lambda *a: [sys.executable, "-c", "import time; time.sleep(60)"])
+    identifier = await service.launch("installed", "chrome", proxy.id, "http://example.invalid")
+    session = service.sessions[identifier]
+    original = browser_manager.shutil.rmtree
+    def locked(*args, **kwargs):
+        raise PermissionError("synthetic private path")
+    monkeypatch.setattr(browser_manager.shutil, "rmtree", locked)
+    try:
+        with pytest.raises(BrowserError, match="profil"):
+            await service.close_session(identifier)
+        assert service.session_views()[0]["close_error"]
+        assert session.gateway.status("").bound is None
+        assert session.profile.exists()
+        assert session.process.returncode is not None
+        monkeypatch.setattr(browser_manager.shutil, "rmtree", original)
+        await service.close_session(identifier)
+        assert not service.sessions
+        assert not session.profile.exists()
+    finally:
+        monkeypatch.setattr(browser_manager.shutil, "rmtree", original)
+        await service.stop()
+
+
+async def test_batch_launch_keeps_cleaning_after_one_close_fails(db, tmp_path, monkeypatch):
+    import httpx2 as httpx
+    from fastapi import FastAPI
+
+    from app.health_checker import HealthChecker
+    from app.routes import browsers
+    from app.runtime import Runtime
+
+    key = Fernet.generate_key()
+    pool = await Pool.load(db, key)
+    for n in range(3):
+        proxy = await pool.add(parse_line(f"proxy{n}.invalid:80"))
+        await pool.mark_success(proxy.id, 10)
+    service = BrowserManager(pool, Rotator(), key, tmp_path)
+    app = FastAPI()
+    app.state.runtime = Runtime(pool, HealthChecker(pool, key), Rotator(), "", "", browsers=service)
+    app.include_router(browsers.router)
+    closed = []
+
+    async def launch(source, browser_id, proxy_id, url):
+        if proxy_id == 3:
+            raise BrowserError("Ouverture impossible.")
+        return str(proxy_id)
+
+    async def close(identifier):
+        closed.append(identifier)
+        if identifier == "1":
+            raise BrowserError("Profil verrouillé.")
+
+    monkeypatch.setattr(service, "launch", launch)
+    monkeypatch.setattr(service, "close_session", close)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/browsers/sessions", json={
+            "source": "dedicated", "browser_id": "chromium", "mode": "fixed", "proxy_ids": [1, 2, 3],
+        })
+    assert response.status_code == 409
+    assert closed == ["1", "2"]
+    assert "fermeture" in response.json()["detail"]
+
+
+async def test_download_cleanup_failure_does_not_block_retry(db, tmp_path, monkeypatch):
+    from app import browser_manager
+
+    class Process:
+        returncode = None
+
+        async def wait(self):
+            raise TimeoutError
+
+    async def create(*args, **kwargs):
+        return Process()
+
+    async def terminate(process):
+        raise BrowserError("Fermeture refusée.")
+
+    monkeypatch.setattr(browser_manager.asyncio, "create_subprocess_exec", create)
+    monkeypatch.setattr(browser_manager, "terminate_process", terminate)
+    key = Fernet.generate_key()
+    pool = await Pool.load(db, key)
+    service = BrowserManager(pool, Rotator(), key, tmp_path)
+    service.install("firefox")
+    await service._install_tasks["firefox"]
+    assert not service._install_tasks
+    assert service.installs["firefox"] == "error"

@@ -341,3 +341,10 @@ exécutés sur cette machine.
 
 Références : [moteurs Playwright](https://playwright.dev/python/docs/browsers),
 [profils et configuration proxy](https://playwright.dev/python/docs/api/class-browsertype).
+
+## Distribution Windows
+
+Voir [le guide Windows](docs/WINDOWS.md) pour les prérequis, le lancement,
+les diagnostics et les limites de validation. Générer une archive sans données
+utilisateur : `python scripts/build_windows.py`. Python 3.11 x64 recommandé
+sous Windows (lanceur limité à 3.11–3.13 x64).

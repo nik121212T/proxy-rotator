@@ -5,7 +5,7 @@
   <title>Navigateurs · Proxy Rotator</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="stylesheet" href="/static/styles.css?v=browsers-22">
-  <script src="/static/browser_controls.js?v=1" defer></script>
+  <script src="/static/browser_controls.js?v=2" defer></script>
 </head>
 <body>
 {% include '_topnav.html' %}
@@ -20,7 +20,7 @@
         <select id="browser-choice" required disabled><option value="">Chargement…</option></select>
         <p id="browser-detection" class="helper"></p>
         <label for="browser-url">Page de départ</label>
-        <input id="browser-url" type="url" value="https://api.ipify.org" maxlength="2048" required>
+        <input id="browser-url" type="url" value="https://whoer.com/fr/" maxlength="2048" required>
         <label for="browser-mode">Connexion</label>
         <select id="browser-mode"><option value="rotation">Rotation du pool</option><option value="fixed">Proxy fixe — une fenêtre par proxy</option></select>
         <p id="browser-mode-help" class="helper">Utilise les réglages de rotation et de sélection du pool. Les connexions déjà ouvertes gardent leur proxy.</p>
@@ -31,7 +31,7 @@
         </div>
         <button type="submit" id="browser-open" class="wide" disabled>Ouvrir le navigateur</button>
       </form>
-      <p class="helper">Profils temporaires isolés : leurs cookies sont supprimés à la fermeture. Arrêter l’application ferme les sessions. L’IP indiquée est la dernière IP vérifiée ; un fournisseur peut la faire changer.</p>
+      <p class="helper">Profils temporaires isolés : leur suppression est vérifiée à la fermeture ; un échec est signalé pour réessayer. Arrêter l’application ferme les sessions. L’IP indiquée est la dernière IP vérifiée ; un fournisseur peut la faire changer.</p>
     </section>
     <section class="control-section" aria-labelledby="engines-title">
       <h2 id="engines-title">Moteurs dédiés à l’app</h2>

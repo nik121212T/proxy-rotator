@@ -27,7 +27,7 @@ class LaunchBrowser(BaseModel):
     browser_id: str = Field(pattern=r"^[a-z]+$", max_length=32)
     mode: Literal["rotation", "fixed"] = "rotation"
     proxy_ids: list[int] = Field(default_factory=list, max_length=8)
-    url: str = Field(default="https://api.ipify.org", max_length=2048)
+    url: str = Field(default="https://whoer.com/fr/", max_length=2048)
 
     @model_validator(mode="after")
     def fixed_requires_proxies(self) -> "LaunchBrowser":
@@ -79,15 +79,25 @@ async def launch_browser(body: LaunchBrowser, runtime: Services) -> dict[str, ob
         for identifier in ids:
             created.append(await service.launch(body.source, body.browser_id, identifier, body.url))
     except BaseException as exc:
+        cleanup_failed = False
         for session_id in created:
-            await service.close_session(session_id)
+            try:
+                await service.close_session(session_id)
+            except BrowserError:
+                cleanup_failed = True
         if isinstance(exc, BrowserError):
-            raise HTTPException(409, str(exc)) from None
+            detail = str(exc)
+            if cleanup_failed:
+                detail += " Une fermeture reste à terminer dans la liste des sessions."
+            raise HTTPException(409, detail) from None
         raise
     return {"opened": len(created), "sessions": created}
 
 
 @router.delete("/api/browsers/sessions/{identifier}")
 async def close_browser(identifier: str, runtime: Services) -> dict[str, bool]:
-    await manager(runtime).close_session(identifier)
+    try:
+        await manager(runtime).close_session(identifier)
+    except BrowserError as exc:
+        raise HTTPException(409, str(exc)) from None
     return {"closed": True}

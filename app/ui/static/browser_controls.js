@@ -43,7 +43,7 @@
       option.disabled = !engine.ready; dedicated.append(option);
       const row = document.createElement("div"); row.className = "browser-engine-row";
       const label = document.createElement("span");
-      label.textContent = engine.name + " · " + ({installing:"Téléchargement en cours…",error:"Téléchargement échoué — réessayez"}[engine.status] || (engine.ready ? "Prêt" : "Non téléchargé"));
+      label.textContent = engine.name + " · " + ({installing:"Téléchargement en cours…",error:engine.error || "Téléchargement échoué — réessayez"}[engine.status] || (engine.ready ? "Téléchargé" : "Non téléchargé"));
       row.append(label);
       if (!engine.ready || engine.status === "installing") {
         const button = document.createElement("button"); button.type = "button"; button.className = "secondary";
@@ -73,8 +73,8 @@
     for (const session of data.sessions) {
       const row = document.createElement("div"); row.className = "browser-session-row";
       const label = document.createElement("span");
-      label.textContent = session.name + " · " + (session.mode === "fixed" ? "Proxy #" + session.proxy_id + (session.exit_ip ? " · IP vérifiée : " + session.exit_ip : "") : "Rotation du pool") + (session.available ? "" : " · proxy indisponible");
-      const close = document.createElement("button"); close.type = "button"; close.className = "secondary"; close.textContent = "Fermer";
+      label.textContent = session.name + " · " + (session.mode === "fixed" ? "Proxy #" + session.proxy_id + (session.exit_ip ? " · IP vérifiée : " + session.exit_ip : "") : "Rotation du pool") + (session.available ? "" : " · proxy indisponible") + (session.close_error ? " · " + session.close_error : "");
+      const close = document.createElement("button"); close.type = "button"; close.className = "secondary"; close.textContent = session.close_error ? "Réessayer la fermeture" : "Fermer";
       close.addEventListener("click", async () => {
         close.disabled = true;
         try { await request("/api/browsers/sessions/" + session.id, {method:"DELETE"}); await refresh(); }
