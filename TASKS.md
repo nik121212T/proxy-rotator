@@ -508,3 +508,10 @@ script auto-attach).
   `scripts/build_windows.py`. Archive locale `dist/proxy-rotator-windows.zip`.
 - Limite conservée : les profils résiduels après fermeture ratée sont visibles
   et réessayables pendant la session, mais ne sont pas repris après redémarrage.
+
+- Première CI Windows du 16 octobre : six scénarios navigateurs réussis ;
+  suite générale 409 réussis, trois échecs et une erreur de nettoyage liée.
+  Corrections : le faux téléchargeur laisse maintenant passer taskkill ;
+  WSAETIMEDOUT reste un Timeout sur tous les OS ; le détecteur consulte aussi
+  os_error.winerror pour ERROR_CONNECTION_REFUSED (1225) de Proactor/aiohttp.
+  Régression locale ajoutée pour cette enveloppe d’exception.

@@ -72,5 +72,18 @@ def test_a_completed_response_is_never_reported_as_a_timeout() -> None:
 def test_winsock_connection_errors_are_recognized(code):
     result = BurnDetector().classify(error=OSError(code, "synthetic-secret"))
     assert result.burned
+    assert result.reason == ("Timeout" if code == 10060 else "Connection failure")
+    assert "synthetic-secret" not in result.model_dump_json()
+
+
+def test_windows_proactor_refusal_wrapped_by_aiohttp_is_recognized():
+    from types import SimpleNamespace
+
+    from aiohttp import ClientConnectorError
+
+    error = OSError(errno.EINVAL, "synthetic-secret")
+    error.winerror = 1225
+    wrapped = ClientConnectorError(SimpleNamespace(), error)
+    result = BurnDetector().classify(error=wrapped)
     assert result.reason == "Connection failure"
     assert "synthetic-secret" not in result.model_dump_json()

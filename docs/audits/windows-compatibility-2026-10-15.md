@@ -93,3 +93,15 @@ Sources exactes : API officielle PyPI `/pypi/<nom>/<version>/json`, fichiers lis
 7. Essai manuel Windows 11 dans une session standard : chemin avec espaces/accents, installation propre, double lancement, fermeture du terminal, import/export pays/compteurs, navigation Whoer et contrôle des fuites. Les résultats macOS et la CI historique ne remplacent pas cet essai.
 
 Artefacts de travail : `/tmp/proxy-windows-3.11-win_amd64.json` (résolution complète), `/tmp/proxy-windows-wheels.json` (matrice des fichiers PyPI), `/tmp/proxy-windows-ci.log` (journal historique), scripts de simulation `/tmp/proxy_windows_resolve.py` et `/tmp/proxy_windows_wheels.py`. Ce sont des artefacts temporaires ; les conclusions et sources durables sont consignées ici.
+
+## Complément du 16 octobre 2026
+
+La [première exécution de reprise](https://github.com/nik121212T/proxy-rotator/actions/runs/38911388193)
+a validé les six scénarios des trois navigateurs sur Windows. La suite générale
+révèle que les seuls codes Winsock ne suffisent pas : Proactor peut préserver
+le code Win32 dans `os_error.winerror` de l’exception aiohttp, avec un errno
+non spécifique. Le détecteur reconnaît désormais également le
+[code Win32 1225, ERROR_CONNECTION_REFUSED](https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--1000-1299-).
+Le timeout Winsock 10060 est classé Timeout de façon identique sur les OS.
+Le test du téléchargeur ne remplace plus la commande Windows taskkill par un
+faux téléchargement, ce qui empêchait le nettoyage du sous-processus de test.

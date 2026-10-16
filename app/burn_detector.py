@@ -39,18 +39,20 @@ class BurnDetector:
         # The elapsed-time rule only applies when no response arrived. The
         # gateway bounds a request by idle time rather than total duration, so a
         # slow but completed transfer must not be reported as a timeout.
-        if isinstance(error, TimeoutError) or (
+        # aiohttp preserves errno but keeps Windows winerror only on os_error.
+        underlying = getattr(error, "os_error", None)
+        transport_error = underlying if isinstance(underlying, OSError) else error
+        code = transport_error.errno if isinstance(transport_error, OSError) else None
+        winerror = getattr(transport_error, "winerror", None)
+        if isinstance(transport_error, TimeoutError) or code in {errno.ETIMEDOUT, 10060} or winerror == 10060 or (
             status_code is None and elapsed_ms > self.timeout_s * 1000
         ):
             return BurnResult(burned=True, reason="Timeout")
-        if isinstance(error, OSError) and error.errno in {
-            errno.ECONNREFUSED,
-            errno.ECONNRESET,
-            errno.ETIMEDOUT,
-            10054,  # WSAECONNRESET (also preserved by aiohttp on Windows)
-            10060,  # WSAETIMEDOUT
-            10061,  # WSAECONNREFUSED
-        }:
+        if isinstance(transport_error, OSError) and (
+            code in {errno.ECONNREFUSED, errno.ECONNRESET, 10054, 10061}
+            or winerror in {10054, 10061, 1225, 1236}
+            or isinstance(transport_error, ConnectionRefusedError | ConnectionResetError)
+        ):
             return BurnResult(burned=True, reason="Connection failure")
         media_type = (content_type or "").partition(";")[0].strip().lower()
         if (

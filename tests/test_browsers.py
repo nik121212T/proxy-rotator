@@ -162,6 +162,8 @@ async def test_engine_download_runs_once_and_shutdown_cancels_it(db, tmp_path, m
     processes = []
 
     async def subprocess(*args, **kwargs):
+        if args[0] == "taskkill":
+            return await original(*args, **kwargs)
         assert args[1:4] == ("-m", "playwright", "install")
         process = await original(sys.executable, "-c", "import time; time.sleep(60)", **kwargs)
         processes.append(process)
