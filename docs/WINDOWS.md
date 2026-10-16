@@ -52,9 +52,11 @@ rotation, pool vide, absence de repli HTTP direct, fermeture, libération du por
 et suppression du profil. Les serveurs de test sont locaux ; seuls ces tests
 acceptent leur certificat TLS temporaire. Le produit conserve ses vérifications TLS.
 
-Au 16 octobre 2026, cette nouvelle vérification Windows est préparée dans le
-workflow local, mais son exécution Windows reste à effectuer. Les tests macOS
-et les simulations d’erreurs Winsock ne certifient pas Windows. Un essai manuel
-sur Windows reste requis, notamment pour les navigateurs installés, les chemins
-accentués, l’arrêt du terminal et les fuites DNS/WebRTC. Les tests HTTP ne sont
-pas une certification d’absence de toute fuite réseau.
+Le 16 octobre 2026, la [CI du commit 58f7cd6](https://github.com/nik121212T/proxy-rotator/actions/runs/38912519830)
+a réussi sur Windows, macOS et Linux, ainsi que l’audit des dépendances.
+Les six scénarios des navigateurs réels ont réussi sur le runner Windows
+(Python 3.11), et Ruff/mypy sont verts. Les trois moteurs ont aussi été testés
+réellement sur macOS. Un essai manuel sur Windows 11 reste recommandé,
+notamment pour les navigateurs installés, les chemins accentués, l’arrêt du
+terminal et les fuites DNS/WebRTC. Les tests HTTP ne sont pas une certification
+d’absence de toute fuite réseau.

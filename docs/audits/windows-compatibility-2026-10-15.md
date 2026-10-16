@@ -105,3 +105,8 @@ non spécifique. Le détecteur reconnaît désormais également le
 Le timeout Winsock 10060 est classé Timeout de façon identique sur les OS.
 Le test du téléchargeur ne remplace plus la commande Windows taskkill par un
 faux téléchargement, ce qui empêchait le nettoyage du sous-processus de test.
+
+Validation finale : [exécution 38912519830, commit 58f7cd6](https://github.com/nik121212T/proxy-rotator/actions/runs/38912519830).
+Suite générale Windows et six scénarios navigateurs Windows réussis ; suites
+macOS/Linux, Ruff/mypy et audit des dépendances également réussis. Voir le
+guide `docs/WINDOWS.md` pour la distribution et les limites des essais.

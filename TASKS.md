@@ -492,7 +492,7 @@ script auto-attach).
 - [x] Respecter les réglages de passerelle et les filtres en mode rotation.
 - [x] Vérifier fermeture et suppression des profils, signaler/reprendre les échecs.
 - [x] Encadrer Python Windows et améliorer les diagnostics des moteurs.
-- [ ] Tests Windows des trois moteurs, HTTP/HTTPS et absence de repli direct.
+- [x] Tests Windows des trois moteurs, HTTP/HTTPS et absence de repli direct.
 - [x] Distribution Windows propre avec instructions et sans données utilisateur.
 
 - Reprise du 16 octobre : nettoyage des lancements multiples poursuivi même si
@@ -515,3 +515,20 @@ script auto-attach).
   WSAETIMEDOUT reste un Timeout sur tous les OS ; le détecteur consulte aussi
   os_error.winerror pour ERROR_CONNECTION_REFUSED (1225) de Proactor/aiohttp.
   Régression locale ajoutée pour cette enveloppe d’exception.
+
+### T13 — Validation finale et point de reprise (16 octobre 2026)
+
+- **Terminé et sauvegardé** sur `fix/windows-browser-sessions-20261016`.
+  Code validé : `58f7cd6`. Branche envoyée au dépôt privé ; main non fusionnée.
+- [CI finale](https://github.com/nik121212T/proxy-rotator/actions/runs/38912519830) :
+  Windows/macOS/Linux, Ruff, mypy et audit des dépendances réussis. Six scénarios
+  réels des trois moteurs Windows réussis. Dernière régression macOS générale :
+  420 tests réussis, 8 ignorés (dont 6 navigateurs déjà exécutés séparément).
+- Application locale redémarrée et contrôlée : `/healthz`, `/navigateurs` et
+  `/api/browsers` répondent ; trois moteurs disponibles, aucune session ouverte.
+  Adresse : http://127.0.0.1:8081.
+- Archive finale : `dist/proxy-rotator-windows.zip`, reconstruite depuis les
+  sources corrigées ; guide `docs/WINDOWS.md`, aucun secret/base/profil inclus.
+- Suite éventuelle : essai utilisateur manuel Windows 11, puis intégration de
+  la branche dans main. La CI ne certifie pas les fuites DNS/WebRTC ni toutes
+  les configurations de navigateurs installés. Aucun nouveau chantier lancé.
