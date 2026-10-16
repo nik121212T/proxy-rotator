@@ -147,7 +147,8 @@ async def test_browser_api_validates_choices_and_rolls_back_partial_launch(db, t
         page = await client.get("/navigateurs")
         assert page.status_code == 200
         assert "browser_controls.js" in page.text
-        assert "Profils temporaires isolés" in page.text
+        assert "profils temporaires isolés" in page.text
+        assert "bitbrowser-connect" in page.text
     await service.stop()
 
 

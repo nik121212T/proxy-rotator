@@ -267,15 +267,25 @@ vide et `X-Line-Count: 0`, sans repli sur tous les pays.
 - `POST /api/browsers/install/{engine}`: start a background download for `chromium`,
   `firefox` or `webkit`; repeated requests share the running install. Status is
   exposed in the catalog. Downloads time out after 15 minutes.
-- `POST /api/browsers/sessions`: JSON `{source: "installed"|"dedicated",
+- `POST /api/browsers/sessions`: JSON `{source: "installed"|"dedicated"|"bitbrowser",
   browser_id: "chrome"|"firefox"|..., mode: "rotation"|"fixed",
   proxy_ids: [1,2], url: "https://api.ipify.org"}`. Fixed mode requires 1–8 IDs;
   rotation mode opens one window. Only http(s) URLs without credentials are accepted.
   Opening several windows rolls back the newly opened group if a launch fails.
 - `DELETE /api/browsers/sessions/{id}`: close an app-owned session and gateway,
-  remove its temporary profile. Unknown IDs are harmless and idempotent.
+  remove its temporary profile. BitBrowser profiles remain stored in BitBrowser.
+  Unknown session IDs are harmless and idempotent.
 
 There are at most eight active sessions. Browser executables are resolved from
 an internal discovery list, never supplied as arbitrary request paths. Installed
 Firefox uses a private profile; dedicated Firefox uses Playwright's supported
 build. The manager closes its processes/contexts and install jobs on shutdown.
+
+- `PUT /api/browsers/bitbrowser/connection`: JSON `{port: 54345, api_key: "..."}`.
+  Tests the local API before encrypting the settings. A null/omitted key preserves
+  the saved key. Returns `{connected: true}`; refuses changes while a BitBrowser
+  session is tracked. Only 127.0.0.1 is supported.
+- BitBrowser launches use `source: "bitbrowser", browser_id: "bitbrowser"`.
+  Creates/reuses an app-owned profile per fixed proxy or one rotation profile.
+  The catalog exposes only `bitbrowser: {configured, port}`, never the API key.
+  See [BitBrowser setup and validation limits](BITBROWSER.md).

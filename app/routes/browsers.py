@@ -5,8 +5,9 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from playwright.async_api import Error
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
+from app.bitbrowser import BitBrowserError
 from app.browser_manager import BrowserError, BrowserManager
 from app.routes.proxies import Services
 from app.runtime import Runtime
@@ -23,7 +24,7 @@ def manager(runtime: Runtime) -> BrowserManager:
 
 class LaunchBrowser(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    source: Literal["installed", "dedicated"]
+    source: Literal["installed", "dedicated", "bitbrowser"]
     browser_id: str = Field(pattern=r"^[a-z]+$", max_length=32)
     mode: Literal["rotation", "fixed"] = "rotation"
     proxy_ids: list[int] = Field(default_factory=list, max_length=8)
@@ -110,3 +111,24 @@ async def uninstall_engine(engine: Literal["chromium", "firefox", "webkit"], run
     except BrowserError as exc:
         raise HTTPException(409, str(exc)) from None
     return {"removed": True}
+
+
+class BitBrowserConnection(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    port: int = Field(default=54345, ge=1, le=65535)
+    api_key: SecretStr | None = None
+
+
+@router.put("/api/browsers/bitbrowser/connection")
+async def connect_bitbrowser(body: BitBrowserConnection, runtime: Services) -> dict[str, bool]:
+    service = manager(runtime)
+    async with service._lock:
+        if service.bitbrowser is None:
+            raise HTTPException(503, "Configuration BitBrowser indisponible.")
+        if any(s.bitbrowser_id for s in service.sessions.values()):
+            raise HTTPException(409, "Fermez les sessions BitBrowser avant de modifier la connexion.")
+        try:
+            await service.bitbrowser.configure(body.port, body.api_key)
+        except BitBrowserError as exc:
+            raise HTTPException(409, str(exc)) from None
+    return {"connected": True}

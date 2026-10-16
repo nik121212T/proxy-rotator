@@ -562,3 +562,16 @@ script auto-attach).
   calcul mise en cache 30 s, invalidation après installation/suppression.
   Dossiers inconnus et liens symboliques refusés ; ffmpeg et autres moteurs
   préservés. Cache Playwright partagé signalé dans la confirmation.
+
+## T16 — Profils BitBrowser réservés au gestionnaire (16 octobre 2026)
+
+- [x] Connexion à l’API locale configurable dans Navigateurs ; clé chiffrée.
+- [x] Création et réutilisation d’un profil rotation et d’un profil par proxy fixe.
+- [x] Passerelle privée, fermeture et suivi ; ne modifier que les profils créés ici.
+- [x] Tests avec API locale simulée et documentation.
+- [ ] Essai réel : BitBrowser absent sur le Mac ; installation et connexion du compte nécessaires.
+
+Validation T16 : 430 tests réussis, 8 ignorés ; Ruff, mypy et syntaxe JS verts.
+Parcours Chrome avec API simulée : connexion, sélection, effacement du champ clé ;
+mobile sans débordement. Profils réutilisés, propriété contrôlée et passerelle
+arrêtée même si la fermeture distante échoue.

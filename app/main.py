@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
+from app.bitbrowser import BitBrowserClient
 from app.browser_manager import BrowserManager
 from app.burn_detector import BurnDetector
 from app.config import Settings
@@ -132,7 +133,7 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
             )
             cleanup.push_async_callback(geo_service.stop)
             geo_service.start(pool)
-            browser_manager = BrowserManager(pool, rotator, key, config.db_path.parent / "browser-profiles", settings=config)
+            browser_manager = BrowserManager(pool, rotator, key, config.db_path.parent / "browser-profiles", settings=config, bitbrowser=await BitBrowserClient.load(conn, key))
             cleanup.push_async_callback(browser_manager.stop)
             yield Runtime(
                 browsers=browser_manager,

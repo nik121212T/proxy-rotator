@@ -10,6 +10,7 @@
   let opening = false;
   let refreshing = false;
   let loaded = false;
+  let bitbrowserLoaded = false;
   function message(text, error = false) {
     feedback.textContent = text;
     feedback.className = error ? "error" : "helper";
@@ -90,6 +91,15 @@
       engines.append(row);
     }
     choice.append(dedicated);
+    const bitbrowser = data.bitbrowser || {configured: false, port: 54345};
+    const bitOption = new Option("BitBrowser" + (bitbrowser.configured ? " — profils conservés" : " — à connecter ci-dessous"), "bitbrowser:bitbrowser");
+    bitOption.disabled = !bitbrowser.configured;
+    choice.append(bitOption);
+    if (!bitbrowserLoaded) {
+      document.getElementById("bitbrowser-port").value = bitbrowser.port;
+      document.getElementById("bitbrowser-status").textContent = bitbrowser.configured ? "Configuration enregistrée. Vous pouvez choisir BitBrowser ci-dessus." : "Connectez BitBrowser pour le choisir comme navigateur.";
+      bitbrowserLoaded = true;
+    }
     if ([...choice.options].some(option => option.value === previous && !option.disabled)) choice.value = previous;
     choice.disabled = opening;
     document.getElementById("browser-detection").textContent = data.installed.length ? "Navigateurs détectés automatiquement. Chaque ouverture utilise un profil séparé." : "Aucun navigateur installé reconnu. Téléchargez un moteur dédié.";
@@ -140,6 +150,23 @@
       message(data.opened + " session(s) ouverte(s). Les fenêtres apparaissent sur cet ordinateur.");
     } catch (error) { message(error.message, true); }
     finally { opening = false; choice.disabled = false; await refresh(); updateMode(); }
+  });
+  document.getElementById("bitbrowser-connect").addEventListener("submit", async event => {
+    event.preventDefault();
+    const button = event.currentTarget.querySelector("button");
+    const status = document.getElementById("bitbrowser-status");
+    const key = document.getElementById("bitbrowser-key");
+    button.disabled = true;
+    status.textContent = "Vérification de l’API locale…";
+    try {
+      await request("/api/browsers/bitbrowser/connection", {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify({port: Number(document.getElementById("bitbrowser-port").value), api_key: key.value || null})});
+      key.value = "";
+      status.textContent = "Connexion vérifiée. Choisissez BitBrowser pour créer votre premier profil.";
+      await refresh();
+      choice.value = "bitbrowser:bitbrowser";
+      updateMode();
+    } catch (error) { status.textContent = error.message; }
+    finally { button.disabled = false; }
   });
   refresh();
   setInterval(() => { if (!document.hidden) refresh(); }, 3000);

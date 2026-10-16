@@ -5,7 +5,7 @@
   <title>Navigateurs · Proxy Rotator</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="stylesheet" href="/static/styles.css?v=engine-storage-24">
-  <script src="/static/browser_controls.js?v=engine-storage-3" defer></script>
+  <script src="/static/browser_controls.js?v=bitbrowser-1" defer></script>
 </head>
 <body>
 {% include '_topnav.html' %}
@@ -31,7 +31,7 @@
         </div>
         <button type="submit" id="browser-open" class="wide" disabled>Ouvrir le navigateur</button>
       </form>
-      <p class="helper">Profils temporaires isolés : leur suppression est vérifiée à la fermeture ; un échec est signalé pour réessayer. Arrêter l’application ferme les sessions. L’IP indiquée est la dernière IP vérifiée ; un fournisseur peut la faire changer.</p>
+      <p class="helper">Navigateurs installés et moteurs dédiés : profils temporaires isolés. leur suppression est vérifiée à la fermeture ; un échec est signalé pour réessayer. BitBrowser conserve ses profils et cookies après fermeture. Arrêter l’application ferme les sessions. L’IP indiquée est la dernière IP vérifiée ; un fournisseur peut la faire changer.</p>
     </section>
     <section class="control-section" aria-labelledby="engines-title">
       <h2 id="engines-title">Moteurs dédiés à l’app</h2>
@@ -40,6 +40,19 @@
       <p class="helper">WebKit est le moteur de Safari, pas Safari. Safari installé ne permet pas ici de régler un proxy par session ; il est détecté mais ne sera pas lancé. Le proxy concerne la navigation web, pas tout le trafic du système.</p>
     </section>
   </div>
+  <section class="control-section" aria-labelledby="bitbrowser-title">
+    <h2 id="bitbrowser-title">BitBrowser</h2>
+    <p class="helper">Installez et ouvrez <a href="https://www.bitbrowser.net/" target="_blank" rel="noopener noreferrer">BitBrowser</a>, connectez votre compte et activez son API locale. Aucun profil à préparer : l’app en crée un par proxy fixe et un pour la rotation, puis les réutilise avec leurs cookies.</p>
+    <form id="bitbrowser-connect">
+      <label for="bitbrowser-port">Port de l’API locale</label>
+      <input id="bitbrowser-port" type="number" min="1" max="65535" value="54345" required>
+      <label for="bitbrowser-key">Clé API BitBrowser</label>
+      <input id="bitbrowser-key" type="password" autocomplete="off" placeholder="Laisser vide pour garder la clé enregistrée">
+      <button type="submit">Connecter / vérifier</button>
+    </form>
+    <p id="bitbrowser-status" class="helper" role="status">Configuration non enregistrée.</p>
+    <p class="helper">Gardez BitBrowser et le gestionnaire ouverts pendant la navigation. Fermer une session conserve son profil ; vous pouvez le supprimer dans BitBrowser.</p>
+  </section>
   <section class="control-section" aria-labelledby="sessions-title">
     <h2 id="sessions-title">Sessions ouvertes</h2>
     <div id="browser-sessions"><p>Aucune session ouverte depuis l’app.</p></div>

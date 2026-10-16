@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 
 from playwright.async_api import BrowserContext, Error, Playwright, async_playwright
 
+from app.bitbrowser import BitBrowserClient, BitBrowserError
 from app.browser_catalog import ENGINES, discover_installed, firefox_preferences, native_arguments
 from app.browser_storage import delete_engine, engine_folders, installed_size
 from app.burn_detector import BurnDetector
@@ -54,6 +55,7 @@ class BrowserSession:
     watcher: asyncio.Task[None] | None = None
     close_error: str | None = None
     engine: str | None = None
+    bitbrowser_id: str | None = None
 
 
 def remove_profile(profile: Path) -> None:
@@ -99,10 +101,11 @@ async def terminate_process(process: asyncio.subprocess.Process) -> None:
 
 
 class BrowserManager:
-    def __init__(self, pool: Pool, rotator: Rotator, key: bytes, root: Path, *, headless: bool = False, settings: Settings | None = None) -> None:
+    def __init__(self, pool: Pool, rotator: Rotator, key: bytes, root: Path, *, headless: bool = False, settings: Settings | None = None, bitbrowser: BitBrowserClient | None = None) -> None:
         self.pool, self.rotator, self.key = pool, rotator, key
         self.root = root
         self.settings = settings
+        self.bitbrowser = bitbrowser
         self.headless = headless
         self.sessions: dict[str, BrowserSession] = {}
         self.installs: dict[str, str] = {}
@@ -145,6 +148,8 @@ class BrowserManager:
         return {
             "installed": [{"id": b.id, "name": b.name, "engine": b.engine, "supported": b.supported} for b in installed],
             "dedicated": dedicated,
+            "bitbrowser": {"configured": bool(self.bitbrowser and self.bitbrowser.configured),
+                           "port": self.bitbrowser.port if self.bitbrowser else 54345},
         }
 
     def session_views(self) -> list[dict[str, object]]:
@@ -226,7 +231,7 @@ class BrowserManager:
                 self._removing.discard(engine)
                 self._sizes.pop(engine, None)
 
-    async def launch(self, source: Literal["installed", "dedicated"], browser_id: str, proxy_id: int | None, url: str) -> str:
+    async def launch(self, source: Literal["installed", "dedicated", "bitbrowser"], browser_id: str, proxy_id: int | None, url: str) -> str:
         try:
             parsed = urlsplit(url)
         except ValueError:
@@ -242,6 +247,11 @@ class BrowserManager:
                 raise BrowserError("Aucun proxy disponible. Importez et testez vos proxies.")
             if proxy_id is None and not self.rotator.eligible(self.pool):
                 raise BrowserError("Aucun proxy disponible pour la sélection de rotation actuelle.")
+            if source == "bitbrowser":
+                if browser_id != "bitbrowser" or not self.bitbrowser or not self.bitbrowser.configured:
+                    raise BrowserError("Connectez BitBrowser dans le panneau ci-dessous.")
+                if any(s.bitbrowser_id and s.proxy_id == proxy_id for s in self.sessions.values()):
+                    raise BrowserError("Ce profil BitBrowser possède déjà une session ouverte.")
             installed = next((b for b in await asyncio.to_thread(discover_installed) if b.id == browser_id), None) if source == "installed" else None
             if source == "installed" and (installed is None or not installed.supported):
                 raise BrowserError("Navigateur absent ou incompatible avec un proxy isolé. Utilisez un moteur dédié.")
@@ -265,7 +275,12 @@ class BrowserManager:
                 bound = gateway.status("").bound
                 assert bound is not None
                 port = int(bound.rsplit(":", 1)[1])
-                if installed:
+                if source == "bitbrowser":
+                    assert self.bitbrowser is not None
+                    session.name = "BitBrowser · " + ("Rotation" if proxy_id is None else f"Proxy #{proxy_id}")
+                    session.bitbrowser_id = await self.bitbrowser.prepare(proxy_id, port, url)
+                    await self.bitbrowser.open(session.bitbrowser_id)
+                elif installed:
                     args = await asyncio.to_thread(native_arguments, installed, profile, port, url)
                     session.process = await asyncio.create_subprocess_exec(
                         *args, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
@@ -303,13 +318,19 @@ class BrowserManager:
                     session.close_error = "Nettoyage incomplet après un échec de lancement. Réessayez la fermeture."
                     self.sessions[identifier] = session
                     raise
+                if isinstance(exc, BitBrowserError):
+                    raise BrowserError(str(exc)) from None
                 if isinstance(exc, Error | OSError):
                     raise BrowserError("Ouverture impossible. Vérifiez l’installation du navigateur et l’accès au bureau. Sous Windows, vérifiez aussi les composants Visual C++ et Media Foundation (voir le guide Windows).") from None
                 raise
 
     async def _watch(self, session: BrowserSession) -> None:
         try:
-            if session.process:
+            if session.bitbrowser_id:
+                assert self.bitbrowser is not None
+                while await self.bitbrowser.running(session.bitbrowser_id):
+                    await asyncio.sleep(3)
+            elif session.process:
                 await session.process.wait()
             elif session.context:
                 while session.context.browser and session.context.browser.is_connected():
@@ -317,15 +338,23 @@ class BrowserManager:
             await self.close_session(session.id)
         except asyncio.CancelledError:
             pass
+        except BitBrowserError:
+            await session.gateway.stop()
+            session.close_error = "Suivi BitBrowser interrompu. Connexion proxy arrêtée ; réessayez la fermeture."
         except BrowserError:
             logger.warning("browser_cleanup_pending session=%s", session.id)
 
     async def _dispose(self, session: BrowserSession) -> None:
         try:
+            if session.bitbrowser_id:
+                assert self.bitbrowser is not None
+                await self.bitbrowser.close(session.bitbrowser_id)
             if session.context:
                 await session.context.close()
             if session.process:
                 await terminate_process(session.process)
+        except BitBrowserError as exc:
+            raise BrowserError(str(exc)) from None
         except (Error, OSError, TimeoutError) as exc:
             raise BrowserError("Fermeture du navigateur incomplète. Réessayez après avoir fermé sa fenêtre.") from exc
         finally:
