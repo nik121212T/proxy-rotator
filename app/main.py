@@ -27,7 +27,7 @@ from app.health_checker import HealthChecker
 from app.pool import Pool
 from app.providers.dichvusocks import DichvusocksClient
 from app.rotator import Rotator
-from app.routes import browsers, events, gateway, geo, providers, proxies, ui
+from app.routes import browsers, events, gateway, geo, providers, proxies, ui, updates
 from app.routes import pool as pool_routes
 from app.runtime import Runtime
 from app.salt import load_or_create_salt
@@ -39,6 +39,7 @@ from app.security import (
     configured_hosts,
     is_loopback,
 )
+from app.updater import UpdateChecker
 from app.views import UI_DIR, templates
 
 logger = logging.getLogger(__name__)
@@ -135,6 +136,15 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
             geo_service.start(pool)
             browser_manager = BrowserManager(pool, rotator, key, config.db_path.parent / "browser-profiles", settings=config, bitbrowser=await BitBrowserClient.load(conn, key))
             cleanup.push_async_callback(browser_manager.stop)
+            updater = (
+                UpdateChecker(
+                    repo=config.updates_repo,
+                    cache_ttl_s=config.updates_check_interval_hours * 3600,
+                    timeout_s=config.updates_timeout_s,
+                )
+                if config.updates_enabled
+                else None
+            )
             yield Runtime(
                 browsers=browser_manager,
                 pool=pool,
@@ -147,6 +157,7 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
                 socks5_gateway=socks5_gateway,
                 geo=geo_service,
                 dichvusocks=dichvusocks_client,
+                updater=updater,
                 db_conn=conn,
             )
 
@@ -202,7 +213,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.runtime = None
     app.state.config_failed = False
     app.state.admin_token_required = bool(admin_token)
-    for router in (browsers.router, proxies.router, pool_routes.router, gateway.router, events.router, geo.router, providers.router, ui.router):
+    for router in (browsers.router, proxies.router, pool_routes.router, gateway.router, events.router, geo.router, providers.router, updates.router, ui.router):
         app.include_router(router)
 
     @app.get("/login", response_class=HTMLResponse, include_in_schema=False)

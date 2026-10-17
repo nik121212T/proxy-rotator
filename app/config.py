@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     geolocation_cache_ttl_s: int = Field(default=30 * 24 * 3600, ge=60)
     geolocation_timeout_s: float = Field(default=4.0, gt=0)
 
+    # ── Updates (git-based, opt-out; see docs/UPDATES.md) ─────────────────
+    updates_enabled: bool = True
+    updates_repo: str = "nik121212T/proxy-rotator"
+    updates_check_interval_hours: int = Field(default=24, ge=1, le=168)
+    updates_timeout_s: float = Field(default=5.0, gt=0)
+
     # ── Dichvusocks provider (opt-in SOCKS5 import source) ─────────────────
     dichvusocks_api_token: SecretStr | None = None
     dichvusocks_base_url: str = "https://dichvusocks.net/api/v1"

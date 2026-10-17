@@ -652,3 +652,113 @@
     }
   })();
 
+
+  // ── Updates (git-based auto-update) ───────────────────────────────────
+  (async function initUpdates() {
+    const badge = document.getElementById('update-badge');
+    const card = document.getElementById('updates-card');
+    const dataFields = card
+      ? Array.from(card.querySelectorAll('[data-field]'))
+      : [];
+    const status = card ? document.getElementById('updates-status') : null;
+    const checkBtn = card ? document.getElementById('updates-check') : null;
+    const applyBtn = card ? document.getElementById('updates-apply') : null;
+    const releaseLink = card ? document.getElementById('updates-release-link') : null;
+    const output = card ? document.getElementById('updates-output') : null;
+
+    function render(payload) {
+      if (payload == null || payload.enabled === false) {
+        if (badge) badge.hidden = true;
+        if (status) status.textContent = 'Mises à jour désactivées.';
+        if (applyBtn) applyBtn.hidden = true;
+        return;
+      }
+      for (const el of dataFields) {
+        el.textContent = payload[el.dataset.field] ?? '—';
+      }
+      const available = Boolean(payload.available);
+      if (badge) {
+        badge.hidden = !available;
+        const latest = badge.querySelector('[data-field="latest"]');
+        if (latest) latest.textContent = payload.latest ? 'v' + payload.latest : '';
+      }
+      if (applyBtn) applyBtn.hidden = !available;
+      if (releaseLink) {
+        if (payload.release_url) {
+          releaseLink.href = payload.release_url;
+          releaseLink.hidden = false;
+        } else {
+          releaseLink.hidden = true;
+        }
+      }
+      if (status) {
+        if (payload.error) {
+          status.textContent = 'Vérification impossible : ' + payload.error;
+          status.dataset.state = 'error';
+        } else if (available) {
+          status.textContent = 'Nouvelle version disponible.';
+          status.dataset.state = 'good';
+        } else {
+          status.textContent = 'Vous êtes à jour.';
+          status.dataset.state = 'ok';
+        }
+      }
+    }
+
+    async function pull(force) {
+      try {
+        const url = force ? '/api/updates/check' : '/api/updates/status';
+        const method = force ? 'POST' : 'GET';
+        const resp = await fetch(url, { method });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        render(await resp.json());
+      } catch (err) {
+        if (status) {
+          status.textContent = 'Impossible de contacter le vérificateur : ' + err.message;
+          status.dataset.state = 'error';
+        }
+      }
+    }
+
+    if (badge && !card) {
+      await pull(false);
+      return;
+    }
+    if (!card) return;
+
+    checkBtn?.addEventListener('click', async () => {
+      checkBtn.disabled = true;
+      status.textContent = 'Vérification en cours…';
+      await pull(true);
+      checkBtn.disabled = false;
+    });
+
+    applyBtn?.addEventListener('click', async () => {
+      if (!window.confirm('Appliquer la mise à jour maintenant ? L\'application doit être relancée après.')) return;
+      applyBtn.disabled = true;
+      checkBtn.disabled = true;
+      status.textContent = 'Mise à jour en cours… (git fetch + pull + pip install)';
+      try {
+        const resp = await fetch('/api/updates/apply', { method: 'POST' });
+        const body = await resp.json();
+        output.hidden = false;
+        output.textContent = body.output || '';
+        if (resp.ok && body.ok) {
+          status.textContent = body.message || 'Mise à jour appliquée. Relancez l\'application.';
+          status.dataset.state = 'good';
+          applyBtn.hidden = true;
+        } else {
+          status.textContent = body.message || body.detail || 'Mise à jour échouée.';
+          status.dataset.state = 'error';
+        }
+      } catch (err) {
+        status.textContent = 'Erreur : ' + err.message;
+        status.dataset.state = 'error';
+      } finally {
+        applyBtn.disabled = false;
+        checkBtn.disabled = false;
+      }
+    });
+
+    await pull(false);
+  })();

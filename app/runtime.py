@@ -15,6 +15,7 @@ from app.models import GatewayStatus, ListenerStatus
 from app.pool import Pool
 from app.providers.dichvusocks import DichvusocksClient
 from app.rotator import Rotator
+from app.updater import UpdateChecker
 
 
 @dataclass(repr=False)
@@ -30,6 +31,7 @@ class Runtime:
     socks5_gateway: SocksGateway | None = field(default=None)
     geo: GeolocationService | None = field(default=None)
     dichvusocks: DichvusocksClient | None = field(default=None)
+    updater: UpdateChecker | None = field(default=None)
     browsers: BrowserManager | None = None
     imports: ImportTracker = field(default_factory=ImportTracker)
     gateway_test_locks: dict[str, asyncio.Lock] = field(default_factory=dict)

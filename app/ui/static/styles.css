@@ -1074,3 +1074,42 @@ footer { padding-bottom: 88px; }
 .import-status progress.is-idle { visibility: hidden; }
 #import-feedback { overflow-wrap: anywhere; }
 #import-form[aria-busy="true"] button[type="submit"] { cursor: progress; }
+
+/* ── Update badge in topnav + Settings "Mises à jour" card ─────────────── */
+.update-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 12px; border-radius: var(--radius-pill);
+  background: rgba(234,179,8,.14); color: #facc15;
+  border: 1px solid rgba(234,179,8,.35);
+  font-size: .72rem; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; text-decoration: none; line-height: 1;
+  transition: background-color .14s, filter .14s;
+}
+.update-badge:hover { background: rgba(234,179,8,.22); filter: brightness(1.1); }
+.update-badge .dot {
+  width: 8px; height: 8px; border-radius: 50%; background: #facc15;
+  box-shadow: 0 0 0 3px rgba(234,179,8,.22);
+}
+.update-badge .version { color: var(--topbar-ink); font-weight: 600; }
+.update-badge[hidden] { display: none; }
+
+.updates-info {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2) var(--space-4); margin: var(--space-3) 0;
+}
+.updates-info div { display: flex; flex-direction: column; gap: 2px; }
+.updates-info dt { color: var(--muted); font-size: .74rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.updates-info dd { margin: 0; color: var(--ink); font-size: .9rem; font-weight: 600; }
+#updates-status[data-state="good"] { color: var(--good); }
+#updates-status[data-state="error"] { color: var(--danger); }
+#updates-status[data-state="ok"] { color: var(--muted); }
+.updates-actions {
+  display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-2);
+}
+.updates-output {
+  margin-top: var(--space-3); max-height: 260px; overflow: auto;
+  padding: var(--space-3); border-radius: var(--radius-md);
+  background: var(--paper-soft); border: 1px solid var(--line);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .76rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+}

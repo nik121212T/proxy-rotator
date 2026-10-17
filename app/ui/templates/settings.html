@@ -117,6 +117,24 @@
         <p id="dichvusocks-hint" class="helper" aria-live="polite"></p>
       </form>
     </section>
+
+    <section id="updates-card" class="control-section" aria-labelledby="updates-title">
+      <h2 id="updates-title">Mises à jour</h2>
+      <p class="helper">L'application vérifie périodiquement les nouvelles versions publiées sur GitHub et peut se mettre à jour en un clic (ff-only, dépôt attendu uniquement).</p>
+      <dl class="updates-info">
+        <div><dt>Version installée</dt><dd data-field="current">—</dd></div>
+        <div><dt>Dernière disponible</dt><dd data-field="latest">—</dd></div>
+        <div><dt>Dépôt</dt><dd data-field="repo">—</dd></div>
+        <div><dt>Publiée le</dt><dd data-field="published_at">—</dd></div>
+      </dl>
+      <div id="updates-status" class="helper" aria-live="polite"></div>
+      <div class="updates-actions">
+        <button type="button" id="updates-check" class="secondary">Vérifier maintenant</button>
+        <button type="button" id="updates-apply" hidden>Mettre à jour</button>
+        <a id="updates-release-link" class="button secondary" href="#" target="_blank" rel="noopener" hidden>Voir les notes</a>
+      </div>
+      <pre id="updates-output" class="updates-output" hidden></pre>
+    </section>
   </div>
 </main>
 <nav class="page-shortcuts" aria-label="Raccourcis de navigation"><a href="/" class="button secondary">← Dashboard</a><a href="#page-top" class="button secondary" aria-label="Remonter en haut" title="Remonter en haut">↑ Haut</a></nav>
