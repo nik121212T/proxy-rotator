@@ -20,15 +20,16 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 cd -- "$(dirname -- "$0")"
-if [ "$(git branch --show-current)" != main ]; then
-  printf 'Passez sur la branche main avant de relancer ce fichier.\n'
+branch=$(git branch --show-current)
+if [ -z "$branch" ]; then
+  printf 'Aucune branche active (HEAD détachée). Revenez sur votre branche de travail avant de relancer.\n'
   exit 1
 fi
 if [ -n "$(git status --porcelain)" ]; then
   printf 'Attention : des modifications ne sont pas encore commitées.\n'
   printf 'Seuls les commits existants seront envoyés.\n\n'
 fi
-printf 'Dépôt : nik121212T/proxy-rotator — branche main\n'
+printf 'Dépôt : nik121212T/proxy-rotator — branche %s\n' "$branch"
 credential_identity='protocol=https
 host=github.com
 username=nik121212T'
@@ -64,5 +65,5 @@ else
 fi
 # Use only the native Keychain helper, scoped to this account.
 git -c credential.helper= -c credential.helper=osxkeychain \
-  -c credential.username=nik121212T push -u origin main
+  -c credential.username=nik121212T push -u origin "$branch"
 printf '\nPush terminé avec succès.\n'

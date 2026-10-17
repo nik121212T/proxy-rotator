@@ -617,3 +617,11 @@ Archive Windows reconstruite, sans base ni profils utilisateur.
   en mémoire obtenue par lecture seule ; aucune mutation du pool réel.
 - Nouveau serveur d’import confirmé actif par son schéma OpenAPI. Aucun
   redémarrage supplémentaire effectué pendant les essais utilisateur.
+
+## T19 — Lanceur de push sur la branche de travail
+
+- [x] Envoyer la branche courante au lieu d’imposer main ; afficher son nom.
+- [x] Refuser HEAD détachée. Tests avec faux Git : main, branche de travail,
+  absence de branche ; aucun accès au trousseau ou au réseau dans ces tests.
+
+Validation T19 : 441 tests réussis, 8 ignorés ; Ruff, mypy et bash -n verts.
