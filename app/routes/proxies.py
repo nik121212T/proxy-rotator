@@ -1,13 +1,14 @@
 """Proxy management API; credential input never becomes public output."""
 
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from app.models import CheckResult, Proxy, ProxyStatus
-from app.parser import ImportReport
+from app.parser import ImportReport, Scheme
 from app.runtime import Runtime, get_runtime
 from app.views import feedback, render
 
@@ -19,13 +20,31 @@ class ImportRequest(BaseModel):
     model_config = ConfigDict(hide_input_in_errors=True)
     text: SecretStr
     label: str | None = None
+    scheme: Scheme | None = None
 
 
 @router.post("/import", response_model=ImportReport)
 async def import_proxies(
-    body: ImportRequest, runtime: Services, request: Request
+    body: ImportRequest, runtime: Services, request: Request,
+    import_id: Annotated[UUID | None, Header(alias="X-Import-ID")] = None,
 ) -> ImportReport | HTMLResponse:
-    report = await runtime.pool.import_text(body.text.get_secret_value(), label=body.label, verify=runtime.checker.probe_candidate)
+    progress = None
+    if import_id is not None:
+        try:
+            progress = runtime.imports.start(str(import_id))
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from None
+    try:
+        report = await runtime.pool.import_text(
+            body.text.get_secret_value(), label=body.label, verify=runtime.checker.probe_candidate,
+            progress=progress.update if progress else None, scheme=body.scheme,
+        )
+    except BaseException:
+        if progress:
+            progress.update("error", progress.total, progress.completed, progress.failed)
+        raise
+    if progress:
+        progress.update("done", progress.total, progress.completed, progress.failed)
     if request.headers.get("HX-Request") == "true":
         return feedback(
             request,
@@ -36,6 +55,15 @@ async def import_proxies(
             clear_import=not report.errors and not report.failed,
         )
     return report
+
+
+@router.get("/imports/{identifier}")
+async def import_status(identifier: UUID, runtime: Services) -> dict[str, str | int]:
+    runtime.imports.prune()
+    progress = runtime.imports.items.get(str(identifier))
+    if progress is None:
+        raise HTTPException(404, "Suivi d’import indisponible ou expiré.")
+    return progress.public()
 
 
 class ProxyPage(BaseModel):

@@ -5,8 +5,9 @@
   <meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"selfRequestsOnly":true}'>
   <title>Paramètres · Proxy Rotator</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <link rel="stylesheet" href="/static/styles.css?v=browsers-22">
-  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=summary-export-20" defer></script>
+  <link rel="stylesheet" href="/static/styles.css?v=import-progress-25">
+  <script src="/static/htmx.min.js" defer></script><script src="/static/app.js?v=import-progress-21" defer></script>
+  <script src="/static/import_controls.js?v=1" defer></script>
 </head>
 <body>
 <div id="page-top" tabindex="-1"></div>
@@ -18,7 +19,7 @@
 
   <div class="settings-grid">
     <section class="control-section"><h2>Importer une liste</h2><p class="helper">Une ligne par proxy. Chaque nouveau proxy est testé avant ajout ; seuls ceux qui répondent sont importés.</p>
-      <form id="import-form" hx-post="/api/proxies/import" hx-ext="json-form" hx-target="#feedback" hx-disabled-elt="find button" autocomplete="off">
+      <form id="import-form" hx-post="/api/proxies/import" hx-ext="json-form" hx-target="#import-feedback" hx-swap="innerHTML show:none" hx-sync="this:drop" hx-disabled-elt="find button" autocomplete="off">
         <div class="file-drop" id="proxy-drop" tabindex="0" aria-label="Déposer un fichier .txt ou .csv de proxies">
           <input id="proxy-file" type="file" accept=".txt,.csv,.list,text/plain" multiple hidden>
           <label for="proxy-file" class="file-drop-cta"><strong>Déposer un fichier</strong><span>ou cliquer — .txt, .csv, .list</span></label>
@@ -26,10 +27,24 @@
         </div>
         <label for="proxy-text">Proxies <span class="optional">ou collez-les ici</span></label>
         <textarea id="proxy-text" name="text" rows="6" required spellcheck="false" autocapitalize="off" placeholder="hôte:port ou user:pass@hôte:port"></textarea>
+        <label for="import-scheme">Protocole du proxy</label>
+        <select id="import-scheme" name="scheme" aria-describedby="import-scheme-help">
+          <option value="">Conserver les préfixes de la liste</option>
+          <option value="http">HTTP — y compris pour naviguer sur des sites HTTPS</option>
+          <option value="https">HTTPS — connexion TLS au proxy</option>
+          <option value="socks5">SOCKS5</option>
+        </select>
+        <p id="import-scheme-help" class="helper">Suivez le protocole indiqué par le fournisseur. « HTTPS » chiffre la connexion au proxy lui-même ; un proxy HTTP peut aussi ouvrir des sites HTTPS. Ce choix s’applique à toutes les lignes.</p>
         <label for="proxy-label">Libellé <span class="optional">facultatif</span></label>
         <input id="proxy-label" name="label" placeholder="Ex. : pool principal">
         <p class="helper">Formats acceptés : hôte:port ou user:pass@hôte:port, mélange possible. Sans identifiants, le fournisseur peut exiger une autorisation de votre IP. Préfixe http://, https:// ou socks5:// facultatif (HTTP par défaut). 2 000 lignes maximum. Lignes invalides ignorées.</p>
+        <div id="import-status" class="import-status">
+          <div class="import-status-heading"><strong id="import-state" role="status" aria-live="polite">Prêt à tester votre liste</strong><span id="import-elapsed" class="helper"></span></div>
+          <progress id="import-progress" max="1" value="0" aria-label="Progression des tests avant import" class="is-idle"></progress>
+          <p id="import-counts" class="helper">La progression des tests apparaîtra ici.</p>
+        </div>
         <button type="submit" class="wide">Tester et importer les disponibles</button>
+        <div id="import-feedback" role="status" aria-live="polite"></div>
       </form>
     </section>
 

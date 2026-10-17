@@ -590,3 +590,30 @@ côté serveur identifiée comme prochaine priorité, hors de cette première pa
 
 Validation T17 : 434 tests réussis, 8 ignorés, 11 sous-tests ; Ruff et mypy verts.
 Archive Windows reconstruite, sans base ni profils utilisateur.
+
+## T18 — Progression réelle de l’import, au niveau du formulaire
+
+- [x] Compteurs serveur isolés par import : analyse, tests, enregistrement, résultat.
+- [x] Barre de progression et retour local, sans déplacement de page ; erreurs et doubles clics.
+- [x] Tests backend et parcours navigateur simulé ; préserver tout import utilisateur en cours.
+
+- Diagnostic du lot signalé : 125 lignes valides, toutes préfixées HTTPS ;
+  3 échantillons expirent en HTTPS à 8 s, TCP accessible et HTTP sans
+  identifiants répond 407. Compatibilité HTTP probable ; aucune conversion
+  ni transmission d’identifiants en HTTP faite pendant le diagnostic.
+- Choix explicite du protocole ajouté : préfixes préservés par défaut,
+  remplacement seulement sur sélection utilisateur, déduplication après choix.
+- Suivi en mémoire : identifiant UUID par import, compteurs sans secrets,
+  maximum 64 suivis et expiration des résultats après 10 minutes.
+- Validation : 438 tests réussis, 8 ignorés ; Ruff/mypy/JS verts. Parcours
+  Chrome simulé : compteurs, bouton bloqué, protocole, résultat local, défilement
+  stable et mobile sans débordement.
+
+### Vérification utilisateur après T18
+
+- Pool réel observé : 12 proxies disponibles. Dashboard médian 3,89 ms,
+  snapshot 2,82 ms, ligne 1,02 ms. Mesures détaillées dans `docs/PERFORMANCE.md`.
+- 3/3 requêtes HTTPS via HTTP et 3/3 via SOCKS5 réussies, sur une copie SQLite
+  en mémoire obtenue par lecture seule ; aucune mutation du pool réel.
+- Nouveau serveur d’import confirmé actif par son schéma OpenAPI. Aucun
+  redémarrage supplémentaire effectué pendant les essais utilisateur.

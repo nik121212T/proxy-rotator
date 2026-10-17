@@ -289,3 +289,21 @@ build. The manager closes its processes/contexts and install jobs on shutdown.
   Creates/reuses an app-owned profile per fixed proxy or one rotation profile.
   The catalog exposes only `bitbrowser: {configured, port}`, never the API key.
   See [BitBrowser setup and validation limits](BITBROWSER.md).
+
+## Import progress and protocol override
+
+`POST /api/proxies/import` accepts optional `scheme: "http" | "https" | "socks5" | null`.
+Null preserves input prefixes. A supplied scheme overrides every parsed candidate
+and deduplication runs on the resulting identity. There is no automatic TLS downgrade.
+
+Send optional `X-Import-ID: <UUID>` to track that request with
+`GET /api/proxies/imports/{UUID}`. Response: `{stage, total, completed, failed}`.
+Stages: parsing, testing, saving, done, error. Totals count new unique candidates,
+not comments, malformed lines or existing entries. Completed/failed count actual
+probe results; saving is separate from testing and the POST response remains the
+authoritative import result. No proxy addresses or credentials appear in progress.
+
+Tracking is process-local, bounded to 64 records, with completed/error records
+expiring after 10 minutes. Unknown/expired UUIDs return 404 and duplicate UUID
+submissions return 409. A network loss is not confirmation that nothing was saved;
+check the pool before retrying. Keep the settings page open during import.

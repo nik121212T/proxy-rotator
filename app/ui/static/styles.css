@@ -1066,3 +1066,11 @@ footer { padding-bottom: 88px; }
 .browser-engine-size { display: block; margin: 0; font-variant-numeric: tabular-nums; }
 .browser-engine-row { gap: var(--space-4); }
 .browser-engine-row button { flex-shrink: 0; }
+
+/* Import feedback stays next to the action, without moving the page heading. */
+.import-status { min-block-size: 112px; margin-block: var(--space-4); }
+.import-status-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.import-status progress { display: block; inline-size: 100%; block-size: 10px; margin-block: var(--space-3); accent-color: var(--accent); }
+.import-status progress.is-idle { visibility: hidden; }
+#import-feedback { overflow-wrap: anywhere; }
+#import-form[aria-busy="true"] button[type="submit"] { cursor: progress; }

@@ -7,6 +7,7 @@
     },
     encodeParameters(xhr, parameters, element) {
       const data = Object.fromEntries(new FormData(element));
+      if (element.id === "import-form") data.scheme = data.scheme || null;
       if (element.id === "strategy-form") {
         data.strategy = element.querySelector('[name="strategy"]').value;
         data.interval_minutes = Number(data.interval_minutes);
@@ -329,12 +330,6 @@
       btn.disabled = false;
     }
   });
-  document.body.addEventListener("htmx:beforeRequest", event => {
-    if (event.detail.elt?.id === "import-form") {
-      feedback.textContent = "Test des proxies en cours… seuls ceux qui répondent seront ajoutés. Cela peut prendre plusieurs minutes pour un grand lot.";
-      feedback.setAttribute("role", "status");
-    }
-  });
   document.body.addEventListener("htmx:afterRequest", event => {
     if (event.detail.xhr.getResponseHeader("X-Clear-Import") === "true") {
       document.getElementById("import-form").reset();
@@ -346,10 +341,13 @@
     }
   });
   document.body.addEventListener("htmx:responseError", event => {
+    if (event.detail.elt?.id === "import-form") return;
     const code = event.detail.xhr.status;
     showError(code === 422 ? "Saisie invalide. Vérifiez les champs puis réessayez." : "Opération impossible. Vérifiez la connexion puis réessayez.");
   });
-  document.body.addEventListener("htmx:sendError", () => showError("Serveur indisponible. Vérifiez que l’application est démarrée."));
+  document.body.addEventListener("htmx:sendError", event => {
+    if (event.detail.elt?.id !== "import-form") showError("Serveur indisponible. Vérifiez que l’application est démarrée.");
+  });
   window.addEventListener("pagehide", () => {
     stopped = true;
     clearTimeout(scheduled);

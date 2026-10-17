@@ -24,7 +24,7 @@ from app.models import (
     ProxyEvent,
     RotationStrategy,
 )
-from app.parser import ImportReport, ParsedProxy, parse_bulk
+from app.parser import ImportReport, ParsedProxy, Scheme, parse_bulk
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -327,27 +327,47 @@ class Pool:
     async def import_text(
         self, text: str, *, label: str | None = None,
         verify: Callable[[ParsedProxy], Awaitable[CheckResult]] | None = None,
+        progress: Callable[[str, int, int, int], None] | None = None,
+        scheme: Scheme | None = None,
     ) -> ImportReport:
         report = await asyncio.to_thread(parse_bulk, text)
+        if scheme is not None:
+            report.proxies = [p.model_copy(update={"scheme": scheme}) for p in report.proxies]
 
         def identity(proxy: ParsedProxy | Proxy) -> tuple[str, str, int, str]:
             return proxy.scheme, proxy.host, proxy.port, proxy.username
 
         seen = {identity(p) for p in self._snapshot}
-        candidates = [p for p in report.proxies if identity(p) not in seen]
+        candidates = []
+        for candidate in report.proxies:
+            if identity(candidate) not in seen:
+                candidates.append(candidate)
+                seen.add(identity(candidate))
+        total, completed, checked_failed = len(candidates), 0, 0
+        if progress:
+            progress("testing", total, 0, 0)
         checks: dict[tuple[str, str, int, str], CheckResult] = {}
         failed = 0
         if verify is not None:
             # Bound network concurrency in the checker; cancel siblings on error.
             async def measure(candidate: ParsedProxy) -> CheckResult:
                 assert verify is not None
-                return await verify(candidate)
+                nonlocal completed, checked_failed
+                result = await verify(candidate)
+                completed += 1
+                checked_failed += int(not result.ok)
+                if progress:
+                    progress("testing", total, completed, checked_failed)
+                return result
 
             async with asyncio.TaskGroup() as group:
                 tasks = [group.create_task(measure(p)) for p in candidates]
             checks = {identity(p): task.result() for p, task in zip(candidates, tasks, strict=True)}
             failed = sum(not check.ok for check in checks.values())
             candidates = [p for p in candidates if checks[identity(p)].ok]
+
+        if progress:
+            progress("saving", total, completed, checked_failed)
 
         async def write() -> ImportReport:
             # Another import may have committed while probes were running.

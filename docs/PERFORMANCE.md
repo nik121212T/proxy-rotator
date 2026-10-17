@@ -61,3 +61,38 @@ la latence Internet, TLS/CONNECT, SOCKS, les téléchargements volumineux, le co
 d’affichage du DOM, les moteurs navigateur ni un historique rempli à 50 tests
 par IP. Les tests fonctionnels existants couvrent les protocoles, mais leurs
 débits ne sont pas extrapolés depuis cette mesure HTTP locale.
+
+## Vérification sur le pool réel — 17 octobre 2026
+
+Après l’import utilisateur : 12 proxies enregistrés, tous disponibles au début
+des mesures. Lecture seule de l’application locale : médiane de 5 requêtes après
+une requête de chauffage, sans requête de test ni mutation sur l’instance active.
+
+| Mesure | Résultat |
+|---|---|
+| Dashboard HTTP local | 3,89 ms médiane ; 34 244 octets |
+| Snapshot du tableau | 2,82 ms médiane ; 27 664 octets |
+| Paramètres | 1,24 ms médiane |
+| Ligne isolée | 1,02 ms médiane |
+| Chargement du pool depuis une copie mémoire | 0,64 ms médiane |
+| Sélection à tour de rôle | 0,024 ms médiane |
+| Pic d’allocations d’un rendu Python | 0,169 MiB |
+
+Pour les tests réseau, la base a été ouverte avec `mode=ro` et sauvegardée dans
+une base SQLite exclusivement en mémoire. Les passerelles de test ont utilisé
+cette copie sur des ports localhost éphémères ; leurs mises à jour de santé et
+leur activité n’ont pas été écrites dans le pool utilisateur.
+
+- HTTP : 3 requêtes HTTPS sur 3 réussies, médiane 1 933 ms, maximum 1 983 ms,
+  3 IP de sortie distinctes.
+- SOCKS5 : 3 requêtes HTTPS sur 3 réussies, médiane 2 138 ms, maximum 3 005 ms,
+  3 IP de sortie distinctes.
+
+Ce sont six petits contrôles vers la cible de vérification configurée, pas un
+test de débit ni une certification de chacun des 12 proxies. Les IP et accès
+ne sont pas consignés. Le coût local de sélection est faible face au délai
+réseau mesuré ; cette observation ne sépare pas le fournisseur, Internet et
+le service cible. La médiane HTTP locale du dashboard masque un maximum de
+74,55 ms dans cette courte série ; ne pas interpréter ces valeurs comme des
+percentiles de production. Les mesures ne vérifient pas les 113 autres lignes
+du fichier initial et ne permettent pas de conclure à leur indisponibilité.
