@@ -465,6 +465,10 @@ time { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
 
 /* ── Buttons ─────────────────────────────────────────────────────────── */
 
+/* Respect the HTML `hidden` attribute even when a later rule assigns
+   `display: inline-flex` (buttons, flags, etc.). */
+[hidden] { display: none !important; }
+
 button, .button {
   display: inline-flex;
   align-items: center;
