@@ -575,3 +575,18 @@ Validation T16 : 430 tests réussis, 8 ignorés ; Ruff, mypy et syntaxe JS verts
 Parcours Chrome avec API simulée : connexion, sélection, effacement du champ clé ;
 mobile sans débordement. Profils réutilisés, propriété contrôlée et passerelle
 arrêtée même si la fermeture distante échoue.
+
+## T17 — Mesure et optimisation des grands pools (17 octobre 2026)
+
+- [x] Benchmark reproductible et isolé : démarrage, dashboard, ligne, sélection,
+  mémoire temporaire de rendu et débit HTTP via un faux upstream local.
+- [x] Corriger les coûts confirmés par les mesures, avec tests de régression.
+- [x] Documenter avant/après et limites ; validation générale et archive.
+
+Résultats et protocole : `docs/PERFORMANCE.md`. Sur 10 000 proxies synthétiques,
+chargement 1 367 → 340 ms, ligne 95,66 → 0,67 ms, sélection 43,91 → 16,82 ms ;
+débit HTTP local 16,3 → 38,7 req/s. Le tableau complet reste lourd ; pagination
+côté serveur identifiée comme prochaine priorité, hors de cette première passe.
+
+Validation T17 : 434 tests réussis, 8 ignorés, 11 sous-tests ; Ruff et mypy verts.
+Archive Windows reconstruite, sans base ni profils utilisateur.

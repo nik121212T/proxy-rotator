@@ -50,13 +50,18 @@ class Rotator:
 
     def eligible(self, pool: ActivePool) -> tuple[Proxy, ...]:
         """Apply selection without advancing rotation or sticky state."""
+        return tuple(p.model_copy(update={"score": score}) for p, score in self._eligible_scored(pool))
+
+    def _eligible_scored(self, pool: ActivePool) -> tuple[tuple[Proxy, float], ...]:
+        scored = getattr(pool, "active_scored", None)
+        candidates = scored() if callable(scored) else tuple((p, p.score) for p in pool.active())
         country_of = getattr(pool, "country_code", lambda proxy_id: None)
         city_of = getattr(pool, "city_name", lambda proxy_id: None)
         region_of = getattr(pool, "region_name", lambda proxy_id: None)
         active = tuple(
-            p
-            for p in pool.active()
-            if p.score >= self.selection.min_score
+            (p, score)
+            for p, score in candidates
+            if score >= self.selection.min_score
             and (self.selection.country is None or country_of(p.id) == self.selection.country)
             and (
                 self.selection.city is None
@@ -74,7 +79,7 @@ class Rotator:
         if callable(pinned_fn):
             pinned = pinned_fn()
             if pinned or self.selection.pinned_only:
-                narrowed = tuple(p for p in active if p.id in pinned)
+                narrowed = tuple((p, score) for p, score in active if p.id in pinned)
                 if narrowed or self.selection.pinned_only:
                     active = narrowed
         if not active:
@@ -88,7 +93,18 @@ class Rotator:
         client_ip: str = "",
         target_domain: str = "",
     ) -> Proxy | None:
-        active = self.eligible(pool)
+        candidates = self._eligible_scored(pool)
+        active = tuple(p for p, _ in candidates)
+        weights = [score for _, score in candidates]
+        selected = self._choose(active, weights, client_ip=client_ip, target_domain=target_domain)
+        if selected is None:
+            return None
+        score = next(score for proxy, score in candidates if proxy.id == selected.id)
+        return selected.model_copy(update={"score": score})
+
+    def _choose(
+        self, active: tuple[Proxy, ...], weights: list[float], *, client_ip: str, target_domain: str
+    ) -> Proxy | None:
         if not active:
             return None
         if self.strategy == "timed":
@@ -103,7 +119,6 @@ class Rotator:
         if self.strategy == "random":
             return self._rng.choice(active)
         if self.strategy == "weighted":
-            weights = [proxy.score for proxy in active]
             return self._rng.choices(active, weights=weights, k=1)[0] if sum(weights) > 0 else None
         if self.strategy == "sticky":
             if not client_ip or not target_domain:

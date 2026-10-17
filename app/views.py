@@ -131,6 +131,9 @@ def render(
         order = "best"
     now = datetime.now(UTC)
     all_proxies = runtime.pool.all()
+    if template == "_row_oob.html":
+        identifier = (extra or {}).get("proxy_id")
+        all_proxies = tuple(p for p in all_proxies if p.id == identifier)
     city_names = {p.id: runtime.pool.city_name(p.id) for p in all_proxies}
     filter_city = request.query_params.get("city", "").strip()[:128]
     filter_country = request.query_params.get("country", "").strip().upper()[:2]
@@ -150,6 +153,19 @@ def render(
             or normalized_text(filter_city) in normalized_text(city_names[p.id] or "")
         )
     )
+    if template == "_row_oob.html":
+        context = {
+            **(extra or {}),
+            "proxy": visible[0] if visible else None,
+            "pinned_ids": runtime.pool.pinned_ids(),
+            "exits": runtime.pool.exit_observations(),
+            "city_names": city_names,
+            "region_names": {p.id: runtime.pool.region_name(p.id) for p in visible},
+            "country_names": {p.id: runtime.pool.country_name(p.id) for p in visible},
+            "check_ages": {p.id: check_age(p.last_checked_at, now) for p in visible},
+            "check_failures": {p.id: check_failure(runtime.pool.latest_check(p.id)) for p in visible},
+        }
+        return templates.TemplateResponse(request=request, name=template, context=context)
     export_counts: dict[str, int] = {}
     export_names: dict[str, str] = {}
     for proxy in all_proxies:
@@ -158,7 +174,7 @@ def render(
         code = runtime.pool.country_code(proxy.id) or "unknown"
         export_names[code] = runtime.pool.country_name(proxy.id) or "Pays inconnu"
         export_counts[code] = export_counts.get(code, 0) + 1
-    context: dict[str, object] = {
+    context = {
         "export_countries": [
             {"code": code, "name": export_names[code], "count": count}
             for code, count in sorted(export_counts.items(), key=lambda item: export_names[item[0]])

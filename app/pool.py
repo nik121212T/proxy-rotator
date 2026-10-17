@@ -85,11 +85,12 @@ class Pool:
             conn, key, clock=clock, min_score=min_score, quarantine_minutes=quarantine_minutes
         )
         pool._snapshot = tuple(await repository.list_proxies(conn))
-        for proxy in pool._snapshot:
-            history = await repository.list_checks(conn, proxy.id, limit=50)
-            if history:
-                pool._latest_checks[proxy.id] = history[0]
-            pool._latencies[proxy.id] = tuple(check.latency_ms for check in reversed(history[:20]))
+        pool._latencies = {proxy.id: () for proxy in pool._snapshot}
+        async for identifier, history in repository.iter_check_histories(conn):
+            if identifier not in pool._latencies:
+                continue
+            pool._latest_checks[identifier] = history[0]
+            pool._latencies[identifier] = tuple(check.latency_ms for check in reversed(history[:20]))
             for check in reversed(history):
                 pool._observe_exit(check)
         return pool
@@ -146,9 +147,15 @@ class Pool:
         return self._snapshot
 
     def active(self) -> tuple[Proxy, ...]:
+        return tuple(p.model_copy(update={"score": score}) for p, score in self.active_scored())
+
+    def active_scored(self) -> tuple[tuple[Proxy, float], ...]:
+        """Fresh scores without copying every model for a single gateway choice."""
         now = self._clock()
-        current = (p.model_copy(update={"score": health_score(p, now)}) for p in self._snapshot)
-        return tuple(p for p in current if p.status == "alive" and p.score >= self._min_score)
+        return tuple(
+            (p, score) for p in self._snapshot
+            if p.status == "alive" and (score := health_score(p, now)) >= self._min_score
+        )
 
     # ── pinning ──────────────────────────────────────────────────────────
 

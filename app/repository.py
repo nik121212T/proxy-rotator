@@ -164,13 +164,33 @@ async def list_checks(
         (proxy_id, limit),
     ) as cursor:
         rows = await cursor.fetchall()
-    results = []
-    for row in rows:
-        values = dict(row)
-        values["ok"] = bool(values["ok"])
-        timestamp = datetime.fromisoformat(values["checked_at"])
-        values["checked_at"] = (
-            timestamp.replace(tzinfo=UTC) if timestamp.tzinfo is None else timestamp
-        )
-        results.append(CheckResult.model_validate(values))
-    return tuple(results)
+    return tuple(_check_from_row(row) for row in rows)
+
+
+def _check_from_row(row: aiosqlite.Row) -> CheckResult:
+    values = dict(row)
+    values["ok"] = bool(values["ok"])
+    timestamp = datetime.fromisoformat(values["checked_at"])
+    values["checked_at"] = timestamp.replace(tzinfo=UTC) if timestamp.tzinfo is None else timestamp
+    return CheckResult.model_validate(values)
+
+
+async def iter_check_histories(
+    conn: aiosqlite.Connection,
+) -> AsyncIterator[tuple[int, tuple[CheckResult, ...]]]:
+    """Stream histories in one query, retaining at most 50 records per proxy."""
+    async with conn.execute(
+        "SELECT proxy_id, ok, status_code, latency_ms, exit_ip, error, checked_at "
+        "FROM proxy_checks ORDER BY proxy_id, checked_at DESC, id DESC"
+    ) as cursor:
+        identifier: int | None = None
+        history: list[CheckResult] = []
+        async for row in cursor:
+            if identifier is not None and row["proxy_id"] != identifier:
+                yield identifier, tuple(history)
+                history = []
+            identifier = row["proxy_id"]
+            if len(history) < 50:
+                history.append(_check_from_row(row))
+        if identifier is not None:
+            yield identifier, tuple(history)
