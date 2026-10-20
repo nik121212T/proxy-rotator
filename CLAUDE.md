@@ -24,7 +24,7 @@ Target OS: **macOS + Windows**. Keep the stack stdlib-friendly to stay simple.
 1. **Never log raw credentials** (`user:pass`). Mask as `user:***`. Enforce in every logger and every error message.
 2. **Encrypt credentials at rest**. Use `cryptography.Fernet` with a key derived from `MASTER_SECRET` (env). Never store plaintext in SQLite.
 3. **Localhost only by default**. Gateway + admin UI bind to `127.0.0.1`. Expose on LAN only if the user flips `BIND_HOST=0.0.0.0` in `.env` — print a loud warning when they do.
-4. **No external telemetry**. No analytics, no auto-updater pinging a server. Only outbound traffic = health checks + user requests through gateway.
+4. **No external telemetry**. No analytics. Outbound traffic includes health checks, user requests and explicitly configured providers. The user-requested release checker may contact GitHub (disable with UPDATES_ENABLED=false); installation and dependency downloads require an explicit update action. See docs/UPDATES.md.
 5. **DNS leak protection**. For SOCKS5, resolve DNS through the proxy. Document the Firefox `network.proxy.socks_remote_dns = true` requirement.
 6. **Fail closed**. If the pool has zero healthy proxies, the gateway returns `503 Pool Empty` instead of connecting directly. Never silently bypass.
 7. **Deterministic parser**. Must round-trip: `parse(serialize(parse(x))) == parse(x)`. Add a property-based test for this.

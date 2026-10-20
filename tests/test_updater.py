@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import stat as _stat
 from collections.abc import AsyncIterator
-from pathlib import Path as _Path
 
 import pytest
 from aiohttp import web
 
 from app import __version__ as CURRENT_VERSION  # noqa: N812
-from app.routes import updates as _updates
 from app.updater import UpdateChecker, UpdateInfo, parse_version
 
 
@@ -145,7 +142,7 @@ async def test_latest_handles_no_release_yet(github: FakeGitHub) -> None:
     checker = _checker_against(github)
     github.set_status(404)
     info = await checker.latest()
-    assert info.error == "no release"
+    assert "Aucune release" in info.error
     assert info.latest is None
 
 
@@ -186,117 +183,82 @@ async def test_apply_route_rejects_when_updater_absent(api, running_app) -> None
     client, _ = api
     app, _ = running_app
     app.state.runtime.updater = None
-    response = await client.post("/api/updates/apply")
+    response = await client.post("/api/updates/apply", json={"tag": "v9.9.9"})
     assert response.status_code == 404
 
 
-# ── /apply: happy, failure, timeout, missing, concurrency ─────────────────
-
-
-def _install_fake_script(monkeypatch, tmp_path: _Path, body: str) -> _Path:
-    script = tmp_path / "fake_update.sh"
-    script.write_text("#!/usr/bin/env bash\n" + body + "\n")
-    script.chmod(script.stat().st_mode | _stat.S_IEXEC | _stat.S_IXGRP | _stat.S_IXOTH)
-    monkeypatch.setattr(_updates, "UPDATE_SCRIPT", script)
-    return script
-
-
-def _attach_updater(app) -> None:
-    app.state.runtime.updater = UpdateChecker(
-        "nik121212T/proxy-rotator", cache_ttl_s=60, timeout_s=2.0
-    )
-
-
-async def test_apply_reports_success_when_script_exits_zero(
-    api, running_app, tmp_path, monkeypatch
-) -> None:
-    client, _ = api
-    app, _ = running_app
-    _attach_updater(app)
-    _install_fake_script(monkeypatch, tmp_path, 'echo "ok"\nexit 0\n')
-    response = await client.post("/api/updates/apply")
-    assert response.status_code == 200
-    body = response.json()
-    assert body["returncode"] == 0
-    assert body["ok"] is True
-    assert "ok" in body["output"]
-
-
-async def test_apply_reports_failure_when_script_exits_nonzero(
-    api, running_app, tmp_path, monkeypatch
-) -> None:
-    client, _ = api
-    app, _ = running_app
-    _attach_updater(app)
-    _install_fake_script(monkeypatch, tmp_path, 'echo "oops" >&2\nexit 7\n')
-    response = await client.post("/api/updates/apply")
-    assert response.status_code == 200
-    body = response.json()
-    assert body["returncode"] == 7
-    assert body["ok"] is False
-    assert "oops" in body["output"]
-
-
-async def test_apply_returns_500_when_script_missing(
-    api, running_app, tmp_path, monkeypatch
-) -> None:
-    client, _ = api
-    app, _ = running_app
-    _attach_updater(app)
-    monkeypatch.setattr(_updates, "UPDATE_SCRIPT", tmp_path / "does-not-exist.sh")
-    response = await client.post("/api/updates/apply")
-    assert response.status_code == 500
-
-
-async def test_apply_times_out_long_running_script(
-    api, running_app, tmp_path, monkeypatch
-) -> None:
-    client, _ = api
-    app, _ = running_app
-    _attach_updater(app)
-    _install_fake_script(monkeypatch, tmp_path, "sleep 30\n")
-    monkeypatch.setattr(_updates, "APPLY_TIMEOUT_S", 0.5)
-    response = await client.post("/api/updates/apply")
-    assert response.status_code == 504
-
-
-async def test_apply_rejects_concurrent_calls_with_409(
-    api, running_app, tmp_path, monkeypatch
-) -> None:
-    import asyncio as _asyncio
+async def test_apply_installs_only_selected_available_release(
+    api, running_app, github, monkeypatch
+):
+    from app.routes import updates
 
     client, _ = api
     app, _ = running_app
-    _attach_updater(app)
-    _install_fake_script(monkeypatch, tmp_path, "sleep 0.5\nexit 0\n")
-    first = _asyncio.create_task(client.post("/api/updates/apply"))
-    await _asyncio.sleep(0.1)  # let the lock be acquired
-    second = await client.post("/api/updates/apply")
-    assert second.status_code == 409
-    done = await first
-    assert done.status_code == 200
-    assert done.json()["ok"] is True
+    app.state.runtime.updater = _checker_against(github)
+    calls = []
+
+    async def install(root, repo, tag):
+        calls.append(tag)
+        return "Ready"
+
+    monkeypatch.setattr(updates, "install", install)
+    assert (await client.post("/api/updates/apply", json={"tag": "v8.8.8"})).status_code == 409
+    assert not calls
+    assert (await client.post("/api/updates/apply", json={"tag": "v9.9.9"})).status_code == 200
+    assert calls == ["v9.9.9"]
 
 
-async def test_apply_passes_whitelisted_env_only_to_subprocess(
-    api, running_app, tmp_path, monkeypatch
-) -> None:
-    """Secrets like MASTER_SECRET must not reach the pip install step."""
-    import os as _os
+async def test_invalid_release_payload_is_not_installable(github):
+    github.set_payload({"tag_name": "v9.9.9-beta", "prerelease": True})
+    info = await _checker_against(github).latest()
+    assert not info.available and info.error
+
+
+async def test_private_api_receives_secret_header(github, monkeypatch):
+    from pydantic import SecretStr
+
+    seen = []
+    original = github._handle
+
+    async def handle(request):
+        seen.append(request.headers.get("Authorization"))
+        return await original(request)
+
+    # Register a fresh server handler rather than altering an already-bound callback.
+    await github.stop()
+    monkeypatch.setattr(github, "_handle", handle)
+    await github.start()
+    info = await _checker_against(github, token=SecretStr("fake-token")).latest()
+    assert seen == ["Bearer fake-token"]
+    assert "fake-token" not in repr(info)
+
+
+async def test_apply_rejects_concurrent_request_and_cancels_timeout(
+    api, running_app, github, monkeypatch
+):
+    import asyncio
+
+    from app.routes import updates
 
     client, _ = api
     app, _ = running_app
-    _attach_updater(app)
-    monkeypatch.setenv("MASTER_SECRET", "super-secret-should-not-leak")
-    monkeypatch.setenv("DICHVUSOCKS_API_TOKEN", "token-should-not-leak")
-    _install_fake_script(monkeypatch, tmp_path, 'env | sort\nexit 0\n')
-    response = await client.post("/api/updates/apply")
-    body = response.json()
-    assert response.status_code == 200
-    assert "MASTER_SECRET" not in body["output"]
-    assert "DICHVUSOCKS_API_TOKEN" not in body["output"]
-    # The expected repo must be forwarded so the shell check can validate it.
-    assert "PROXY_ROTATOR_UPDATE_REPO=nik121212T/proxy-rotator" in body["output"]
-    # Sanity: PATH is passed (needed for `env` itself to resolve) but no secret.
-    _os.environ.pop("MASTER_SECRET", None)
-    _os.environ.pop("DICHVUSOCKS_API_TOKEN", None)
+    app.state.runtime.updater = _checker_against(github)
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def install(*args):
+        started.set()
+        try:
+            await asyncio.sleep(10)
+        finally:
+            cancelled.set()
+
+    monkeypatch.setattr(updates, "install", install)
+    monkeypatch.setattr(updates, "APPLY_TIMEOUT_S", 0.2)
+    first = asyncio.create_task(client.post("/api/updates/apply", json={"tag": "v9.9.9"}))
+    await asyncio.wait_for(started.wait(), 2)
+    other = await client.post("/api/updates/apply", json={"tag": "v9.9.9"})
+    assert other.status_code == 409
+    assert (await first).status_code == 504
+    assert cancelled.is_set()
+    assert not updates._apply_lock.locked()

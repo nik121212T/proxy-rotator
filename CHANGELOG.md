@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.2 — Reliable release updates (2026-10-20)
+
+- Authenticate private release checks using an optional token or local GitHub CLI login.
+- Install the selected stable tag rather than the latest branch commit.
+- Prepare dependencies in an isolated environment; retain the running environment.
+- Stop subprocess trees on timeout and restore the previous code if activation fails.
+- Use a Python installer and startup bootstrap on macOS and Windows; require restart.
+- Reject concurrent updates, local edits, divergent history and active browser sessions.
+- Fix the push launcher to support the current working branch.
+
 ## Post-audit fixes — robustness and observability (2026-10-12)
 
 ### Fixed

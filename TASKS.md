@@ -625,3 +625,14 @@ Archive Windows reconstruite, sans base ni profils utilisateur.
   absence de branche ; aucun accès au trousseau ou au réseau dans ces tests.
 
 Validation T19 : 441 tests réussis, 8 ignorés ; Ruff, mypy et bash -n verts.
+
+## T20 — Fiabiliser la mise à jour GitHub
+
+- [x] Authentification privée, erreurs explicites et release stable exacte.
+- [x] Installation Python portable ; dépendances préparées dans un environnement séparé.
+- [x] Arrêt de l’arbre de processus, restauration du code sur erreur et tests isolés.
+- [x] Documentation, validation et préparation de la release v0.1.2.
+
+Validation T20 : 472 tests réussis, 8 ignorés, 11 sous-tests ; Ruff, mypy,
+JavaScript et syntaxe Bash verts. Installation réelle du tag vérifiée dans
+un dépôt temporaire, sans modifier les proxies ni lancer la mise à jour réelle.

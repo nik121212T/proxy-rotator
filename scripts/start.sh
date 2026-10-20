@@ -16,6 +16,9 @@ if [[ ! -f .env ]]; then
   echo '[error] .env missing. Copy .env.example to .env and set MASTER_SECRET.' >&2
   exit 78
 fi
+if [[ -f .updates/active.json ]]; then
+  exec .venv/bin/python scripts/update_bootstrap.py
+fi
 if [[ ! -x .venv/bin/python ]]; then
   command -v python3 >/dev/null 2>&1 || { echo '[error] Install Python 3.11+ first.' >&2; exit 1; }
   python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' || {

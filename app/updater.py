@@ -1,7 +1,7 @@
 """GitHub-release-based update checker (audit evolution, option A).
 
 The checker only READS the GitHub Releases API: it never performs the
-upgrade itself. Applying an update is a separate shell script, triggered
+upgrade itself. Applying an update uses the isolated Python installer, triggered
 from the UI, so the user keeps control and no silent writes to the project
 tree are ever done.
 """
@@ -11,13 +11,17 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import shutil
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import aiohttp
+from pydantic import SecretStr
 
 from app import __version__ as CURRENT_VERSION  # noqa: N812
+from app.update_install import UpdateError, run
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +70,9 @@ class UpdateChecker:
         cache_ttl_s: float = 24 * 3600,
         timeout_s: float = 5.0,
         api_base: str = "https://api.github.com",
+        token: SecretStr | None = None,
     ) -> None:
+        self._token = token
         self._repo = repo
         self._cache_ttl_s = cache_ttl_s
         self._timeout_s = timeout_s
@@ -110,6 +116,17 @@ class UpdateChecker:
             "User-Agent": f"proxy-rotator/{CURRENT_VERSION}",
             "X-GitHub-Api-Version": "2022-11-28",
         }
+        token = self._token
+        if token is None and self._api_base == "https://api.github.com" and shutil.which("gh"):
+            try:
+                async with asyncio.timeout(self._timeout_s):
+                    token = SecretStr(
+                        await run(["gh", "auth", "token", "--hostname", "github.com"], Path.cwd())
+                    )
+            except (UpdateError, OSError, TimeoutError):
+                token = None
+        if token and token.get_secret_value():
+            headers["Authorization"] = "Bearer " + token.get_secret_value()
         now = time.monotonic()
         try:
             async with (
@@ -117,7 +134,7 @@ class UpdateChecker:
                     trust_env=False,
                     timeout=aiohttp.ClientTimeout(total=self._timeout_s),
                 ) as session,
-                session.get(url, headers=headers) as response,
+                session.get(url, headers=headers, allow_redirects=False) as response,
             ):
                 if response.status == 404:
                     logger.info("updater_no_release_yet repo=%s", self._repo)
@@ -128,7 +145,7 @@ class UpdateChecker:
                         release_url=None,
                         published_at=None,
                         checked_at=now,
-                        error="no release",
+                        error="Aucune release publiée ou accès au dépôt privé refusé.",
                     )
                 if response.status != 200:
                     logger.info(
@@ -146,8 +163,8 @@ class UpdateChecker:
                         error=f"HTTP {response.status}",
                     )
                 payload: dict[str, Any] = await response.json(content_type=None)
-        except (aiohttp.ClientError, TimeoutError, OSError) as exc:
-            logger.info("updater_transport_failure repo=%s err=%s", self._repo, exc)
+        except (aiohttp.ClientError, TimeoutError, OSError, ValueError) as exc:
+            logger.info("updater_transport_failure repo=%s type=%s", self._repo, type(exc).__name__)
             return UpdateInfo(
                 current=CURRENT_VERSION,
                 latest=None,
@@ -157,7 +174,17 @@ class UpdateChecker:
                 checked_at=now,
                 error=exc.__class__.__name__,
             )
+        if not isinstance(payload, dict):
+            payload = {}
         tag = str(payload.get("tag_name") or "").strip()
+        if (
+            not re.fullmatch(r"v?\d+\.\d+\.\d+", tag)
+            or payload.get("draft")
+            or payload.get("prerelease")
+        ):
+            return UpdateInfo(
+                CURRENT_VERSION, None, None, None, None, now, "Release stable invalide."
+            )
         version = tag.lstrip("v") if tag else None
         release_url = payload.get("html_url")
         published = payload.get("published_at")

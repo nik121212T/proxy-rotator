@@ -1,66 +1,87 @@
-# Mises à jour auto (option A : git-based)
+# Mises à jour par releases GitHub
 
-Public visé : installations locales de la bêta amis, pas de packaging binaire.
+Disponible pour les **clones Git sur la branche main**, sur macOS et Windows.
+Une archive ZIP sans `.git` doit être mise à jour manuellement. Git et Python
+restent nécessaires ; aucun Bash n’est nécessaire sous Windows.
 
-## Chez l'utilisateur
+## Dépôt privé : accès requis
 
-L'ami récupère le projet une seule fois :
+Chaque utilisateur doit disposer d’un accès au dépôt privé. Le vérificateur
+utilise `UPDATES_GITHUB_TOKEN` si renseigné dans `.env` (jeton autorisé à lire
+les contenus du dépôt). Sinon, il utilise la connexion locale de GitHub CLI
+(`gh auth login`). Le jeton n’est ni affiché ni transmis aux processus d’installation.
 
-```bash
-git clone https://github.com/nik121212T/proxy-rotator.git
-cd proxy-rotator
-./scripts/install.sh    # crée .venv + installe deps
-cp .env.example .env    # renseigne MASTER_SECRET
-./scripts/start.sh
-```
+L’accès Git est distinct de l’accès API : configurez aussi Git pour pouvoir
+récupérer le dépôt sans interaction, par exemple `gh auth setup-git` pour HTTPS
+ou une clé SSH autorisée. Un jeton dans `.env` seul ne configure pas Git.
 
-Au démarrage, l'application interroge GitHub Releases (cache 24 h).
-Si une nouvelle version est publiée :
+Un tag Git ne suffit pas : une **release stable publiée** doit exister.
+L’erreur 404 peut signifier absence de release ou accès privé refusé.
 
-- badge **« Mise à jour disponible »** dans la barre du haut
-- carte **« Mises à jour »** dans *Paramètres* : version installée,
-  dernière disponible, bouton *Mettre à jour*, lien vers les notes.
+## Utilisation
 
-Un clic sur *Mettre à jour* lance `scripts/update.sh`, qui :
+Ouvrez **Paramètres → Mises à jour → Vérifier maintenant**. Le dashboard et
+les paramètres consultent également le vérificateur à leur ouverture ; le
+résultat reste en cache 24 heures par défaut. Il n’y a pas de boucle périodique.
 
-1. refuse si `origin` ne pointe pas sur `nik121212T/proxy-rotator`
-2. refuse si le working tree a des modifications locales
-3. `git fetch` puis `git merge --ff-only` (jamais de merge divergent)
-4. réinstalle `requirements.txt` dans `.venv/`
-5. demande à l'utilisateur de relancer l'app
+Le bouton *Mettre à jour* demande confirmation pour la version affichée :
 
-## Côté mainteneur (toi)
+1. Vérification de la release stable choisie, du dépôt `origin`, de la branche
+   `main`, de l’absence de modifications locales et de sessions navigateur.
+2. Récupération du **tag exact**, avec refus d’un historique divergent.
+3. Création d’un environnement Python dans `.updates/<identifiant>/venv`,
+   installation des dépendances, contrôle `pip check` et import de l’application.
+4. Nouvelle vérification des modifications locales, puis avance du code vers
+   le commit de la release et activation via `.updates/active.json`.
+5. **Relance manuelle** avec le lanceur habituel. Le processus déjà démarré
+   continue d’utiliser son ancien environnement jusqu’à sa fermeture.
 
-Pour pousser une nouvelle version :
+L’environnement en cours n’est jamais modifié par pip. Si la préparation
+échoue, son dossier est supprimé. Si l’activation échoue, le code et le pointeur
+précédents sont restaurés. Le délai maximum est de cinq minutes ; les processus
+d’installation sont arrêtés à expiration. Une seule installation est autorisée
+à la fois. La préparation peut utiliser plusieurs centaines de Mo.
 
-```bash
-# 1. bump dans app/__init__.py (__version__ = "0.2.0")
-# 2. commit + tag
-git commit -am "release: v0.2.0"
-git tag v0.2.0
-git push --tags origin main
-# 3. GitHub → Releases → Draft new release → tag v0.2.0 → notes → Publish
-```
+Les anciens environnements sont conservés, sans nettoyage automatique. Ne
+supprimez pas `.venv` (utilisé par le lanceur), ni l’environnement référencé
+par `.updates/active.json`. Les données, profils et `.env` restent dans le
+dossier du projet et ne sont pas inclus dans les archives distribuées.
 
-Dans la minute, les instances connectées voient la nouvelle version à leur
-prochain `GET /api/updates/check` (ou au prochain cycle de cache 24 h).
+## Limites et récupération
+
+Une coupure de courant entre l’avance Git et l’écriture du pointeur n’est pas
+une transaction atomique : le lanceur refuse une incohérence code/environnement
+plutôt que de lancer une combinaison incorrecte. Dans ce cas, faites vérifier
+le commit et le pointeur avant de relancer. Ne supprimez pas vos données.
+
+Les installations antérieures à v0.1.2 ne disposent pas de ce mécanisme fiable.
+Pour cette première migration, fermez l’application, sauvegardez les données,
+vérifiez que le clone est propre sur `main`, puis récupérez le tag v0.1.2 et
+avancez jusqu’à ce tag en fast-forward. Relancez le lanceur habituel : il mettra
+à niveau l’environnement initial. Le script historique `scripts/update.sh`
+refuse désormais l’ancienne installation directe dans l’environnement actif.
 
 ## Configuration
 
 | Variable | Défaut | Rôle |
 |---|---|---|
-| `UPDATES_ENABLED` | `true` | désactive complètement le vérificateur |
-| `UPDATES_REPO` | `nik121212T/proxy-rotator` | dépôt interrogé |
-| `UPDATES_CHECK_INTERVAL_HOURS` | `24` | TTL du cache |
-| `UPDATES_TIMEOUT_S` | `5.0` | timeout HTTP vers api.github.com |
+| `UPDATES_ENABLED` | `true` | `false` désactive vérification et installation |
+| `UPDATES_REPO` | `nik121212T/proxy-rotator` | Dépôt autorisé |
+| `UPDATES_GITHUB_TOKEN` | absent | Accès API privé ; sinon connexion locale `gh` |
+| `UPDATES_CHECK_INTERVAL_HOURS` | `24` | Durée du cache |
+| `UPDATES_TIMEOUT_S` | `5.0` | Délai des requêtes de vérification |
 
-## Sécurité
+Aucune télémétrie. Cette fonctionnalité autorise explicitement les requêtes
+GitHub et le téléchargement des dépendances lors d’une installation demandée.
+`UPDATES_ENABLED=false` désactive les contacts GitHub du vérificateur.
+Les tags ne sont pas vérifiés par signature : la confiance repose sur le dépôt
+configuré et ses mainteneurs. Ne déplacez pas un tag de release déjà publié.
 
-- aucune signature cryptographique (bêta privée, ami de confiance)
-- `git merge --ff-only` : impossible d'avaler un historique divergent
-- `remote` vérifié contre `UPDATES_REPO` : impossible de pointer vers un fork
-- la mise à jour exige une confirmation explicite dans l'UI, jamais silencieuse
-- `UPDATES_ENABLED=false` dans `.env` coupe tout contact avec api.github.com
+## Publier une version
 
-Pour une diffusion plus large, passer à **option B** (release tarball signé)
-ou **option C** (PyInstaller + PyUpdater) — voir discussion d'audit.
+Synchroniser `app/__init__.py` et `pyproject.toml`, mettre à jour le changelog,
+exécuter les tests et la CI macOS/Windows/Linux, puis publier une release GitHub
+stable sur le commit validé. Joindre uniquement l’archive produite par
+`scripts/build_windows.py`, qui utilise une liste explicite de fichiers publics.
+Le paquet ZIP permet une installation manuelle ; utiliser un clone pour les
+mises à jour intégrées.

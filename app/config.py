@@ -60,7 +60,8 @@ class Settings(BaseSettings):
 
     # ── Updates (git-based, opt-out; see docs/UPDATES.md) ─────────────────
     updates_enabled: bool = True
-    updates_repo: str = "nik121212T/proxy-rotator"
+    updates_repo: str = Field(default="nik121212T/proxy-rotator", pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+    updates_github_token: SecretStr | None = None
     updates_check_interval_hours: int = Field(default=24, ge=1, le=168)
     updates_timeout_s: float = Field(default=5.0, gt=0)
 

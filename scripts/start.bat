@@ -11,6 +11,7 @@ if not exist .env (
   echo [error] .env missing. Copy .env.example to .env and set MASTER_SECRET.
   exit /b 78
 )
+if exist ".updates\active.json" goto updated_environment
 if exist ".venv\Scripts\python.exe" goto check_python
 where python >nul 2>nul
 if errorlevel 1 goto python_error
@@ -37,6 +38,9 @@ if not exist data exit /b 1
 echo [run] starting proxy-rotator...
 rem Never interpolate credential-bearing .env values into shell commands.
 findstr /R /C:"^[ ]*BIND_HOST[ ]*=" /C:"^[ ]*ADMIN_PORT[ ]*=" .env | ".venv\Scripts\python.exe" scripts\windows_env.py
+exit /b %errorlevel%
+:updated_environment
+".venv\Scripts\python.exe" scripts\update_bootstrap.py
 exit /b %errorlevel%
 :python_error
 echo [error] Install Python 3.11-3.13 x64 (3.11 recommended) and recreate any incompatible virtual environment.

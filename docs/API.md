@@ -307,3 +307,18 @@ Tracking is process-local, bounded to 64 records, with completed/error records
 expiring after 10 minutes. Unknown/expired UUIDs return 404 and duplicate UUID
 submissions return 409. A network loss is not confirmation that nothing was saved;
 check the pool before retrying. Keep the settings page open during import.
+
+## Release updates
+
+- `GET /api/updates/status`: cached release metadata (`current`, `latest`,
+  `latest_tag`, `available`, `error`, `repo`), or `enabled: false`.
+- `POST /api/updates/check`: refresh release metadata, including private-repo
+  authentication configured on the server. Disabled: 404.
+- `POST /api/updates/apply`, JSON `{"tag":"v0.1.2"}`: revalidate the selected
+  available stable release and prepare its isolated Python environment. Returns
+  `{ok, returncode, output, message}` on success; the user must restart.
+  Invalid payload: 422; disabled: 404; conflicting release, local edits,
+  active browser sessions, concurrent update or installation failure: 409;
+  installation timeout: 504. No credentials or subprocess output are returned.
+
+See [UPDATES.md](UPDATES.md) for prerequisites, private Git access and recovery.

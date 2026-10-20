@@ -1,6 +1,6 @@
 [project]
 name = "proxy-rotator"
-version = "0.1.0"
+version = "0.1.2"
 description = "Local proxy pool manager with rotation + health checks + burn detection."
 requires-python = ">=3.11"
 readme = "README.md"

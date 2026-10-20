@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
+from app import __version__
 from app.bitbrowser import BitBrowserClient
 from app.browser_manager import BrowserManager
 from app.burn_detector import BurnDetector
@@ -139,6 +140,7 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
             updater = (
                 UpdateChecker(
                     repo=config.updates_repo,
+                    token=config.updates_github_token,
                     cache_ttl_s=config.updates_check_interval_hours * 3600,
                     timeout_s=config.updates_timeout_s,
                 )
@@ -204,7 +206,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.runtime = None
             app.state.pool = None
 
-    app = FastAPI(title="proxy-rotator", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="proxy-rotator", version=__version__, lifespan=lifespan)
     # Added innermost first: the last one added runs first.
     app.add_middleware(TokenGuard, token=admin_token)
     app.add_middleware(CrossSiteGuard, allowed=allowed_hosts)

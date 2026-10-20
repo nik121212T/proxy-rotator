@@ -655,6 +655,7 @@
 
   // ── Updates (git-based auto-update) ───────────────────────────────────
   (async function initUpdates() {
+    let selectedTag = null;
     const badge = document.getElementById('update-badge');
     const card = document.getElementById('updates-card');
     const dataFields = card
@@ -668,6 +669,7 @@
 
     function render(payload) {
       if (payload == null || payload.enabled === false) {
+        selectedTag = null;
         if (badge) badge.hidden = true;
         if (status) status.textContent = 'Mises à jour désactivées.';
         if (applyBtn) applyBtn.hidden = true;
@@ -676,7 +678,8 @@
       for (const el of dataFields) {
         el.textContent = payload[el.dataset.field] ?? '—';
       }
-      const available = Boolean(payload.available);
+      const available = Boolean(payload.available && !payload.error);
+      selectedTag = available ? payload.latest_tag : null;
       if (badge) {
         badge.hidden = !available;
         const latest = badge.querySelector('[data-field="latest"]');
@@ -734,12 +737,12 @@
     });
 
     applyBtn?.addEventListener('click', async () => {
-      if (!window.confirm('Appliquer la mise à jour maintenant ? L\'application doit être relancée après.')) return;
+      if (!selectedTag || !window.confirm('Installer la release ' + selectedTag + ' ? Relancez ensuite l’application.')) return;
       applyBtn.disabled = true;
       checkBtn.disabled = true;
-      status.textContent = 'Mise à jour en cours… (git fetch + pull + pip install)';
+      status.textContent = 'Préparation de la release et de son environnement Python…';
       try {
-        const resp = await fetch('/api/updates/apply', { method: 'POST' });
+        const resp = await fetch('/api/updates/apply', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tag: selectedTag}) });
         const body = await resp.json();
         output.hidden = false;
         output.textContent = body.output || '';
