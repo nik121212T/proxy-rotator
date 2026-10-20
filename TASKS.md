@@ -640,3 +640,13 @@ un dépôt temporaire, sans modifier les proxies ni lancer la mise à jour réel
 CI T20 : tests Linux/macOS/Windows et vrais moteurs Windows réussis.
 Le contrôle mypy Windows a révélé des attributs Unix ; les branches sont
 désormais distinguées par sys.platform et validées aussi avec --platform win32.
+
+## T21 — Accès au dashboard sur le réseau local
+
+- [x] Séparer l’écoute des passerelles et celle de l’administration.
+- [x] Protéger aussi les événements WebSocket par jeton, hôte et origine.
+- [ ] Configurer le port choisi et vérifier connexion et authentification LAN.
+
+Validation T21 (préparation) : 478 tests réussis, 8 ignorés et 11 sous-tests.
+Ruff/mypy verts. Activation en attente du choix du port : 5000 occupé par
+AirPlay, proposition 5001 sans modifier ce service système.

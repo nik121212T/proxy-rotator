@@ -81,14 +81,15 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
             interval_s=config.health_check_interval_s,
         )
         rotator = Rotator(config.rotation_strategy, sticky_ttl_s=config.sticky_ttl_s)
-        host = f"[{config.bind_host}]" if ":" in config.bind_host else config.bind_host
+        gateway_host = config.gateway_bind_host or config.bind_host
+        host = f"[{gateway_host}]" if ":" in gateway_host else gateway_host
         http_configured = f"{host}:{config.gateway_http_port}"
         socks5_configured = f"{host}:{config.gateway_socks_port}"
         http_gateway = HttpGateway(
             pool,
             rotator,
             key,
-            host=config.bind_host,
+            host=gateway_host,
             port=config.gateway_http_port,
             timeout_s=config.gateway_timeout_s,
             max_retry_per_request=config.max_retry_per_request,
@@ -102,7 +103,7 @@ async def services(config: Settings) -> AsyncIterator[Runtime]:
             pool,
             rotator,
             key,
-            host=config.bind_host,
+            host=gateway_host,
             port=config.gateway_socks_port,
             timeout_s=config.gateway_timeout_s,
             max_retry_per_request=config.max_retry_per_request,
@@ -192,8 +193,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 # ADMIN_ALLOWED_HOSTS have all been set deliberately.
                 logger.warning(
                     "event=lan_binding bind_host=%s admin_token=set "
-                    "proxy_gateways_unauthenticated=true",
+                    "proxy_gateways_unauthenticated=%s",
                     config.bind_host,
+                    str(not is_loopback(config.gateway_bind_host or config.bind_host)).lower(),
                 )
             async with services(config) as runtime:
                 app.state.runtime = runtime

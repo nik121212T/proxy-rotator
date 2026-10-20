@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     quarantine_minutes: int = Field(default=10, ge=1, le=1440)
 
     bind_host: str = "127.0.0.1"
+    gateway_bind_host: Literal["127.0.0.1", "localhost", "::1"] | None = None
     admin_port: int = Field(default=8080, ge=1, le=65535)
     # ── Exposure guards (see docs/SECURITY.md) ────────────────────────────
     # Binding beyond loopback publishes an unauthenticated admin UI and two

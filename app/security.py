@@ -1,6 +1,6 @@
 """Request guards for the single-user admin application.
 
-Three independent controls are applied to every HTTP request:
+Three independent controls are applied to HTTP requests and WebSocket handshakes:
 
 ``HostGuard``
     Refuses a ``Host`` header that is not one of the configured names. A page
@@ -19,7 +19,7 @@ Three independent controls are applied to every HTTP request:
 
 These are plain ASGI middlewares rather than ``BaseHTTPMiddleware`` subclasses:
 they never wrap the response body, which keeps streaming, background tasks and
-WebSocket scopes untouched.
+WebSocket streaming untouched after handshake validation.
 
 The proxy gateways (ports 8888/1080) speak HTTP CONNECT, SOCKS5 and raw bytes,
 not this application's HTTP routes, and are deliberately not covered here. See
@@ -89,12 +89,15 @@ class HostGuard:
         self.allowed = allowed
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http":
+        if scope["type"] not in {"http", "websocket"}:
             await self.app(scope, receive, send)
             return
         host = host_without_port(Headers(scope=scope).get("host", ""))
         if host not in self.allowed:
             logger.warning("admin_host_rejected host=%s path=%s", host or "-", scope.get("path"))
+            if scope["type"] == "websocket":
+                await send({"type": "websocket.close", "code": 1008})
+                return
             response = PlainTextResponse("Invalid Host header\n", status_code=400)
             await response(scope, receive, send)
             return
@@ -109,7 +112,9 @@ class CrossSiteGuard:
         self.allowed = allowed
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or scope["method"] not in _UNSAFE_METHODS:
+        if scope["type"] not in {"http", "websocket"} or (
+            scope["type"] == "http" and scope["method"] not in _UNSAFE_METHODS
+        ):
             await self.app(scope, receive, send)
             return
         headers = Headers(scope=scope)
@@ -129,8 +134,11 @@ class CrossSiteGuard:
                 "admin_cross_site_rejected source=%s path=%s method=%s",
                 rejected,
                 scope.get("path"),
-                scope["method"],
+                scope.get("method", "WEBSOCKET"),
             )
+            if scope["type"] == "websocket":
+                await send({"type": "websocket.close", "code": 1008})
+                return
             response = PlainTextResponse("Cross-site request refused\n", status_code=403)
             await response(scope, receive, send)
             return
@@ -162,11 +170,13 @@ class TokenGuard:
         return morsel.value if morsel is not None else ""
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or self.token is None:
+        if scope["type"] not in {"http", "websocket"} or self.token is None:
             await self.app(scope, receive, send)
             return
         path = str(scope.get("path", ""))
-        if path in _TOKEN_EXEMPT_PATHS or path.startswith(_TOKEN_EXEMPT_PREFIXES):
+        if scope["type"] == "http" and (
+            path in _TOKEN_EXEMPT_PATHS or path.startswith(_TOKEN_EXEMPT_PREFIXES)
+        ):
             await self.app(scope, receive, send)
             return
         supplied = self._supplied(scope)
@@ -174,11 +184,14 @@ class TokenGuard:
             await self.app(scope, receive, send)
             return
         logger.warning("admin_token_rejected path=%s", path)
+        if scope["type"] == "websocket":
+            await send({"type": "websocket.close", "code": 1008})
+            return
         if path.startswith("/api/"):
             await _unauthorised("Admin token required")(scope, receive, send)
             return
         response = PlainTextResponse(
-            "Jeton d'administration requis : ouvrez http://127.0.0.1:8080/login\n",
+            "Jeton d'administration requis : ouvrez /login sur cette même adresse\n",
             status_code=401,
         )
         await response(scope, receive, send)

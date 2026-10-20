@@ -60,7 +60,9 @@ A non-loopback `BIND_HOST` requires `ALLOW_REMOTE_BIND=true`, a non-empty
 `ADMIN_TOKEN` and a non-empty `ADMIN_ALLOWED_HOSTS`; otherwise startup is
 refused with `EX_CONFIG` (78). The gateways themselves are **not** covered by
 these guards — they speak CONNECT, SOCKS5 and raw bytes — so a remote bind
-publishes two unauthenticated proxies. The startup warning says so explicitly.
+publishes two unauthenticated proxies. The startup warning says so explicitly. Set `GATEWAY_BIND_HOST=127.0.0.1`
+to keep both proxy gateways local while sharing only the admin UI. Host,
+origin and token guards also protect WebSocket event subscriptions.
 
 ### Known residual risks
 
