@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     updates_repo: str = Field(default="nik121212T/proxy-rotator", pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
     updates_github_token: SecretStr | None = None
     updates_check_interval_hours: int = Field(default=24, ge=1, le=168)
-    updates_timeout_s: float = Field(default=5.0, gt=0)
+    updates_timeout_s: float = Field(default=15.0, gt=0)
 
     # ── Dichvusocks provider (opt-in SOCKS5 import source) ─────────────────
     dichvusocks_api_token: SecretStr | None = None

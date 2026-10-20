@@ -68,7 +68,7 @@ class UpdateChecker:
         repo: str,
         *,
         cache_ttl_s: float = 24 * 3600,
-        timeout_s: float = 5.0,
+        timeout_s: float = 15.0,
         api_base: str = "https://api.github.com",
         token: SecretStr | None = None,
     ) -> None:
@@ -130,8 +130,11 @@ class UpdateChecker:
         now = time.monotonic()
         try:
             async with (
+                # trust_env=True picks up HTTP(S)_PROXY from Windows / corporate
+                # networks; without it, machines behind a mandatory proxy time
+                # out trying to reach api.github.com directly.
                 aiohttp.ClientSession(
-                    trust_env=False,
+                    trust_env=True,
                     timeout=aiohttp.ClientTimeout(total=self._timeout_s),
                 ) as session,
                 session.get(url, headers=headers, allow_redirects=False) as response,
@@ -165,6 +168,24 @@ class UpdateChecker:
                 payload: dict[str, Any] = await response.json(content_type=None)
         except (aiohttp.ClientError, TimeoutError, OSError, ValueError) as exc:
             logger.info("updater_transport_failure repo=%s type=%s", self._repo, type(exc).__name__)
+            if isinstance(exc, TimeoutError):
+                message = (
+                    "Délai dépassé en contactant GitHub. Vérifiez votre connexion "
+                    "ou votre proxy, puis réessayez."
+                )
+            elif isinstance(exc, aiohttp.ClientSSLError | aiohttp.ClientConnectorCertificateError):
+                message = (
+                    "Certificat TLS refusé par api.github.com. Un antivirus "
+                    "ou un proxy fait de l'inspection SSL — ajoutez une "
+                    "exception pour github.com."
+                )
+            elif isinstance(exc, aiohttp.ClientConnectorError | OSError):
+                message = (
+                    "Connexion à api.github.com impossible. Vérifiez votre "
+                    "accès Internet puis réessayez."
+                )
+            else:
+                message = "Vérification impossible : réponse GitHub invalide."
             return UpdateInfo(
                 current=CURRENT_VERSION,
                 latest=None,
@@ -172,7 +193,7 @@ class UpdateChecker:
                 release_url=None,
                 published_at=None,
                 checked_at=now,
-                error=exc.__class__.__name__,
+                error=message,
             )
         if not isinstance(payload, dict):
             payload = {}
