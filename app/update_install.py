@@ -44,7 +44,7 @@ def safe_env() -> dict[str, str]:
 
 async def run(args: list[str], root: Path) -> str:
     options: dict[str, object] = {}
-    if os.name == "nt":
+    if sys.platform == "win32":
         options["creationflags"] = 0x00000200  # CREATE_NEW_PROCESS_GROUP
     else:
         options["start_new_session"] = True
@@ -59,7 +59,7 @@ async def run(args: list[str], root: Path) -> str:
     try:
         output, _ = await process.communicate()
     except BaseException:
-        if os.name == "nt":
+        if sys.platform == "win32":
             killer = await asyncio.create_subprocess_exec(
                 "taskkill",
                 "/PID",

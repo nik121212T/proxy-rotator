@@ -636,3 +636,7 @@ Validation T19 : 441 tests réussis, 8 ignorés ; Ruff, mypy et bash -n verts.
 Validation T20 : 472 tests réussis, 8 ignorés, 11 sous-tests ; Ruff, mypy,
 JavaScript et syntaxe Bash verts. Installation réelle du tag vérifiée dans
 un dépôt temporaire, sans modifier les proxies ni lancer la mise à jour réelle.
+
+CI T20 : tests Linux/macOS/Windows et vrais moteurs Windows réussis.
+Le contrôle mypy Windows a révélé des attributs Unix ; les branches sont
+désormais distinguées par sys.platform et validées aussi avec --platform win32.
