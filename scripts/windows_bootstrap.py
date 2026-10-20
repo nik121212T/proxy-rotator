@@ -122,6 +122,30 @@ def ensure_dependencies(root: Path, python: Path) -> None:
         [str(python), "-m", "ensurepip", "--upgrade"], root
     ):
         raise RuntimeError("Impossible de reparer pip.")
+    # Older bundled pip versions do not understand modern wheel tags (abi3,
+    # per-Python-version builds) and then fail to find legitimate releases
+    # with messages like "Ignoring the following versions that require
+    # Python 3.14". Always upgrade pip + packaging first so resolution uses
+    # the current wheel-tag table.
+    step("[4/6] Mise a jour de pip pour reconnaitre les wheels recentes...")
+    if run(
+        [
+            str(python),
+            "-m",
+            "pip",
+            "install",
+            "--quiet",
+            "--disable-pip-version-check",
+            "--upgrade",
+            "pip",
+            "setuptools",
+            "wheel",
+        ],
+        root,
+    ):
+        raise RuntimeError(
+            "Mise a jour de pip impossible. Verifiez Internet et les droits du dossier."
+        )
     check = [
         str(python),
         str(ROOT / "scripts/check_dependencies.py"),
@@ -129,23 +153,27 @@ def ensure_dependencies(root: Path, python: Path) -> None:
     ]
     if run(check, root, quiet=True) or run([str(python), "-m", "pip", "check"], root, quiet=True):
         step("[4/6] Installation/reparation des dependances. Details ci-dessous :")
-        if run(
-            [
-                str(python),
-                "-m",
-                "pip",
-                "install",
-                "--disable-pip-version-check",
-                "--progress-bar",
-                "on",
-                "-r",
-                str(root / "requirements.txt"),
-            ],
-            root,
-        ):
-            raise RuntimeError(
-                "Installation interrompue. Verifiez Internet puis relancez Lancer.bat."
+        base_args = [
+            str(python),
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "--progress-bar",
+            "on",
+            "-r",
+            str(root / "requirements.txt"),
+        ]
+        if run(base_args, root):
+            # Retry forcing the public PyPI index — defeats a corporate or
+            # cached mirror that may not carry the pinned versions.
+            step(
+                "[4/6] Nouvelle tentative via pypi.org (contournement d'un miroir local)..."
             )
+            if run([*base_args, "--index-url", "https://pypi.org/simple/"], root):
+                raise RuntimeError(
+                    "Installation interrompue. Verifiez Internet puis relancez Lancer.bat."
+                )
         if run(check, root) or run([str(python), "-m", "pip", "check"], root):
             raise RuntimeError("Dependances toujours incompatibles : application non demarree.")
     (python.parent.parent / ".deps-installed").touch()
