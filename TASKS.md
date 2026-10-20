@@ -645,8 +645,10 @@ désormais distinguées par sys.platform et validées aussi avec --platform win3
 
 - [x] Séparer l’écoute des passerelles et celle de l’administration.
 - [x] Protéger aussi les événements WebSocket par jeton, hôte et origine.
-- [ ] Configurer le port choisi et vérifier connexion et authentification LAN.
+- [x] Configurer le port choisi et vérifier connexion et authentification LAN.
 
 Validation T21 (préparation) : 478 tests réussis, 8 ignorés et 11 sous-tests.
-Ruff/mypy verts. Activation en attente du choix du port : 5000 occupé par
-AirPlay, proposition 5001 sans modifier ce service système.
+Ruff/mypy verts. Port 5001 choisi et activé sur 0.0.0.0 ; passerelles sur 127.0.0.1.
+Connexion HTTP et WebSocket vérifiée via 192.168.1.51 depuis le Mac,
+refus des accès anonymes confirmé. Essai depuis un autre poste à effectuer.
+Code et sauvegarde de configuration conservés hors dépôt dans un dossier privé.
