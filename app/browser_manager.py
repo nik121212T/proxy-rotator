@@ -100,6 +100,38 @@ async def terminate_process(process: asyncio.subprocess.Process) -> None:
         await process.wait()
 
 
+def _playwright_download_hint(stderr: str) -> str:
+    """Translate a Playwright install stderr into actionable French guidance."""
+    low = stderr.lower()
+    if any(marker in low for marker in ("ssl", "certificate", "self signed", "unable_to_verify")):
+        return (
+            "Un antivirus ou un proxy intercepte le TLS (ESET, Kaspersky, "
+            "Bitdefender, Avast, Zscaler, proxy d'entreprise). Désactivez "
+            "l'inspection HTTPS pour playwright.azureedge.net et cdn.playwright.dev, "
+            "ou ajoutez une exception, puis réessayez."
+        )
+    if "proxy" in low or "econnrefused" in low or "etimedout" in low:
+        return (
+            "Impossible d'atteindre le CDN de Playwright. Vérifiez votre "
+            "connexion. Si vous êtes derrière un proxy, définissez HTTPS_PROXY "
+            "dans les variables d'environnement Windows avant de relancer."
+        )
+    if "enospc" in low or "no space" in low or "espace" in low:
+        return "Espace disque insuffisant. Libérez quelques Go puis réessayez."
+    if any(marker in low for marker in ("eacces", "eperm", "access is denied", "denied")):
+        return (
+            "Droits refusés sur le dossier d'installation. Lancez l'application "
+            "sans mode administrateur restreint, ou videz le cache "
+            "%USERPROFILE%\\AppData\\Local\\ms-playwright puis réessayez."
+        )
+    if "403" in low or "forbidden" in low:
+        return (
+            "Le CDN Playwright a refusé la requête (403). Un filtre réseau "
+            "la bloque — ajoutez une exception pour playwright.azureedge.net."
+        )
+    return "Vérifiez Internet, l'espace disque et les droits du dossier, puis réessayez."
+
+
 class BrowserManager:
     def __init__(self, pool: Pool, rotator: Rotator, key: bytes, root: Path, *, headless: bool = False, settings: Settings | None = None, bitbrowser: BitBrowserClient | None = None) -> None:
         self.pool, self.rotator, self.key = pool, rotator, key
@@ -178,16 +210,30 @@ class BrowserManager:
     async def _install(self, engine: str) -> None:
         process = None
         try:
+            # Capture stderr so the real Playwright failure (SSL, proxy, 403,
+            # disk-full, …) reaches the UI instead of a generic message.
+            # The parent env is inherited, so HTTPS_PROXY / HTTP_PROXY /
+            # NO_PROXY set at the OS level reach Playwright's downloader.
             process = await asyncio.create_subprocess_exec(
                 sys.executable, "-m", "playwright", "install", engine,
-                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
                 start_new_session=sys.platform != "win32",
             )
             code = await asyncio.wait_for(process.wait(), 900)
             self.installs[engine] = "ready" if code == 0 else "error"
             if code:
+                stderr_bytes = b""
+                stderr_stream = getattr(process, "stderr", None)
+                if stderr_stream is not None:
+                    with contextlib.suppress(Exception):
+                        stderr_bytes = await asyncio.wait_for(stderr_stream.read(), 5)
+                stderr_text = stderr_bytes.decode("utf-8", errors="replace").strip()
+                tail = "\n".join(stderr_text.splitlines()[-6:])[-480:]
+                hint = _playwright_download_hint(stderr_text)
                 self.install_errors[engine] = (
-                    "Téléchargement échoué. Vérifiez Internet, l’espace disque et les droits du dossier, puis réessayez."
+                    f"Téléchargement échoué. {hint}"
+                    + (f"\n\nDétail Playwright :\n{tail}" if tail else "")
                 )
         except TimeoutError:
             self.installs[engine] = "error"
