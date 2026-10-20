@@ -1,0 +1,13 @@
+# Development + CI dependencies. Install on top of requirements.txt
+# (never alone) when running the test suite, linters or audits locally
+# or in CI.
+-r requirements.txt
+
+# httpx2: the Starlette 1.x TestClient requires it (httpx is deprecated there).
+httpx2==2.13.1
+pytest==9.1.1
+pytest-asyncio==1.4.0
+hypothesis==6.169.0
+ruff==0.6.9
+mypy==1.11.2
+pip-audit==2.10.1

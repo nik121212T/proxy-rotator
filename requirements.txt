@@ -1,4 +1,8 @@
-# Runtime
+# Runtime dependencies ONLY. Development / test dependencies live in
+# requirements-dev.txt so an end-user install never needs to resolve
+# pytest, hypothesis, ruff, mypy, pip-audit — the pins that were tripping
+# up older bundled pip on Windows.
+#
 # Starlette 1.x clears seven advisories; it is pinned explicitly so the
 # security floor stays visible instead of being implied by fastapi's range.
 fastapi==0.143.0
@@ -21,14 +25,3 @@ click==8.1.7
 
 # Browser engines are downloaded separately, only on explicit user action.
 playwright==1.63.0
-
-# Dev / tests. Kept in one file for MVP simplicity, as before; this comment
-# used to point at a requirements-dev.txt that never existed.
-# httpx2: the Starlette 1.x TestClient requires it (httpx is deprecated there).
-httpx2==2.13.1
-pytest==9.1.1
-pytest-asyncio==1.4.0
-hypothesis==6.169.0
-ruff==0.6.9
-mypy==1.11.2
-pip-audit==2.10.1

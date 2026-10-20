@@ -24,7 +24,7 @@ jobs:
           python-version: '3.11'
           cache: pip
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: python -m pip install -r requirements-dev.txt
       - name: Tests (offline upstream fixtures only)
         run: pytest -q
       - name: Ruff
@@ -43,11 +43,11 @@ jobs:
           python-version: '3.11'
           cache: pip
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: python -m pip install -r requirements-dev.txt
       # Blocking: docs/SECURITY.md previously promised this step while the
       # workflow did not run it, which let 49 advisories accumulate unnoticed.
       - name: pip-audit
-        run: pip-audit -r requirements.txt
+        run: pip-audit -r requirements-dev.txt
 
   windows-browser-engines:
     name: Windows browser engines
@@ -61,7 +61,7 @@ jobs:
           cache: pip
       - name: Install dependencies and real engines
         run: |
-          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
           python -m playwright install chromium firefox webkit
       - name: Real browser HTTP and HTTPS through synthetic proxies
         env:
