@@ -348,3 +348,9 @@ Voir [le guide Windows](docs/WINDOWS.md) pour les prérequis, le lancement,
 les diagnostics et les limites de validation. Générer une archive sans données
 utilisateur : `python scripts/build_windows.py`. Python 3.11 x64 recommandé
 sous Windows (lanceur limité à 3.11–3.13 x64).
+
+### Windows : lancement automatique
+
+Extraire tout le ZIP puis double-cliquer sur **Lancer.bat**. Il vérifie ou installe
+Python, crée `.env` avec une clé unique, répare les dépendances et ouvre le dashboard.
+Garder la console ouverte. Voir [les détails Windows](docs/WINDOWS.md).

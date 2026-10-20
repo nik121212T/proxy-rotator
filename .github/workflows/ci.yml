@@ -69,3 +69,48 @@ jobs:
           GATEWAY_HTTP_PORT: '0'
           GATEWAY_SOCKS_PORT: '0'
         run: python -m pytest -q tests/test_browser_engines.py
+
+  windows-auto-install:
+    name: Windows automatic installation
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download signed Python and prepare a fresh installation
+        shell: powershell
+        run: |
+          & .\scripts\bootstrap_windows.ps1 -InstallPython -PrepareOnly
+          if ($LASTEXITCODE -ne 0) { throw 'Automatic preparation failed' }
+      - name: Preserve configuration and repair a missing dependency
+        shell: powershell
+        run: |
+          $before = (Get-FileHash .env).Hash
+          & .venv\Scripts\python.exe -m pip uninstall -y cachetools
+          & .\scripts\bootstrap_windows.ps1 -PrepareOnly
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency repair failed' }
+          if ((Get-FileHash .env).Hash -ne $before) { throw 'Configuration was overwritten' }
+          & .venv\Scripts\python.exe -c "import cachetools; import app.main"
+          if ($LASTEXITCODE -ne 0) { throw 'Application import failed' }
+      - name: Start the prepared application and check its local dashboard
+        shell: powershell
+        env:
+          ADMIN_PORT: '18765'
+          GATEWAY_HTTP_PORT: '0'
+          GATEWAY_SOCKS_PORT: '0'
+          UPDATES_ENABLED: 'false'
+        run: |
+          $server = Start-Process -FilePath .venv\Scripts\python.exe -ArgumentList 'scripts/windows_bootstrap.py','--serve' -PassThru
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 40; $i++) {
+              try {
+                $response = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:18765/healthz
+                if ($response.StatusCode -eq 200) { $ready = $true; break }
+              } catch { Start-Sleep -Seconds 1 }
+            }
+            if (-not $ready) { throw 'Prepared server did not start' }
+            $page = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:18765/
+            if ($page.StatusCode -ne 200) { throw 'Dashboard unavailable' }
+          } finally {
+            Stop-Process -Id $server.Id -ErrorAction SilentlyContinue
+          }

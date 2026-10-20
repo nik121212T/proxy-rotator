@@ -6,7 +6,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 ROOT_FILES = (
     ".env.example", "requirements.txt", "pyproject.toml", "README.md",
-    "ARCHITECTURE.md", "SPEC.md", "CHANGELOG.md",
+    "ARCHITECTURE.md", "SPEC.md", "CHANGELOG.md", "Lancer.bat",
 )
 
 
@@ -14,7 +14,7 @@ def build(root: Path, output: Path) -> None:
     files = [root / name for name in ROOT_FILES]
     for folder, suffixes in (
         ("app", {".py", ".html", ".css", ".js", ".svg", ".woff2", ".ico", ".txt", ".md"}),
-        ("scripts", {".py", ".bat", ".sh"}),
+        ("scripts", {".py", ".bat", ".sh", ".ps1"}),
         ("docs", {".md"}),
     ):
         files.extend(p for p in (root / folder).rglob("*")
@@ -27,15 +27,18 @@ def build(root: Path, output: Path) -> None:
             if path.is_file() and not path.is_symlink():
                 archive.write(path, Path("proxy-rotator") / path.relative_to(root))
         archive.writestr("proxy-rotator/LIRE-MOI-WINDOWS.txt", (
-            "1. Installez Python 3.11 x64 (Add python.exe to PATH).\n"
-            "2. Extrayez tout le dossier dans votre dossier personnel.\n"
-            "3. Copiez .env.example en .env et remplacez MASTER_SECRET=CHANGE_ME_NOW\n"
-            "   par une longue phrase secrete propre a cette installation.\n"
-            "4. Dans un terminal, lancez scripts\\start.bat.\n"
-            "5. Ouvrez http://127.0.0.1:8080 puis importez vos proxies.\n"
-            "6. Dans Navigateurs, telechargez les moteurs souhaites.\n\n"
-            "Consultez docs/WINDOWS.md pour les prerequis et limites de validation.\n"
-            "Cette archive ne contient ni proxies, ni mots de passe, ni profils.\n"
+            "1. Extrayez TOUT le ZIP dans un dossier personnel (ex. Documents).\n"
+            "2. Double-cliquez sur Lancer.bat a la racine du dossier.\n"
+            "3. Le lanceur verifie/installe Python et les dependances, cree .env\n"
+            "   avec une cle unique puis ouvre le navigateur automatiquement.\n"
+            "4. Gardez la console ouverte pendant l'utilisation.\n"
+            "5. Importez vos proxies dans votre propre installation.\n\n"
+            "Internet est necessaire au premier lancement et pour les reparations.\n"
+            "Les moteurs de navigateurs restent telechargeables depuis l'application.\n"
+            "Ne partagez pas votre .env : il contient votre cle de chiffrement.\n"
+            "Ne lancez pas l'application directement depuis le ZIP.\n"
+            "En cas d'erreur, la fenetre reste ouverte : relevez la derniere etape.\n"
+            "Consultez docs/WINDOWS.md. Aucun proxy, mot de passe ou profil personnel inclus.\n"
         ))
 
 

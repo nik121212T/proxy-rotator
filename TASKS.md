@@ -652,3 +652,14 @@ Ruff/mypy verts. Port 5001 choisi et activé sur 0.0.0.0 ; passerelles sur 127.0
 Connexion HTTP et WebSocket vérifiée via 192.168.1.51 depuis le Mac,
 refus des accès anonymes confirmé. Essai depuis un autre poste à effectuer.
 Code et sauvegarde de configuration conservés hors dépôt dans un dossier privé.
+
+## T22 — Installation automatique Windows
+
+- [x] Lanceur racine : Python x64 détecté ou installé depuis python.org, téléchargement vérifié.
+- [x] .env créé automatiquement avec secret unique ; configuration existante préservée.
+- [x] Environnement et dépendances vérifiés/réparés, progression visible, ouverture du navigateur.
+- [ ] Tests isolés, validation Windows et archive prête à copier.
+
+Validation locale T22 : 483 tests réussis, 9 ignorés, 11 sous-tests ;
+Ruff et mypy verts. CI dédiée ajoutée pour installation réelle de Python
+signé sur Windows, création de .env et réparation d’une dépendance retirée.

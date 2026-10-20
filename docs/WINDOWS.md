@@ -5,17 +5,44 @@ Utilisez **Python 3.11 x64** avec « Add python.exe to PATH ». Le lanceur accep
 3.11 à 3.13 x64 ; la CI cible 3.11. Python 3.14, ARM64 natif et Python 32 bits
 sont refusés par ce lanceur avec les dépendances actuellement épinglées.
 
-## Première installation
+## Première installation automatique
 
 1. Extraire entièrement `proxy-rotator-windows.zip` dans un dossier personnel
    accessible en écriture, hors `Program Files` et hors dossier synchronisé.
-2. Copier `.env.example` en `.env`. Remplacer `MASTER_SECRET=CHANGE_ME_NOW`
-   par une longue phrase secrète propre à cette installation et la conserver.
-3. Ouvrir un terminal dans ce dossier et lancer `scripts\start.bat`.
-   La première exécution crée `.venv` et télécharge les dépendances.
-4. Ouvrir <http://127.0.0.1:8080>, importer les proxys puis les vérifier.
-5. Dans **Navigateurs**, choisir un navigateur installé ou télécharger un moteur
-   dédié. Les fenêtres s’ouvrent sur le PC qui exécute le serveur.
+2. Double-cliquer sur **Lancer.bat**, à la racine du dossier extrait.
+3. Suivre les six étapes affichées. Le navigateur s’ouvre lorsque le serveur répond.
+4. Garder la console ouverte et importer ses propres proxies.
+
+Le lanceur recherche Python 3.11–3.13 x64. Si nécessaire, il télécharge
+[Python 3.13.16 depuis python.org](https://www.python.org/downloads/release/python-31316/),
+vérifie sa signature Windows et son éditeur Python Software Foundation, puis
+l’installe pour l’utilisateur, sans modifier le PATH ni les associations de fichiers.
+Les options d’installation suivent la [documentation officielle](https://docs.python.org/3.13/using/windows.html#installing-without-ui).
+
+Il crée automatiquement `.env` à partir de `.env.example`, avec une clé aléatoire
+propre à cette installation. Une configuration déjà renseignée est conservée.
+Si une base existe mais que la clé manque, il s’arrête : il faut restaurer
+le `.env` original, pas créer une nouvelle clé qui ne pourrait pas lire les données.
+
+À chaque lancement, il vérifie l’environnement, les versions des dépendances et
+leurs options, puis l’import de l’application. Les dépendances absentes ou
+incompatibles sont réinstallées, avec les détails affichés ligne par ligne.
+Un environnement incompatible est sauvegardé avant recréation. Deux lancements
+simultanés du même dossier sont refusés. Un port déjà occupé est signalé.
+
+L’adresse par défaut est **http://127.0.0.1:8080**. Si le navigateur ne s’ouvre
+pas automatiquement, copier cette adresse dans sa barre d’adresse. Les moteurs
+Chromium/Firefox/WebKit restent des téléchargements à la demande dans l’application.
+`Lancer.bat` conserve la fenêtre ouverte en cas d’erreur. PowerShell est utilisé
+uniquement pour ce lancement ; aucune politique système permanente n’est modifiée.
+Une politique d’entreprise, un antivirus, des droits insuffisants, un manque de
+place ou l’absence d’Internet peuvent empêcher l’installation : le lanceur affiche
+l’étape en échec plutôt que de contourner ces contrôles.
+
+Pour une préparation sans démarrage :
+`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\bootstrap_windows.ps1 -PrepareOnly`.
+Le lanceur historique `scripts\start.bat` reste disponible pour les installations
+préparées manuellement ; l’entrée recommandée est désormais `Lancer.bat`.
 
 Une connexion Internet est nécessaire pour les installations. Le navigateur
 utilise une passerelle locale ; ce n’est pas un VPN pour tout Windows.
@@ -43,8 +70,7 @@ les connexions déjà ouvertes peuvent conserver leur proxy.
 
 `python scripts/build_windows.py` crée `dist/proxy-rotator-windows.zip` avec
 une liste explicite de fichiers applicatifs. `.env`, bases, sels, profils,
-caches, environnements virtuels et historique Git sont exclus. Le destinataire
-crée son propre secret et importe ses propres proxys.
+caches, environnements virtuels et historique Git sont exclus. Le lanceur crée le secret du destinataire ; celui-ci importe ses propres proxys.
 
 Le job CI **Windows browser engines** installe Chromium, Firefox et WebKit et
 exécute les scénarios réels HTTP/HTTPS, avec/sans authentification, proxy fixe,

@@ -38,3 +38,7 @@ data/browser-profiles/
 
 # Prepared update environments (never distribute)
 .updates/
+
+# Windows bootstrap lock and preserved incompatible environments
+.bootstrap.lock
+.venv.backup-*/
